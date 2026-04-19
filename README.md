@@ -87,3 +87,13 @@ C:\Users\konishi\.virtualenvs\NovelCreatetor\Scripts\python.exe -m flask --app a
 - Project-root `.env` is loaded automatically at startup if present.
 - `/health` checks both HTTP response and SQLite connectivity.
 - `migrations\20260419_add_character_image_rule.sql` remains as a manual reference SQL file.
+
+## GPT Image 1.5 Diagnostic
+Use this script to verify whether your current API key supports `gpt-image-1.5` on both `/images/generations` and `/images/edits`.
+
+```powershell
+cd C:\Users\konishi\PycharmProjects\NovelCreatetor
+C:\Users\konishi\.virtualenvs\NovelCreatetor\Scripts\python.exe .\scripts\verify_gpt_image_1_5_edits.py --image C:\path\to\reference.png
+```
+
+If `generations` succeeds but `edits` returns `Value must be 'dall-e-2'`, the limitation is coming from the current API environment rather than this app.

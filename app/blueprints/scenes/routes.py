@@ -2,6 +2,7 @@ from flask import Blueprint, request
 
 from ...api import json_response
 from ...services.generation_service import GenerationService
+from ...services.scene_character_service import SceneCharacterService
 from ...services.scene_choice_service import SceneChoiceService
 from ...services.scene_service import SceneService
 from ...services.scene_workspace_service import SceneWorkspaceService
@@ -11,6 +12,7 @@ from ...utils import json_util
 scenes_bp = Blueprint("scenes", __name__)
 scene_service = SceneService()
 scene_choice_service = SceneChoiceService()
+scene_character_service = SceneCharacterService()
 generation_service = GenerationService()
 scene_workspace_service = SceneWorkspaceService()
 
@@ -36,6 +38,7 @@ def _serialize_scene(scene, *, include_choices=False):
         "narration_text": scene.narration_text,
         "dialogue_json": scene.dialogue_json,
         "scene_state_json": scene.scene_state_json,
+        "cast_character_ids": scene_character_service.list_character_ids(scene.id),
         "image_prompt_text": scene.image_prompt_text,
         "active_version_id": scene.active_version_id,
         "sort_order": scene.sort_order,
@@ -169,6 +172,34 @@ def generate_scene(scene_id: int):
     payload = _build_generation_payload(request.get_json(silent=True) or {})
     try:
         job = generation_service.process_scene_generation(scene_id, payload)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    if not job:
+        return json_response({"message": "not_found"}, status=404)
+    return json_response(_serialize_generation_job(job))
+
+
+@scenes_bp.route("/scenes/<int:scene_id>/generate-narration", methods=["POST"])
+def generate_scene_narration(scene_id: int):
+    payload = _build_generation_payload(request.get_json(silent=True) or {})
+    try:
+        job = generation_service.process_narration_generation(scene_id, payload)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    if not job:
+        return json_response({"message": "not_found"}, status=404)
+    return json_response(_serialize_generation_job(job))
+
+
+@scenes_bp.route("/scenes/<int:scene_id>/generate-dialogue", methods=["POST"])
+def generate_scene_dialogue(scene_id: int):
+    payload = _build_generation_payload(request.get_json(silent=True) or {})
+    try:
+        job = generation_service.process_dialogue_generation(scene_id, payload)
     except ValueError as exc:
         return json_response({"message": str(exc)}, status=400)
     except RuntimeError as exc:

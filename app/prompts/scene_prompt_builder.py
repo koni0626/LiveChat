@@ -5,7 +5,18 @@ from typing import Any
 DEFAULT_SCENE_OUTPUT_SCHEMA = {
     "title": "scene title",
     "summary": "short scene summary",
-    "narration_text": "narration text",
+    "narration_text": "scene design note written as narration",
+    "dialogues": [{"speaker": "character name", "text": "dialogue line"}],
+    "choices": [{"choice_text": "choice text", "next_scene_hint": "optional next scene hint"}],
+}
+
+NARRATION_OUTPUT_SCHEMA = {
+    "title": "scene title",
+    "summary": "short scene summary",
+    "narration_text": "scene design note written as narration",
+}
+
+DIALOGUE_OUTPUT_SCHEMA = {
     "dialogues": [{"speaker": "character name", "text": "dialogue line"}],
     "choices": [{"choice_text": "choice text", "next_scene_hint": "optional next scene hint"}],
 }
@@ -80,6 +91,10 @@ def _format_character(character: Any) -> str:
     return f"{name} | " + " | ".join(parts) if parts else str(name)
 
 
+def _character_name(character: Any) -> str:
+    return _stringify(_read(character, "name"))
+
+
 def _format_glossary_term(term: Any) -> str:
     parts = [_read(term, "term", "unknown")]
     if _read(term, "reading"):
@@ -100,7 +115,6 @@ def _format_recent_scene(scene: Any) -> str:
                 f"id={_stringify(_read(scene, 'id'))}",
                 f"title={_stringify(_read(scene, 'title'))}",
                 f"summary={_stringify(_read(scene, 'summary'))}",
-                f"narration={_stringify(_read(scene, 'narration_text'))}",
                 f"dialogue={_stringify(dialogue_json)}",
             ],
         )
@@ -125,12 +139,14 @@ def _build_scene_generation_prompt(context: dict[str, Any]) -> str:
     project = _read(context, "project", {})
     world = _read(context, "world", {})
     story_outline = _read(context, "story_outline", {})
+    protagonist_name = _stringify(_read(context, "protagonist_name")) or "主人公"
     scene = _read(context, "scene", {})
     chapter = _read(context, "chapter", {})
     previous_scene = _read(context, "previous_scene")
     recent_scenes = list(_read(context, "recent_scenes", []) or [])
     story_memories = list(_read(context, "story_memories", []) or [])
     characters = list(_read(context, "characters", []) or [])
+    all_characters = list(_read(context, "all_characters", []) or [])
     glossary_terms = list(_read(context, "glossary_terms", []) or [])
     extra_instruction = _read(context, "instruction") or _read(context, "extra_instruction")
     choice_count = _read(context, "choice_count")
@@ -140,14 +156,30 @@ def _build_scene_generation_prompt(context: dict[str, Any]) -> str:
     outline_json = _loads_jsonish(_read(story_outline, "outline_json"))
     current_dialogues = _loads_jsonish(_read(scene, "dialogue_json"))
     current_state = _loads_jsonish(_read(scene, "scene_state_json"))
+    allowed_character_names = [name for name in (_character_name(character) for character in characters) if name]
+    all_character_names = [name for name in (_character_name(character) for character in all_characters) if name]
+    prohibited_character_names = [name for name in all_character_names if name not in allowed_character_names]
 
     lines = [
         "あなたは日本語のノベルゲーム制作アシスタントです。",
         "以下の設定、過去文脈、重要メモを踏まえて、次に使える1シーン分の本文を生成してください。",
+        "この作品では、まず地の文でシーン設計をまとめ、その内容をベースにセリフで物語を進めます。",
         "",
         "出力ルール:",
         "- 必ず JSON オブジェクトのみを返してください。",
-        "- 地の文、会話、選択肢を含めてください。",
+        "- narration_text には、このシーンで起きること、言いたいこと、感情の流れ、場面の状況を日本語で簡潔にまとめてください。",
+        "- dialogues は narration_text をそのまま説明するのではなく、narration_text の内容を会話として自然に表現してください。",
+        "- 物語の進行は主に dialogue で見せてください。",
+        "- narration_text は画像生成や内部設計の元情報として使うため、場面の核が分かるようにしてください。",
+        "- dialogue では情報説明、感情変化、状況の進行をできるだけキャラクターのセリフで表現してください。",
+        "- narration_text に書いた内容と dialogue の内容は矛盾させないでください。",
+        "- 地の文は長い小説本文ではなく、設計メモ兼絵コンテのように扱ってください。",
+        "- 会話だけでもシーンの目的、対立、次への導線が伝わるようにしてください。",
+        "- このシーンに登場させてよいのは allowed_characters に含まれるキャラクターだけです。",
+        "- prohibited_characters に含まれるキャラクターは、本文・セリフ・地の文のどこにも出さないでください。",
+        "- dialogue の speaker は allowed_characters に含まれる名前だけを使ってください。",
+        f"- 主人公を出す必要がある場合は、speaker 名や本文中の呼び方に『{protagonist_name}』を使ってください。",
+        "- 単に『主人公』というラベルは使わないでください。",
         "- キャラクターの口調と世界観の整合性を守ってください。",
         "- 重要メモにある内容は矛盾なく引き継いでください。",
         "- プレイヤー名や固有名詞が出ている場合は必ず維持してください。",
@@ -180,6 +212,7 @@ def _build_scene_generation_prompt(context: dict[str, Any]) -> str:
         "story_outline:",
         f"- premise: {_stringify(_read(story_outline, 'premise')) or 'none'}",
         f"- protagonist_position: {_stringify(_read(story_outline, 'protagonist_position')) or 'none'}",
+        f"- protagonist_name: {protagonist_name}",
         f"- main_goal: {_stringify(_read(story_outline, 'main_goal')) or 'none'}",
         f"- branching_policy: {_stringify(_read(story_outline, 'branching_policy')) or 'none'}",
         f"- ending_policy: {_stringify(_read(story_outline, 'ending_policy')) or 'none'}",
@@ -204,13 +237,14 @@ def _build_scene_generation_prompt(context: dict[str, Any]) -> str:
                 "previous_scene:",
                 f"- title: {_stringify(_read(previous_scene, 'title')) or 'none'}",
                 f"- summary: {_stringify(_read(previous_scene, 'summary')) or 'none'}",
-                f"- narration_text: {_stringify(_read(previous_scene, 'narration_text')) or 'none'}",
                 f"- dialogue_json: {_stringify(_loads_jsonish(_read(previous_scene, 'dialogue_json'))) or 'none'}",
             ]
         )
 
     lines.extend(["", *(_lines_from_list("recent_scenes_in_chapter", [_format_recent_scene(item) for item in recent_scenes]))])
     lines.extend(["", *(_lines_from_list("story_memories", [_format_story_memory(item) for item in story_memories]))])
+    lines.extend(["", *(_lines_from_list("allowed_characters", allowed_character_names))])
+    lines.extend(["", *(_lines_from_list("prohibited_characters", prohibited_character_names))])
     lines.extend(["", *(_lines_from_list("characters", [_format_character(character) for character in characters]))])
     lines.extend(["", *(_lines_from_list("glossary_terms", [_format_glossary_term(term) for term in glossary_terms]))])
 
@@ -224,9 +258,215 @@ def _build_scene_generation_prompt(context: dict[str, Any]) -> str:
             "",
             "追加指示:",
             "- 出力は自然な日本語にしてください。",
-            "- dialogue の speaker は既存キャラクター名を優先してください。",
+            "- dialogue の speaker は allowed_characters の名前だけを使ってください。",
+            f"- 主人公が話す場合は speaker を必ず {protagonist_name} にしてください。",
+            "- speaker や本文に『主人公』という汎用ラベルを残さないでください。",
+            "- 先に narration_text でシーン意図を固め、その後に dialogue で自然な会話へ落とし込んでください。",
+            "- dialogue は短すぎる一言だけで終わらせず、会話の往復で内容を進めてください。",
+            "- narration_text は空にせず、画像生成と会話生成の土台になる密度で書いてください。",
+            "- dialogue は narration_text の要約ではなく、キャラクター同士のやり取りとして再構成してください。",
+            "- chapter の目的や要約に反してでも prohibited_characters を出してはいけません。",
             "- recent_scenes_in_chapter と story_memories の情報は継続文脈として扱ってください。",
             "- 設定が足りない場合でも、既存情報と矛盾しない範囲で補完してください。",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _build_narration_generation_prompt(context: dict[str, Any]) -> str:
+    project = _read(context, "project", {})
+    world = _read(context, "world", {})
+    story_outline = _read(context, "story_outline", {})
+    protagonist_name = _stringify(_read(context, "protagonist_name")) or "主人公"
+    scene = _read(context, "scene", {})
+    chapter = _read(context, "chapter", {})
+    previous_scene = _read(context, "previous_scene")
+    recent_scenes = list(_read(context, "recent_scenes", []) or [])
+    story_memories = list(_read(context, "story_memories", []) or [])
+    extra_instruction = _read(context, "instruction") or _read(context, "extra_instruction")
+
+    world_rules = _loads_jsonish(_read(world, "rules_json"))
+    forbidden_rules = _loads_jsonish(_read(world, "forbidden_json"))
+    outline_json = _loads_jsonish(_read(story_outline, "outline_json"))
+
+    lines = [
+        "あなたは日本語のノベルゲーム制作アシスタントです。",
+        "以下の情報を踏まえて、このシーンの設計用地の文だけを生成してください。",
+        "",
+        "出力ルール:",
+        "- 必ず JSON オブジェクトのみを返してください。",
+        "- narration_text には、このシーンで起きる出来事、感情の流れ、誰が何を言いたいか、画像で見せたい状況を書いてください。",
+        "- narration_text はプレイヤーにそのまま見せる本文ではなく、セリフ生成と画像生成の元ネタです。",
+        "- dialogue や choices はまだ作らないでください。",
+        f"- 主人公を指す必要がある場合は『{protagonist_name}』を使い、『主人公』という汎用ラベルは使わないでください。",
+        "- 地の文は長い小説本文ではなく、シーン設計メモ兼絵コンテとして具体的に書いてください。",
+        "",
+        "出力JSONスキーマ:",
+        json.dumps(NARRATION_OUTPUT_SCHEMA, ensure_ascii=False, indent=2),
+        "",
+        "project:",
+        f"- title: {_stringify(_read(project, 'title')) or 'none'}",
+        f"- genre: {_stringify(_read(project, 'genre')) or 'none'}",
+        f"- summary: {_stringify(_read(project, 'summary')) or 'none'}",
+        "",
+        "chapter:",
+        f"- chapter_no: {_stringify(_read(chapter, 'chapter_no')) or 'none'}",
+        f"- title: {_stringify(_read(chapter, 'title')) or 'none'}",
+        f"- summary: {_stringify(_read(chapter, 'summary')) or 'none'}",
+        f"- objective: {_stringify(_read(chapter, 'objective')) or 'none'}",
+        "",
+        "world:",
+        f"- name: {_stringify(_read(world, 'name')) or 'none'}",
+        f"- tone: {_stringify(_read(world, 'tone')) or 'none'}",
+        f"- overview: {_stringify(_read(world, 'overview')) or 'none'}",
+        f"- rules_json: {_stringify(world_rules) or 'none'}",
+        f"- forbidden_json: {_stringify(forbidden_rules) or 'none'}",
+        "",
+        "story_outline:",
+        f"- premise: {_stringify(_read(story_outline, 'premise')) or 'none'}",
+        f"- protagonist_name: {protagonist_name}",
+        f"- protagonist_position: {_stringify(_read(story_outline, 'protagonist_position')) or 'none'}",
+        f"- main_goal: {_stringify(_read(story_outline, 'main_goal')) or 'none'}",
+        f"- branching_policy: {_stringify(_read(story_outline, 'branching_policy')) or 'none'}",
+        f"- ending_policy: {_stringify(_read(story_outline, 'ending_policy')) or 'none'}",
+        f"- outline_text: {_stringify(_read(story_outline, 'outline_text')) or 'none'}",
+        f"- outline_json: {_stringify(outline_json) or 'none'}",
+        "",
+        "current_scene:",
+        f"- id: {_stringify(_read(scene, 'id')) or 'none'}",
+        f"- title: {_stringify(_read(scene, 'title')) or 'none'}",
+        f"- summary: {_stringify(_read(scene, 'summary')) or 'none'}",
+        f"- current_narration_text: {_stringify(_read(scene, 'narration_text')) or 'none'}",
+        f"- scene_state_json: {_stringify(_loads_jsonish(_read(scene, 'scene_state_json'))) or 'none'}",
+    ]
+
+    if previous_scene is not None:
+        lines.extend(
+            [
+                "",
+                "previous_scene:",
+                f"- title: {_stringify(_read(previous_scene, 'title')) or 'none'}",
+                f"- summary: {_stringify(_read(previous_scene, 'summary')) or 'none'}",
+                f"- dialogue_json: {_stringify(_loads_jsonish(_read(previous_scene, 'dialogue_json'))) or 'none'}",
+            ]
+        )
+
+    lines.extend(["", *(_lines_from_list("recent_scenes_in_chapter", [_format_recent_scene(item) for item in recent_scenes]))])
+    lines.extend(["", *(_lines_from_list("story_memories", [_format_story_memory(item) for item in story_memories]))])
+
+    if extra_instruction:
+        lines.extend(["", f"extra_instruction: {_stringify(extra_instruction)}"])
+
+    lines.extend(
+        [
+            "",
+            "追加指示:",
+            "- 章の目的と要約を最優先で守ってください。",
+            "- この地の文を見れば、あとから自然なセリフを書ける状態にしてください。",
+            "- 誰の感情が動く場面か、何を伝えたい場面かを明確にしてください。",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _build_dialogue_generation_prompt(context: dict[str, Any]) -> str:
+    project = _read(context, "project", {})
+    world = _read(context, "world", {})
+    story_outline = _read(context, "story_outline", {})
+    protagonist_name = _stringify(_read(context, "protagonist_name")) or "主人公"
+    scene = _read(context, "scene", {})
+    chapter = _read(context, "chapter", {})
+    previous_scene = _read(context, "previous_scene")
+    recent_scenes = list(_read(context, "recent_scenes", []) or [])
+    story_memories = list(_read(context, "story_memories", []) or [])
+    characters = list(_read(context, "characters", []) or [])
+    all_characters = list(_read(context, "all_characters", []) or [])
+    glossary_terms = list(_read(context, "glossary_terms", []) or [])
+    extra_instruction = _read(context, "instruction") or _read(context, "extra_instruction")
+    choice_count = _read(context, "choice_count")
+
+    current_dialogues = _loads_jsonish(_read(scene, "dialogue_json"))
+    current_state = _loads_jsonish(_read(scene, "scene_state_json"))
+    allowed_character_names = [name for name in (_character_name(character) for character in characters) if name]
+    all_character_names = [name for name in (_character_name(character) for character in all_characters) if name]
+    prohibited_character_names = [name for name in all_character_names if name not in allowed_character_names]
+
+    lines = [
+        "あなたは日本語のノベルゲーム制作アシスタントです。",
+        "以下の地の文を設計メモとして読み取り、このシーンのセリフと選択肢だけを生成してください。",
+        "",
+        "出力ルール:",
+        "- 必ず JSON オブジェクトのみを返してください。",
+        "- narration_text は含めないでください。",
+        "- dialogues は、与えられた narration_text の内容を自然な会話へ変換したものにしてください。",
+        "- 会話の往復で内容、感情、対立、次への導線が伝わるようにしてください。",
+        "- dialogue の speaker は allowed_characters の名前だけを使ってください。",
+        "- prohibited_characters に含まれるキャラクターはセリフにも本文にも出さないでください。",
+        f"- 主人公が話す場合は speaker を必ず {protagonist_name} にしてください。",
+        "- speaker や本文に『主人公』という汎用ラベルを残さないでください。",
+        "",
+        "出力JSONスキーマ:",
+        json.dumps(DIALOGUE_OUTPUT_SCHEMA, ensure_ascii=False, indent=2),
+        "",
+        "project:",
+        f"- title: {_stringify(_read(project, 'title')) or 'none'}",
+        f"- genre: {_stringify(_read(project, 'genre')) or 'none'}",
+        "",
+        "chapter:",
+        f"- chapter_no: {_stringify(_read(chapter, 'chapter_no')) or 'none'}",
+        f"- title: {_stringify(_read(chapter, 'title')) or 'none'}",
+        f"- summary: {_stringify(_read(chapter, 'summary')) or 'none'}",
+        f"- objective: {_stringify(_read(chapter, 'objective')) or 'none'}",
+        "",
+        "story_outline:",
+        f"- premise: {_stringify(_read(story_outline, 'premise')) or 'none'}",
+        f"- protagonist_name: {protagonist_name}",
+        f"- protagonist_position: {_stringify(_read(story_outline, 'protagonist_position')) or 'none'}",
+        f"- main_goal: {_stringify(_read(story_outline, 'main_goal')) or 'none'}",
+        "",
+        "current_scene:",
+        f"- id: {_stringify(_read(scene, 'id')) or 'none'}",
+        f"- title: {_stringify(_read(scene, 'title')) or 'none'}",
+        f"- summary: {_stringify(_read(scene, 'summary')) or 'none'}",
+        f"- narration_text: {_stringify(_read(scene, 'narration_text')) or 'none'}",
+        f"- existing_dialogue_json: {_stringify(current_dialogues) or 'none'}",
+        f"- scene_state_json: {_stringify(current_state) or 'none'}",
+        "",
+        *(_lines_from_list("allowed_characters", allowed_character_names)),
+        "",
+        *(_lines_from_list("prohibited_characters", prohibited_character_names)),
+        "",
+        *(_lines_from_list("characters", [_format_character(character) for character in characters])),
+        "",
+        *(_lines_from_list("glossary_terms", [_format_glossary_term(term) for term in glossary_terms])),
+    ]
+
+    if previous_scene is not None:
+        lines.extend(
+            [
+                "",
+                "previous_scene:",
+                f"- title: {_stringify(_read(previous_scene, 'title')) or 'none'}",
+                f"- summary: {_stringify(_read(previous_scene, 'summary')) or 'none'}",
+                f"- dialogue_json: {_stringify(_loads_jsonish(_read(previous_scene, 'dialogue_json'))) or 'none'}",
+            ]
+        )
+
+    lines.extend(["", *(_lines_from_list("recent_scenes_in_chapter", [_format_recent_scene(item) for item in recent_scenes]))])
+    lines.extend(["", *(_lines_from_list("story_memories", [_format_story_memory(item) for item in story_memories]))])
+
+    if choice_count is not None:
+        lines.extend(["", f"choice_count: {choice_count}"])
+    if extra_instruction:
+        lines.extend(["", f"extra_instruction: {_stringify(extra_instruction)}"])
+
+    lines.extend(
+        [
+            "",
+            "追加指示:",
+            "- narration_text をただ説明し直すのではなく、キャラクター同士の会話として再構成してください。",
+            "- 章の目的や要約に反してでも prohibited_characters を出してはいけません。",
+            "- recent_scenes_in_chapter と story_memories の情報は継続文脈として扱ってください。",
         ]
     )
     return "\n".join(lines)
@@ -283,6 +523,10 @@ def build_scene_prompt(context: dict[str, Any], *, mode: str = "scene_generation
         raise ValueError("context must be a dict")
     if mode == "scene_generation":
         return _build_scene_generation_prompt(context)
+    if mode == "narration_generation":
+        return _build_narration_generation_prompt(context)
+    if mode == "dialogue_generation":
+        return _build_dialogue_generation_prompt(context)
     if mode == "state_extraction":
         return _build_state_extraction_prompt(context)
-    raise ValueError("mode must be 'scene_generation' or 'state_extraction'")
+    raise ValueError("mode must be 'scene_generation', 'narration_generation', 'dialogue_generation' or 'state_extraction'")

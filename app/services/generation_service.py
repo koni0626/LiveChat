@@ -20,6 +20,7 @@ from .generated_candidate_service import GeneratedCandidateService
 from .glossary_service import GlossaryService
 from .project_service import ProjectService
 from .scene_image_service import SceneImageService
+from .scene_character_service import SceneCharacterService
 from .scene_service import SceneService
 from .scene_version_service import SceneVersionService
 from .story_outline_service import StoryOutlineService
@@ -30,7 +31,7 @@ from .world_service import WorldService
 
 class GenerationService:
     VALID_STATUSES = {"queued", "running", "success", "failed"}
-    VALID_JOB_TYPES = {"text_generation", "image_generation", "state_extraction"}
+    VALID_JOB_TYPES = {"text_generation", "image_generation", "state_extraction", "narration_generation", "dialogue_generation"}
 
     def __init__(
         self,
@@ -48,6 +49,7 @@ class GenerationService:
         usage_log_service: UsageLogService | None = None,
         asset_service: AssetService | None = None,
         scene_image_service: SceneImageService | None = None,
+        scene_character_service: SceneCharacterService | None = None,
         character_image_rule_service: CharacterImageRuleService | None = None,
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
@@ -66,9 +68,21 @@ class GenerationService:
         self._usage_log_service = usage_log_service or UsageLogService()
         self._asset_service = asset_service or AssetService()
         self._scene_image_service = scene_image_service or SceneImageService()
+        self._scene_character_service = scene_character_service or SceneCharacterService()
         self._character_image_rule_service = character_image_rule_service or CharacterImageRuleService()
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
+
+    def _resolve_selected_character_ids(self, scene):
+        return self._scene_character_service.list_character_ids(scene.id)
+
+    def _filter_scene_characters(self, scene, characters):
+        selected_ids = self._resolve_selected_character_ids(scene)
+        if not selected_ids:
+            return characters
+        selected_set = set(selected_ids)
+        filtered = [character for character in characters if character.id in selected_set]
+        return filtered or characters
 
     def _normalize_status(self, status: str):
         if not status:
@@ -109,16 +123,25 @@ class GenerationService:
         payload = dict(payload or {})
         chapter = Chapter.query.get(scene.chapter_id)
         history_scene_limit = int(payload.get("history_scene_limit", 3))
-        characters = self._character_service.list_characters(scene.project_id)
+        all_characters = self._character_service.list_characters(scene.project_id)
+        characters = self._filter_scene_characters(
+            scene,
+            all_characters,
+        )
         guide_character = next((character for character in characters if character.is_guide), None)
         primary_character = guide_character or (characters[0] if characters else None)
         image_rule = None
         if primary_character:
             image_rule = self._character_image_rule_service.get_image_rule(primary_character.id)
+        story_outline = self._story_outline_service.get_outline(scene.project_id)
+        protagonist_name = None
+        if story_outline and getattr(story_outline, "protagonist_name", None):
+            protagonist_name = str(story_outline.protagonist_name).strip() or None
         context = {
             "project": self._get_project(scene.project_id),
             "world": self._world_service.get_world(scene.project_id),
-            "story_outline": self._story_outline_service.get_outline(scene.project_id),
+            "story_outline": story_outline,
+            "protagonist_name": protagonist_name,
             "scene": scene,
             "chapter": chapter,
             "previous_scene": self._find_previous_scene(scene),
@@ -135,6 +158,7 @@ class GenerationService:
                 chapter_id=scene.chapter_id,
                 limit=int(payload.get("memory_limit", 8)),
             ),
+            "all_characters": all_characters,
             "image_rule": image_rule,
         }
         context.update(payload)
@@ -146,7 +170,10 @@ class GenerationService:
         if str(use_character_base).lower() in {"0", "false", "no", "off"}:
             return []
 
-        characters = self._character_service.list_characters(scene.project_id)
+        characters = self._filter_scene_characters(
+            scene,
+            self._character_service.list_characters(scene.project_id),
+        )
         assets = []
         seen_asset_ids = set()
         for character in characters:
@@ -158,6 +185,8 @@ class GenerationService:
                 continue
             seen_asset_ids.add(asset_id)
             assets.append(asset)
+            if len(assets) >= 2:
+                break
         return assets
 
     def _create_job(self, scene, *, job_type: str, payload: dict | None = None):
@@ -272,6 +301,54 @@ class GenerationService:
             )
         return candidate, parsed
 
+    def _save_narration_generation_result(self, scene, result: dict, model_name: str | None):
+        text = result.get("text")
+        parsed = self._text_ai_client._try_parse_json(text)
+        candidate = self._create_scene_candidate(
+            scene,
+            "scene_text",
+            content_text=text,
+            content_json=self._dump_json(parsed),
+            tags_json=self._dump_json({"model": model_name, "mode": "narration"}),
+        )
+        if isinstance(parsed, dict):
+            update_payload = {}
+            for field in ("title", "summary", "narration_text"):
+                if field in parsed:
+                    update_payload[field] = parsed[field]
+            if update_payload:
+                self._scene_service.update_scene(scene.id, update_payload)
+        return candidate, parsed
+
+    def _save_dialogue_generation_result(self, scene, result: dict, model_name: str | None):
+        text = result.get("text")
+        parsed = self._text_ai_client._try_parse_json(text)
+        candidate = self._create_scene_candidate(
+            scene,
+            "scene_text",
+            content_text=text,
+            content_json=self._dump_json(parsed),
+            tags_json=self._dump_json({"model": model_name, "mode": "dialogue"}),
+        )
+        if isinstance(parsed, dict):
+            update_payload = {}
+            if "dialogues" in parsed:
+                update_payload["dialogue_json"] = self._dump_json(parsed["dialogues"])
+            if update_payload:
+                self._scene_service.update_scene(scene.id, update_payload)
+            self._scene_version_service.create_version(
+                scene.id,
+                {
+                    "source_type": "ai",
+                    "generated_by": model_name,
+                    "narration_text": scene.narration_text,
+                    "dialogue_json": self._dump_json(parsed.get("dialogues")),
+                    "choice_json": self._dump_json(parsed.get("choices")),
+                    "note_text": "generated by GenerationService.process_dialogue_generation",
+                },
+            )
+        return candidate, parsed
+
     def _save_state_extraction_result(self, scene, result: dict, model_name: str | None):
         parsed = result.get("parsed_json")
         if parsed:
@@ -371,6 +448,22 @@ class GenerationService:
             return None
         return self._create_job(scene, job_type="text_generation", payload=payload)
 
+    def enqueue_narration_generation(self, scene_id: int, payload: dict | None = None):
+        scene = self._get_scene(scene_id)
+        if not scene:
+            return None
+        payload = dict(payload or {})
+        payload.setdefault("target_type", "scene")
+        return self._create_job(scene, job_type="narration_generation", payload=payload)
+
+    def enqueue_dialogue_generation(self, scene_id: int, payload: dict | None = None):
+        scene = self._get_scene(scene_id)
+        if not scene:
+            return None
+        payload = dict(payload or {})
+        payload.setdefault("target_type", "scene")
+        return self._create_job(scene, job_type="dialogue_generation", payload=payload)
+
     def enqueue_state_extraction(self, scene_id: int, payload: dict | None = None):
         scene = self._get_scene(scene_id)
         if not scene:
@@ -402,6 +495,80 @@ class GenerationService:
             self._log_usage(
                 project_id=scene.project_id,
                 action_type="text_generation",
+                usage=result.get("usage"),
+                detail={"scene_id": scene.id, "candidate_id": candidate.id, "parsed": parsed is not None},
+            )
+            return self._mark_job_success(
+                job,
+                response_json=self._dump_json(
+                    {
+                        "prompt": prompt,
+                        "result": {"text": result.get("text"), "usage": result.get("usage"), "model": result.get("model")},
+                    }
+                ),
+            )
+        except Exception as exc:
+            self._mark_job_failed(job, exc)
+            raise
+
+    def process_narration_generation(self, scene_id: int, payload: dict | None = None):
+        scene = self._get_scene(scene_id)
+        if not scene:
+            return None
+        payload = dict(payload or {})
+        job = self.enqueue_narration_generation(scene_id, payload)
+        self._mark_job_running(job)
+        try:
+            context = self._resolve_scene_context(scene, payload)
+            prompt = build_scene_prompt(context, mode="narration_generation")
+            result = self._text_ai_client.generate_text(
+                prompt,
+                model=payload.get("model_name"),
+                temperature=0.7,
+                response_format={"type": "json_object"},
+            )
+            candidate, parsed = self._save_narration_generation_result(scene, result, result.get("model"))
+            self._log_usage(
+                project_id=scene.project_id,
+                action_type="narration_generation",
+                usage=result.get("usage"),
+                detail={"scene_id": scene.id, "candidate_id": candidate.id, "parsed": parsed is not None},
+            )
+            return self._mark_job_success(
+                job,
+                response_json=self._dump_json(
+                    {
+                        "prompt": prompt,
+                        "result": {"text": result.get("text"), "usage": result.get("usage"), "model": result.get("model")},
+                    }
+                ),
+            )
+        except Exception as exc:
+            self._mark_job_failed(job, exc)
+            raise
+
+    def process_dialogue_generation(self, scene_id: int, payload: dict | None = None):
+        scene = self._get_scene(scene_id)
+        if not scene:
+            return None
+        payload = dict(payload or {})
+        if not (scene.narration_text or "").strip():
+            raise ValueError("narration_text is required before dialogue generation")
+        job = self.enqueue_dialogue_generation(scene_id, payload)
+        self._mark_job_running(job)
+        try:
+            context = self._resolve_scene_context(scene, payload)
+            prompt = build_scene_prompt(context, mode="dialogue_generation")
+            result = self._text_ai_client.generate_text(
+                prompt,
+                model=payload.get("model_name"),
+                temperature=0.8,
+                response_format={"type": "json_object"},
+            )
+            candidate, parsed = self._save_dialogue_generation_result(scene, result, result.get("model"))
+            self._log_usage(
+                project_id=scene.project_id,
+                action_type="dialogue_generation",
                 usage=result.get("usage"),
                 detail={"scene_id": scene.id, "candidate_id": candidate.id, "parsed": parsed is not None},
             )
@@ -469,6 +636,7 @@ class GenerationService:
                 prompt,
                 size=payload.get("size"),
                 model=payload.get("model_name"),
+                quality=payload.get("quality"),
                 input_image_paths=[asset.file_path for asset in reference_assets],
                 input_fidelity="high" if reference_assets else None,
             )

@@ -11,6 +11,7 @@ from .generation_job import GenerationJob
 from .glossary_term import GlossaryTerm
 from .project import Project
 from .scene import Scene
+from .scene_character import SceneCharacter
 from .scene_choice import SceneChoice
 from .scene_image import SceneImage
 from .scene_version import SceneVersion
@@ -34,6 +35,7 @@ __all__ = [
     "GlossaryTerm",
     "Project",
     "Scene",
+    "SceneCharacter",
     "SceneChoice",
     "SceneImage",
     "SceneVersion",

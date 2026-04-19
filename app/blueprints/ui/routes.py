@@ -13,7 +13,8 @@ def _project_nav(project_id: int | None):
         {"label": "作品トップ", "icon": "bi-grid-1x2", "href": url_for("ui.project_home_page", project_id=project_id)},
         {"label": "世界観", "icon": "bi-globe2", "href": url_for("ui.world_page", project_id=project_id)},
         {"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)},
-        {"label": "骨子", "icon": "bi-diagram-3", "href": url_for("ui.story_outline_page", project_id=project_id)},
+        {"label": "ストーリー骨子", "icon": "bi-diagram-3", "href": url_for("ui.story_outline_page", project_id=project_id)},
+        {"label": "章一覧", "icon": "bi-list-ol", "href": url_for("ui.chapter_manage_page", project_id=project_id)},
         {"label": "シーン", "icon": "bi-film", "href": url_for("ui.scene_editor_page", project_id=project_id)},
         {"label": "エクスポート", "icon": "bi-box-arrow-up-right", "href": url_for("ui.export_page", project_id=project_id)},
     ]
@@ -64,22 +65,12 @@ def project_create_page():
 
 @ui_bp.route("/projects/<int:project_id>/home", methods=["GET"])
 def project_home_page(project_id: int):
-    return _render(
-        "ui/project_home.html",
-        title="作品編集トップ",
-        screen_id="project-home",
-        project_id=project_id,
-    )
+    return _render("ui/project_home.html", title="作品編集トップ", screen_id="project-home", project_id=project_id)
 
 
 @ui_bp.route("/projects/<int:project_id>/characters", methods=["GET"])
 def character_list_page(project_id: int):
-    return _render(
-        "ui/character_list.html",
-        title="キャラクター一覧",
-        screen_id="character-list",
-        project_id=project_id,
-    )
+    return _render("ui/character_list.html", title="キャラクター一覧", screen_id="character-list", project_id=project_id)
 
 
 @ui_bp.route("/projects/<int:project_id>/characters/new", methods=["GET"])
@@ -106,22 +97,17 @@ def character_edit_page(project_id: int, character_id: int):
 
 @ui_bp.route("/projects/<int:project_id>/world", methods=["GET"])
 def world_page(project_id: int):
-    return _render(
-        "ui/world_edit.html",
-        title="世界観設定",
-        screen_id="world-edit",
-        project_id=project_id,
-    )
+    return _render("ui/world_edit.html", title="世界観設定", screen_id="world-edit", project_id=project_id)
 
 
 @ui_bp.route("/projects/<int:project_id>/story-outline", methods=["GET"])
 def story_outline_page(project_id: int):
-    return _render(
-        "ui/story_outline.html",
-        title="ストーリー骨子設定",
-        screen_id="story-outline",
-        project_id=project_id,
-    )
+    return _render("ui/story_outline.html", title="ストーリー骨子設定", screen_id="story-outline", project_id=project_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/chapters/manage", methods=["GET"])
+def chapter_manage_page(project_id: int):
+    return _render("ui/chapter_manage.html", title="章一覧・編集", screen_id="chapter-manage", project_id=project_id)
 
 
 @ui_bp.route("/projects/<int:project_id>/scenes", methods=["GET"])
@@ -163,23 +149,12 @@ def image_review_page(scene_id: int):
 @ui_bp.route("/scenes/<int:scene_id>/preview", methods=["GET"])
 def preview_page(scene_id: int):
     project_id = request.args.get("project_id", type=int)
-    return _render(
-        "ui/preview.html",
-        title="プレビュー",
-        screen_id="preview",
-        project_id=project_id,
-        scene_id=scene_id,
-    )
+    return _render("ui/preview.html", title="プレビュー", screen_id="preview", project_id=project_id, scene_id=scene_id)
 
 
 @ui_bp.route("/projects/<int:project_id>/exports", methods=["GET"])
 def export_page(project_id: int):
-    return _render(
-        "ui/export.html",
-        title="エクスポート",
-        screen_id="export",
-        project_id=project_id,
-    )
+    return _render("ui/export.html", title="エクスポート", screen_id="export", project_id=project_id)
 
 
 @ui_bp.route("/settings", methods=["GET"])

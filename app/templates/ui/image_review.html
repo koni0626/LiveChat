@@ -33,7 +33,7 @@
       <textarea class="form-control font-mono-sm" id="promptPreview" rows="8" readonly></textarea>
       <div class="d-flex gap-2 justify-content-end">
         <button class="btn btn-outline-dark" type="button" id="imageRefreshButton">再生成</button>
-        <button class="btn btn-sunrise" type="submit">画像を生成</button>
+        <button class="btn btn-sunrise" type="submit" id="imageGenerateButton">画像を生成</button>
       </div>
     </form>
   </section>
@@ -45,7 +45,11 @@
   const sceneId = Number({{ scene_id }});
   const historyHost = document.getElementById("imageHistory");
   const form = document.getElementById("imageGenerateForm");
+  const imageStage = document.getElementById("imageStage");
   const imageRefreshButton = document.getElementById("imageRefreshButton");
+  const imageGenerateButton = document.getElementById("imageGenerateButton");
+  const defaultGenerateLabel = imageGenerateButton.textContent;
+  const defaultRefreshLabel = imageRefreshButton.textContent;
   let latestImageId = null;
 
   function renderReferenceCharacters(characters) {
@@ -66,9 +70,23 @@
     `).join("");
   }
 
-  function setGenerating(active) {
-    form.querySelector('[type="submit"]').disabled = active;
+  function renderGeneratingStage(message = "画像を生成中...") {
+    imageStage.innerHTML = `
+      <div class="text-center">
+        <div class="spinner-border text-warning mb-3" role="status" aria-hidden="true"></div>
+        <div>${NovelUI.escape(message)}</div>
+      </div>
+    `;
+  }
+
+  function setGenerating(active, mode = "generate") {
+    imageGenerateButton.disabled = active;
     imageRefreshButton.disabled = active;
+    imageGenerateButton.textContent = active && mode === "generate" ? "生成中..." : defaultGenerateLabel;
+    imageRefreshButton.textContent = active && mode === "refresh" ? "再生成中..." : defaultRefreshLabel;
+    if (active) {
+      renderGeneratingStage(mode === "refresh" ? "画像を再生成中..." : "画像を生成中...");
+    }
   }
 
   async function loadImageContext() {
@@ -87,9 +105,9 @@
     const selected = payload.selected_image;
     if (selected?.asset?.media_url) {
       latestImageId = selected.id;
-      document.getElementById("imageStage").innerHTML = `<img src="${selected.asset.media_url}" alt="scene image">`;
+      imageStage.innerHTML = `<img src="${selected.asset.media_url}" alt="scene image">`;
     } else {
-      document.getElementById("imageStage").innerHTML = `<div class="empty-panel">まだ選択済み画像がありません。</div>`;
+      imageStage.innerHTML = `<div class="empty-panel">まだ選択済み画像がありません。</div>`;
     }
   }
 
@@ -110,8 +128,8 @@
     await Promise.all([loadImageContext(), loadImageHistory()]);
   }
 
-  async function generateImage(body, successMessage) {
-    setGenerating(true);
+  async function generateImage(body, successMessage, mode = "generate") {
+    setGenerating(true, mode);
     try {
       await NovelUI.api(`/api/v1/scenes/${sceneId}/images/generate`, { method: "POST", body });
       await refreshAll();
@@ -127,7 +145,7 @@
     event.preventDefault();
     const body = Object.fromEntries(new FormData(event.currentTarget).entries());
     body.use_character_base = document.getElementById("useCharacterBase").checked;
-    await generateImage(body, "画像生成が完了しました。");
+    await generateImage(body, "画像生成が完了しました。", "generate");
   });
 
   imageRefreshButton.addEventListener("click", async () => {
@@ -140,7 +158,8 @@
         source_scene_image_id: latestImageId,
         use_character_base: document.getElementById("useCharacterBase").checked,
       },
-      "再生成が完了しました。"
+      "再生成が完了しました。",
+      "refresh"
     );
   });
 

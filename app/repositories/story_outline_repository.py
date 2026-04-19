@@ -5,6 +5,7 @@ from ..models.story_outline import StoryOutline
 class StoryOutlineRepository:
     MUTABLE_FIELDS: tuple[str, ...] = (
         "premise",
+        "protagonist_name",
         "protagonist_position",
         "main_goal",
         "branching_policy",

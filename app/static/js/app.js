@@ -29,6 +29,12 @@ window.NovelUI = (() => {
     const data = normalizeResponse(payload);
     if (!response.ok) {
       const message = data?.message || payload?.message || `HTTP ${response.status}`;
+      if (response.status === 401 && !options.allowUnauthorized) {
+        const loginUrl = "/login";
+        if (window.location.pathname !== loginUrl) {
+          window.location.href = loginUrl;
+        }
+      }
       throw new Error(message);
     }
     return data;
@@ -69,5 +75,22 @@ window.NovelUI = (() => {
     });
   }
 
-  return { api, toast, fillForm, escape: escapeHtml };
+  async function logout() {
+    try {
+      await api("/api/v1/auth/logout", { method: "POST", allowUnauthorized: true });
+    } finally {
+      window.location.href = "/login";
+    }
+  }
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-action='logout']");
+    if (!button) {
+      return;
+    }
+    event.preventDefault();
+    logout();
+  });
+
+  return { api, toast, fillForm, escape: escapeHtml, logout };
 })();

@@ -10,6 +10,7 @@ class StoryOutline(db.Model, TimestampMixin):
         db.Integer, db.ForeignKey("project.id"), nullable=False, unique=True
     )
     premise = db.Column(db.Text)
+    protagonist_name = db.Column(db.String(100))
     protagonist_position = db.Column(db.Text)
     main_goal = db.Column(db.Text)
     branching_policy = db.Column(db.Text)

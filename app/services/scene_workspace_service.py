@@ -13,6 +13,7 @@ from .glossary_service import GlossaryService
 from .project_service import ProjectService
 from .scene_choice_service import SceneChoiceService
 from .scene_image_service import SceneImageService
+from .scene_character_service import SceneCharacterService
 from .scene_service import SceneService
 from .scene_version_service import SceneVersionService
 from .world_service import WorldService
@@ -31,6 +32,7 @@ class SceneWorkspaceService:
         glossary_service: GlossaryService | None = None,
         world_service: WorldService | None = None,
         asset_service: AssetService | None = None,
+        scene_character_service: SceneCharacterService | None = None,
     ):
         self._scene_service = scene_service or SceneService()
         self._scene_choice_service = scene_choice_service or SceneChoiceService()
@@ -42,6 +44,7 @@ class SceneWorkspaceService:
         self._glossary_service = glossary_service or GlossaryService()
         self._world_service = world_service or WorldService()
         self._asset_service = asset_service or AssetService()
+        self._scene_character_service = scene_character_service or SceneCharacterService()
 
     def _load_json(self, value):
         if value is None:
@@ -159,6 +162,8 @@ class SceneWorkspaceService:
         return images[-1] if images else None
 
     def _serialize_scene(self, scene):
+        scene_state = self._load_json(scene.scene_state_json)
+        cast_character_ids = self._scene_character_service.list_character_ids(scene.id)
         return {
             "id": scene.id,
             "project_id": scene.project_id,
@@ -169,7 +174,8 @@ class SceneWorkspaceService:
             "summary": scene.summary,
             "narration_text": scene.narration_text,
             "dialogue_json": self._load_json(scene.dialogue_json),
-            "scene_state_json": self._load_json(scene.scene_state_json),
+            "scene_state_json": scene_state,
+            "cast_character_ids": cast_character_ids,
             "image_prompt_text": scene.image_prompt_text,
             "active_version_id": scene.active_version_id,
             "sort_order": scene.sort_order,

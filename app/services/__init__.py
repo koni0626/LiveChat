@@ -5,6 +5,7 @@ __all__ = [
     "character_service",
     "character_image_rule_service",
     "scene_service",
+    "scene_character_service",
     "asset_service",
     "generation_service",
     "glossary_service",

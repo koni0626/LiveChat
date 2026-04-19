@@ -4,12 +4,12 @@
   <div class="hero-panel">
     <div>
       <div class="eyebrow">Dashboard</div>
-      <h2 class="section-title">制作中の作品へ、最短で戻る</h2>
-      <p class="section-copy">最近触った作品、次に進めるべき導線、制作の温度感をひと目で把握できるホーム画面です。</p>
+      <h2 class="section-title">制作中の作品へ、最短で戻れます。</h2>
+      <p class="section-copy">最近の作品を確認して、そのまま世界観・キャラクター・シーン編集へ進めます。</p>
     </div>
     <div class="hero-actions">
       <a href="{{ url_for('ui.project_create_page') }}" class="btn btn-sunrise">
-        <i class="bi bi-plus-lg"></i><span>新規作品作成</span>
+        <i class="bi bi-plus-lg"></i><span>新規作品を作成</span>
       </a>
       <a href="{{ url_for('ui.project_list_page') }}" class="btn btn-outline-light">
         <i class="bi bi-collection"></i><span>作品一覧</span>
@@ -40,12 +40,13 @@
       </div>
       <div class="project-card-grid" id="recentProjects"></div>
     </section>
+
     <section class="panel-card span-4">
       <div class="panel-head"><h3>Quick Start</h3></div>
       <div class="quick-actions">
-        <a class="quick-link" href="{{ url_for('ui.project_create_page') }}"><i class="bi bi-stars"></i><span>新規タイトルを立ち上げる</span></a>
+        <a class="quick-link" href="{{ url_for('ui.project_create_page') }}"><i class="bi bi-stars"></i><span>新しいタイトルを立ち上げる</span></a>
         <a class="quick-link" href="{{ url_for('ui.settings_page') }}"><i class="bi bi-sliders"></i><span>モデル設定を見る</span></a>
-        <a class="quick-link" href="/health"><i class="bi bi-heart-pulse"></i><span>環境状態を確認する</span></a>
+        <a class="quick-link" href="/health"><i class="bi bi-heart-pulse"></i><span>起動状態を確認する</span></a>
       </div>
     </section>
   </div>
@@ -58,23 +59,28 @@
     const projects = await NovelUI.api("/api/v1/projects");
     const list = Array.isArray(projects) ? projects : [];
     document.getElementById("dashboardProjectCount").textContent = String(list.length);
+
     const host = document.getElementById("recentProjects");
     if (!list.length) {
       host.innerHTML = `<div class="empty-panel">まだ作品がありません。最初の1本をここから始めましょう。</div>`;
       return;
     }
+
     host.innerHTML = list.slice(0, 6).map((project) => `
       <a class="project-card" href="/projects/${project.id}/home">
         <div class="project-card-top">
-          <span class="badge text-bg-light">${project.genre || "genre"}</span>
-          <span class="soft-code">${project.status || "draft"}</span>
+          <span class="badge text-bg-light">${NovelUI.escape(project.genre || "genre")}</span>
+          <span class="soft-code">${NovelUI.escape(project.status || "draft")}</span>
         </div>
         <h4>${NovelUI.escape(project.title || "Untitled")}</h4>
         <p>${NovelUI.escape(project.summary || "概要はまだありません。")}</p>
       </a>
     `).join("");
   }
-  loadDashboard().catch((error) => NovelUI.toast(error.message || "ダッシュボードの読込に失敗しました。", "danger"));
+
+  loadDashboard().catch((error) => {
+    NovelUI.toast(error.message || "ダッシュボードの読み込みに失敗しました。", "danger");
+  });
 })();
 </script>
 {% endblock %}

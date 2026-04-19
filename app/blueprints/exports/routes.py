@@ -1,11 +1,44 @@
 from flask import Blueprint, request
 
 from ...api import json_response
+from ...services.asset_service import AssetService
 from ...services.export_service import ExportService
+import os
+from flask import current_app
 
 
 exports_bp = Blueprint("exports", __name__)
 export_service = ExportService()
+asset_service = AssetService()
+
+
+def _build_media_url(file_path: str | None):
+    if not file_path:
+        return None
+    storage_root = current_app.config.get("STORAGE_ROOT")
+    normalized_path = os.path.normpath(file_path)
+    normalized_root = os.path.normpath(storage_root)
+    if not normalized_path.startswith(normalized_root):
+        return None
+    relative = os.path.relpath(normalized_path, normalized_root).replace("\\", "/")
+    return f"/media/{relative}"
+
+
+def _serialize_asset_summary(asset_id: int | None):
+    if not asset_id:
+        return None
+    asset = asset_service.get_asset(asset_id)
+    if not asset:
+        return None
+    return {
+        "id": asset.id,
+        "file_name": asset.file_name,
+        "mime_type": asset.mime_type,
+        "file_size": asset.file_size,
+        "media_url": _build_media_url(asset.file_path),
+    }
+
+
 def _serialize_export_job(export_job):
     if export_job is None:
         return None
@@ -14,6 +47,7 @@ def _serialize_export_job(export_job):
         "project_id": export_job.project_id,
         "export_type": export_job.export_type,
         "asset_id": export_job.asset_id,
+        "asset": _serialize_asset_summary(export_job.asset_id),
         "status": export_job.status,
         "options_json": export_job.options_json,
         "started_at": export_job.started_at.isoformat() if getattr(export_job, "started_at", None) else None,
@@ -39,7 +73,9 @@ def create_export(project_id: int):
         export_job = export_service.create_export(project_id, payload)
     except ValueError as exc:
         return json_response({"message": str(exc)}, status=400)
-    return json_response(_serialize_export_job(export_job), status=202)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=500)
+    return json_response(_serialize_export_job(export_job), status=201)
 
 
 @exports_bp.route("/exports/<int:export_job_id>", methods=["GET"])

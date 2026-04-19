@@ -13,24 +13,100 @@
     <div class="panel-head">
       <h3 id="sceneEditorTitle">シーン本文エディタ</h3>
       <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-outline-dark" id="scenePreviewButton">Preview</button>
-        <button class="btn btn-sm btn-sunrise" id="sceneSaveButton">保存</button>
+        <button class="btn btn-sm btn-outline-dark" id="scenePreviewButton" type="button">Preview</button>
+        <button class="btn btn-sm btn-sunrise" id="sceneSaveButton" type="button">保存</button>
       </div>
     </div>
+
     <form id="sceneForm" class="vstack gap-3">
-      <input type="hidden" name="chapter_id">
       <div class="row g-3">
-        <div class="col-md-8"><label class="form-label">タイトル</label><input class="form-control" name="title"></div>
-        <div class="col-md-4"><label class="form-label">scene_key</label><input class="form-control font-mono-sm" name="scene_key"></div>
+        <div class="col-md-4">
+          <label class="form-label" for="sceneChapterSelect">章</label>
+          <select class="form-select" name="chapter_id" id="sceneChapterSelect"></select>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label" for="sceneTitleInput">タイトル</label>
+          <input class="form-control" id="sceneTitleInput" name="title">
+        </div>
       </div>
-      <label class="form-label">要約</label><textarea class="form-control" name="summary" rows="2"></textarea>
-      <label class="form-label">地の文</label><textarea class="form-control" name="narration_text" rows="8"></textarea>
-      <label class="form-label">セリフJSON</label><textarea class="form-control font-mono-sm" name="dialogue_json" rows="6"></textarea>
-      <label class="form-label">選択肢メモ</label><div class="mini-board" id="sceneChoicesBoard"></div>
+
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label" for="sceneKeyInput">scene_key</label>
+          <input class="form-control font-mono-sm" id="sceneKeyInput" name="scene_key">
+        </div>
+        <div class="col-md-8">
+          <label class="form-label" for="sceneSummaryInput">要約</label>
+          <textarea class="form-control" id="sceneSummaryInput" name="summary" rows="2"></textarea>
+        </div>
+      </div>
+
+      <label class="form-label" for="sceneNarrationInput">地の文（設計用・画像生成の元）</label>
+      <textarea class="form-control" id="sceneNarrationInput" name="narration_text" rows="8"></textarea>
+
+      <div class="mini-section">
+        <div class="mini-section-title">登場キャラクター</div>
+        <div class="mini-board vstack gap-2" id="sceneCastSelector"></div>
+      </div>
+
+      <label class="form-label" for="sceneDialogueInput">セリフ JSON（地の文ベース）</label>
+      <textarea class="form-control font-mono-sm" id="sceneDialogueInput" name="dialogue_json" rows="6"></textarea>
+
+      <div class="mini-section">
+        <div class="d-flex justify-content-between align-items-center gap-2">
+          <label class="form-label mb-0">選択肢一覧</label>
+          <button class="btn btn-sm btn-outline-dark" type="button" id="choiceNewButton">選択肢を追加</button>
+        </div>
+
+        <div class="mini-board vstack gap-3" id="sceneChoicesBoard"></div>
+
+        <div class="panel-card choice-editor-panel" id="choiceEditorPanel" hidden>
+          <div class="panel-head mb-3">
+            <h3 id="choiceEditorTitle">選択肢を追加</h3>
+            <button class="btn btn-sm btn-outline-dark" type="button" id="choiceCancelButton">閉じる</button>
+          </div>
+
+          <div id="choiceForm" class="vstack gap-3">
+            <input type="hidden" name="choice_id" value="">
+            <div class="choice-editor-grid">
+              <div>
+                <label class="form-label" for="choiceTextInput">表示テキスト</label>
+                <input class="form-control" id="choiceTextInput" name="choice_text">
+              </div>
+              <div>
+                <label class="form-label" for="choiceNextSceneSelect">遷移先シーン</label>
+                <select class="form-select" id="choiceNextSceneSelect" name="next_scene_id"></select>
+              </div>
+            </div>
+
+            <div class="choice-editor-grid">
+              <div>
+                <label class="form-label" for="choiceSortOrderInput">表示順</label>
+                <input class="form-control" id="choiceSortOrderInput" name="sort_order" type="number" min="1" value="1">
+              </div>
+              <div>
+                <label class="form-label" for="choiceResultSummaryInput">結果メモ</label>
+                <input class="form-control" id="choiceResultSummaryInput" name="result_summary">
+              </div>
+            </div>
+
+            <div>
+              <label class="form-label" for="choiceConditionInput">条件 JSON</label>
+              <textarea class="form-control font-mono-sm" id="choiceConditionInput" name="condition_json" rows="4" placeholder='{"flag":"met_guide"}'></textarea>
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-sunrise" type="button" id="choiceSubmitButton">保存</button>
+              <button class="btn btn-outline-dark" type="button" id="choiceResetButton">入力をクリア</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="action-row">
-        <button class="btn btn-dark" type="button" id="sceneGenerateButton">本文を生成</button>
-        <button class="btn btn-outline-dark" type="button" id="sceneRegenerateButton">再生成</button>
-        <button class="btn btn-outline-dark" type="button" id="sceneExtractButton">状態JSON抽出</button>
+        <button class="btn btn-dark" type="button" id="sceneNarrationGenerateButton">地の文生成</button>
+        <button class="btn btn-outline-dark" type="button" id="sceneDialogueGenerateButton">セリフ生成</button>
+        <button class="btn btn-outline-dark" type="button" id="sceneExtractButton">状態 JSON 抽出</button>
         <button class="btn btn-outline-dark" type="button" id="sceneImageButton">画像生成へ</button>
         <button class="btn btn-outline-dark" type="button" id="sceneFixButton">固定 / 解除</button>
       </div>
@@ -38,21 +114,25 @@
   </section>
 
   <aside class="panel-card scene-side-panel">
-    <div class="panel-head"><h3>補助情報</h3></div>
+    <div class="panel-head"><h3>参照情報</h3></div>
+
     <div class="mini-section">
       <div class="mini-section-title">現在のキャラクター</div>
       <div class="mini-board" id="sceneCharacterBoard"></div>
     </div>
+
     <div class="mini-section">
       <div class="mini-section-title">世界観メモ</div>
       <div class="mini-board" id="sceneWorldBoard"></div>
     </div>
+
     <div class="mini-section">
-      <div class="mini-section-title">状態JSON</div>
+      <div class="mini-section-title">状態 JSON</div>
       <pre class="json-board" id="sceneStateBoard"></pre>
     </div>
+
     <div class="mini-section">
-      <div class="mini-section-title">画像用プロンプト</div>
+      <div class="mini-section-title">画像生成プロンプト</div>
       <div class="mini-board" id="sceneImagePromptBoard"></div>
     </div>
   </aside>
@@ -64,13 +144,29 @@
   const projectId = Number({{ project_id }});
   let selectedSceneId = {{ selected_scene_id if selected_scene_id else "null" }};
   let selectedScene = null;
+  let chaptersCache = [];
+  let scenesCache = [];
+  let currentChoices = [];
+  let charactersCache = [];
 
   const treeHost = document.getElementById("sceneTree");
   const form = document.getElementById("sceneForm");
-  const sceneGenerateButton = document.getElementById("sceneGenerateButton");
-  const sceneRegenerateButton = document.getElementById("sceneRegenerateButton");
+  const chapterSelect = document.getElementById("sceneChapterSelect");
+  const sceneCastSelector = document.getElementById("sceneCastSelector");
+  const sceneNarrationGenerateButton = document.getElementById("sceneNarrationGenerateButton");
+  const sceneDialogueGenerateButton = document.getElementById("sceneDialogueGenerateButton");
   const sceneExtractButton = document.getElementById("sceneExtractButton");
   const sceneFixButton = document.getElementById("sceneFixButton");
+  const choiceBoard = document.getElementById("sceneChoicesBoard");
+  const choicePanel = document.getElementById("choiceEditorPanel");
+  const choiceForm = document.getElementById("choiceForm");
+  const choiceNextSceneSelect = document.getElementById("choiceNextSceneSelect");
+  const choiceEditorTitle = document.getElementById("choiceEditorTitle");
+  const choiceSubmitButton = document.getElementById("choiceSubmitButton");
+
+  function choiceField(name) {
+    return choiceForm.querySelector(`[name="${name}"]`);
+  }
 
   function formatJson(value, fallback = "まだありません。") {
     if (value === null || value === undefined || value === "") {
@@ -86,92 +182,349 @@
     return JSON.stringify(value, null, 2);
   }
 
+  function getSelectedCastIds() {
+    return Array.from(form.querySelectorAll('input[name="cast_character_ids"]:checked'))
+      .map((input) => Number(input.value))
+      .filter((value) => Number.isInteger(value) && value > 0);
+  }
+
+  function renderSelectedCharacterBoard(selectedIds) {
+    const selectedSet = new Set((selectedIds || []).map((value) => Number(value)));
+    const selectedCharacters = charactersCache.filter((character) => selectedSet.has(Number(character.id)));
+    document.getElementById("sceneCharacterBoard").innerHTML = selectedCharacters.length
+      ? selectedCharacters.map((character) => `<div class="mini-pill">${NovelUI.escape(character.name)}</div>`).join("")
+      : `<span class="text-secondary">キャラクター未設定</span>`;
+  }
+
+  function renderCastSelector(selectedIds = []) {
+    const selectedSet = new Set((selectedIds || []).map((value) => Number(value)));
+    if (!charactersCache.length) {
+      sceneCastSelector.innerHTML = `<span class="text-secondary">キャラクターがまだありません。</span>`;
+      renderSelectedCharacterBoard([]);
+      return;
+    }
+    sceneCastSelector.innerHTML = charactersCache.map((character) => `
+      <label class="form-check">
+        <input
+          class="form-check-input"
+          type="checkbox"
+          name="cast_character_ids"
+          value="${character.id}"
+          ${selectedSet.has(Number(character.id)) ? "checked" : ""}
+        >
+        <span class="form-check-label">
+          ${NovelUI.escape(character.name)}
+          ${character.role ? `<span class="text-secondary"> / ${NovelUI.escape(character.role)}</span>` : ""}
+        </span>
+      </label>
+    `).join("");
+    renderSelectedCharacterBoard(selectedIds);
+  }
+
+  function resetChoiceEditor() {
+    ["choice_id", "choice_text", "next_scene_id", "sort_order", "result_summary", "condition_json"].forEach((name) => {
+      const field = choiceField(name);
+      if (field) {
+        field.value = "";
+      }
+    });
+    choiceField("choice_id").value = "";
+    choiceField("sort_order").value = String((currentChoices.length || 0) + 1);
+    choiceNextSceneSelect.value = "";
+    choiceEditorTitle.textContent = "選択肢を追加";
+    choiceSubmitButton.textContent = "保存";
+  }
+
+  function setChoicePanelVisible(visible) {
+    choicePanel.hidden = !visible;
+  }
+
+  function fillChoiceNextSceneOptions() {
+    const currentSceneValue = selectedSceneId ? String(selectedSceneId) : "";
+    const options = [`<option value="">未設定</option>`].concat(
+      scenesCache
+        .filter((scene) => String(scene.id) !== currentSceneValue)
+        .map((scene) => `<option value="${scene.id}">${NovelUI.escape(scene.title || "無題のシーン")}</option>`)
+    );
+    choiceNextSceneSelect.innerHTML = options.join("");
+  }
+
+  function renderChoices() {
+    if (!selectedSceneId) {
+      choiceBoard.innerHTML = `<span class="text-secondary">先にシーンを保存すると選択肢を追加できます。</span>`;
+      return;
+    }
+    if (!currentChoices.length) {
+      choiceBoard.innerHTML = `<span class="text-secondary">選択肢はまだありません。</span>`;
+      return;
+    }
+    choiceBoard.innerHTML = currentChoices.map((choice) => `
+      <div class="choice-row" data-choice-id="${choice.id}">
+        <div class="choice-row-main">
+          <div class="choice-row-title">${NovelUI.escape(choice.choice_text || "選択肢")}</div>
+          <div class="choice-row-meta">
+            <span>順番: ${choice.sort_order || "-"}</span>
+            <span>遷移先: ${choice.next_scene_id || "未設定"}</span>
+            <span>${NovelUI.escape(choice.result_summary || "結果メモなし")}</span>
+          </div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-sm btn-outline-dark" type="button" data-choice-action="edit">編集</button>
+          <button class="btn btn-sm btn-outline-danger" type="button" data-choice-action="delete">削除</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  function fillChoiceEditor(choice) {
+    resetChoiceEditor();
+    choiceField("choice_id").value = String(choice.id);
+    choiceField("choice_text").value = choice.choice_text || "";
+    choiceField("next_scene_id").value = choice.next_scene_id || "";
+    choiceField("sort_order").value = choice.sort_order || 1;
+    choiceField("result_summary").value = choice.result_summary || "";
+    choiceField("condition_json").value = formatJson(choice.condition_json, "");
+    choiceEditorTitle.textContent = "選択肢を編集";
+    choiceSubmitButton.textContent = "更新";
+    setChoicePanelVisible(true);
+  }
+
+  function emptyEditor(chapterId = "") {
+    selectedSceneId = null;
+    selectedScene = null;
+    currentChoices = [];
+    form.reset();
+    chapterSelect.value = chapterId ? String(chapterId) : "";
+    document.getElementById("sceneEditorTitle").textContent = "新規シーン";
+    document.getElementById("sceneStateBoard").textContent = "まだありません。";
+    document.getElementById("sceneWorldBoard").innerHTML = `<span class="text-secondary">世界観メモはまだありません。</span>`;
+    document.getElementById("sceneImagePromptBoard").textContent = "画像生成プロンプトはまだありません。";
+    renderCastSelector([]);
+    fillChoiceNextSceneOptions();
+    renderChoices();
+    resetChoiceEditor();
+    setChoicePanelVisible(false);
+  }
+
+  function ensureChapterSelected() {
+    const chapterId = Number(chapterSelect.value);
+    if (!chapterId) {
+      NovelUI.toast("先に章を選択してください。章が無ければ骨子画面で章を追加してください。", "warning");
+      return null;
+    }
+    return chapterId;
+  }
+
   function setSceneBusy(active) {
-    [sceneGenerateButton, sceneRegenerateButton, sceneExtractButton, sceneFixButton].forEach((button) => {
+    [sceneNarrationGenerateButton, sceneDialogueGenerateButton, sceneExtractButton, sceneFixButton].forEach((button) => {
       button.disabled = active;
     });
   }
 
+  async function loadChapters() {
+    const preservedChapterId = chapterSelect.value || (selectedScene?.chapter_id ? String(selectedScene.chapter_id) : "");
+    const chapters = await NovelUI.api(`/api/v1/projects/${projectId}/chapters`);
+    chaptersCache = Array.isArray(chapters) ? chapters : [];
+    chapterSelect.innerHTML = chaptersCache.length
+      ? chaptersCache.map((chapter) => `<option value="${chapter.id}">第${chapter.chapter_no}章 ${NovelUI.escape(chapter.title)}</option>`).join("")
+      : `<option value="">章を先に作成してください</option>`;
+    if (preservedChapterId && chaptersCache.some((chapter) => String(chapter.id) === preservedChapterId)) {
+      chapterSelect.value = preservedChapterId;
+    } else if (!selectedSceneId && chaptersCache.length && !chapterSelect.value) {
+      chapterSelect.value = String(chaptersCache[0].id);
+    }
+    return chaptersCache;
+  }
+
+  async function loadCharacters() {
+    const characters = await NovelUI.api(`/api/v1/projects/${projectId}/characters`);
+    charactersCache = Array.isArray(characters) ? characters : [];
+    renderCastSelector(getSelectedCastIds());
+    return charactersCache;
+  }
+
   async function loadSceneTree() {
     const [chapters, scenes] = await Promise.all([
-      NovelUI.api(`/api/v1/projects/${projectId}/chapters`),
+      loadChapters(),
       NovelUI.api(`/api/v1/projects/${projectId}/scenes`),
     ]);
-    const sceneMap = new Map((Array.isArray(scenes) ? scenes : []).map((scene) => [scene.chapter_id, []]));
-    for (const scene of scenes || []) {
-      if (!sceneMap.has(scene.chapter_id)) sceneMap.set(scene.chapter_id, []);
+    scenesCache = Array.isArray(scenes) ? scenes : [];
+    fillChoiceNextSceneOptions();
+
+    const sceneMap = new Map();
+    for (const scene of scenesCache) {
+      if (!sceneMap.has(scene.chapter_id)) {
+        sceneMap.set(scene.chapter_id, []);
+      }
       sceneMap.get(scene.chapter_id).push(scene);
     }
-    treeHost.innerHTML = (chapters || []).map((chapter) => `
+
+    treeHost.innerHTML = chapters.length ? chapters.map((chapter) => `
       <div class="chapter-block">
         <div class="chapter-title">第${chapter.chapter_no}章 ${NovelUI.escape(chapter.title)}</div>
         <div class="vstack gap-2">
           ${(sceneMap.get(chapter.id) || []).map((scene) => `
-            <button class="scene-chip ${selectedSceneId === scene.id ? "active" : ""}" data-scene-id="${scene.id}" data-scene-chapter="${chapter.id}">
-              <span>${NovelUI.escape(scene.title || "未命名シーン")}</span>
+            <button class="scene-chip ${selectedSceneId === scene.id ? "active" : ""}" data-scene-id="${scene.id}">
+              <span>${NovelUI.escape(scene.title || "無題のシーン")}</span>
               <span class="soft-code">${scene.is_fixed ? "fixed" : "edit"}</span>
             </button>
-          `).join("")}
+          `).join("") || `<div class="empty-panel">この章にはまだシーンがありません。</div>`}
         </div>
       </div>
-    `).join("") || `<div class="empty-panel">章を先に登録してください。</div>`;
+    `).join("") : `<div class="empty-panel">章を先に作成してください。</div>`;
   }
 
   async function loadSceneContext(sceneId) {
     const payload = await NovelUI.api(`/api/v1/scenes/${sceneId}/editor-context`);
     selectedSceneId = sceneId;
     selectedScene = payload.scene;
+    currentChoices = Array.isArray(payload.choices) ? payload.choices : [];
+    charactersCache = Array.isArray(payload.characters) ? payload.characters : charactersCache;
+
     NovelUI.fillForm(form, payload.scene);
+    chapterSelect.value = String(payload.scene.chapter_id || "");
     if (typeof payload.scene.dialogue_json === "object" && payload.scene.dialogue_json !== null) {
       form.querySelector('[name="dialogue_json"]').value = JSON.stringify(payload.scene.dialogue_json, null, 2);
     }
-    document.getElementById("sceneEditorTitle").textContent = payload.scene.title || "未命名シーン";
-    document.getElementById("sceneChoicesBoard").innerHTML = (payload.choices || []).map((choice) => `
-      <div class="mini-pill">${NovelUI.escape(choice.choice_text || "選択肢")}</div>
-    `).join("") || `<span class="text-secondary">選択肢はまだありません。</span>`;
-    document.getElementById("sceneCharacterBoard").innerHTML = (payload.characters || []).map((character) => `
-      <div class="mini-pill">${NovelUI.escape(character.name)}</div>
-    `).join("") || `<span class="text-secondary">キャラクター未設定</span>`;
-    document.getElementById("sceneWorldBoard").innerHTML = `
-      <div class="mini-meta"><strong>${NovelUI.escape(payload.world_memo?.name || "world")}</strong></div>
-      <div>${NovelUI.escape(payload.world_memo?.overview || "")}</div>
-    `;
+
+    document.getElementById("sceneEditorTitle").textContent = payload.scene.title || "無題のシーン";
+    renderCastSelector(payload.scene.cast_character_ids || []);
+    document.getElementById("sceneWorldBoard").innerHTML = payload.world_memo?.overview
+      ? `<div><strong>${NovelUI.escape(payload.world_memo.name || "world")}</strong></div><div>${NovelUI.escape(payload.world_memo.overview)}</div>`
+      : `<span class="text-secondary">世界観メモはまだありません。</span>`;
     document.getElementById("sceneStateBoard").textContent = formatJson(payload.scene.scene_state_json);
-    document.getElementById("sceneImagePromptBoard").textContent = payload.scene.image_prompt_text || "画像用プロンプトはまだありません。";
+    document.getElementById("sceneImagePromptBoard").textContent = payload.scene.image_prompt_text || "画像生成プロンプトはまだありません。";
+
+    fillChoiceNextSceneOptions();
+    renderChoices();
+    resetChoiceEditor();
+    setChoicePanelVisible(false);
     await loadSceneTree();
+  }
+
+  async function saveChoice() {
+    if (!selectedSceneId) {
+      NovelUI.toast("先にシーンを保存してください。", "warning");
+      return;
+    }
+
+    const payload = {
+      choice_text: choiceField("choice_text").value.trim(),
+      next_scene_id: choiceField("next_scene_id").value ? Number(choiceField("next_scene_id").value) : null,
+      sort_order: Number(choiceField("sort_order").value || "1"),
+      result_summary: choiceField("result_summary").value.trim() || null,
+      condition_json: choiceField("condition_json").value.trim() || null,
+    };
+
+    const choiceId = choiceField("choice_id").value;
+    if (choiceId) {
+      await NovelUI.api(`/api/v1/scene-choices/${choiceId}`, { method: "PATCH", body: payload });
+      NovelUI.toast("選択肢を更新しました。");
+    } else {
+      await NovelUI.api(`/api/v1/scenes/${selectedSceneId}/choices`, { method: "POST", body: payload });
+      NovelUI.toast("選択肢を追加しました。");
+    }
+
+    await loadSceneContext(selectedSceneId);
   }
 
   treeHost.addEventListener("click", (event) => {
     const button = event.target.closest("[data-scene-id]");
-    if (!button) return;
-    loadSceneContext(Number(button.dataset.sceneId)).catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
+    if (!button) {
+      return;
+    }
+    loadSceneContext(Number(button.dataset.sceneId)).catch((error) => {
+      NovelUI.toast(error.message || "シーンの読み込みに失敗しました。", "danger");
+    });
+  });
+
+  choiceBoard.addEventListener("click", async (event) => {
+    const row = event.target.closest("[data-choice-id]");
+    const actionButton = event.target.closest("[data-choice-action]");
+    if (!row || !actionButton) {
+      return;
+    }
+
+    const choice = currentChoices.find((item) => String(item.id) === row.dataset.choiceId);
+    if (!choice) {
+      return;
+    }
+
+    if (actionButton.dataset.choiceAction === "edit") {
+      fillChoiceEditor(choice);
+      return;
+    }
+
+    if (!window.confirm("この選択肢を削除しますか？")) {
+      return;
+    }
+    try {
+      await NovelUI.api(`/api/v1/scene-choices/${choice.id}`, { method: "DELETE" });
+      NovelUI.toast("選択肢を削除しました。");
+      await loadSceneContext(selectedSceneId);
+    } catch (error) {
+      NovelUI.toast(error.message || "選択肢の削除に失敗しました。", "danger");
+    }
+  });
+
+  document.getElementById("choiceNewButton").addEventListener("click", () => {
+    if (!selectedSceneId) {
+      NovelUI.toast("先にシーンを保存してください。", "warning");
+      return;
+    }
+    resetChoiceEditor();
+    setChoicePanelVisible(true);
+  });
+
+  document.getElementById("choiceCancelButton").addEventListener("click", () => {
+    setChoicePanelVisible(false);
+    resetChoiceEditor();
+  });
+
+  document.getElementById("choiceResetButton").addEventListener("click", () => {
+    resetChoiceEditor();
+  });
+
+  choiceSubmitButton.addEventListener("click", async () => {
+    try {
+      await saveChoice();
+    } catch (error) {
+      NovelUI.toast(error.message || "選択肢の保存に失敗しました。", "danger");
+    }
+  });
+
+  sceneCastSelector.addEventListener("change", () => {
+    renderSelectedCharacterBoard(getSelectedCastIds());
   });
 
   document.getElementById("newSceneButton").addEventListener("click", async () => {
-    const chapterId = form.querySelector('[name="chapter_id"]').value || prompt("chapter_id を入力してください");
-    if (!chapterId) return;
-    try {
-      const scene = await NovelUI.api(`/api/v1/projects/${projectId}/scenes`, {
-        method: "POST",
-        body: { chapter_id: Number(chapterId), title: "新規シーン" },
-      });
-      await loadSceneContext(scene.id);
-      NovelUI.toast("シーンを作成しました。");
-    } catch (error) {
-      NovelUI.toast(error.message || "シーン作成に失敗しました。", "danger");
+    await loadChapters();
+    const chapterId = ensureChapterSelected();
+    if (!chapterId) {
+      return;
     }
+    emptyEditor(chapterId);
+    NovelUI.toast("新規シーンの入力モードに切り替えました。");
   });
 
   document.getElementById("sceneSaveButton").addEventListener("click", async () => {
-    if (!selectedSceneId) {
-      NovelUI.toast("先にシーンを選択してください。", "warning");
+    const body = Object.fromEntries(new FormData(form).entries());
+    body.cast_character_ids = getSelectedCastIds();
+    const chapterId = ensureChapterSelected();
+    if (!chapterId) {
       return;
     }
-    const body = Object.fromEntries(new FormData(form).entries());
+    body.chapter_id = chapterId;
     try {
-      await NovelUI.api(`/api/v1/scenes/${selectedSceneId}`, { method: "PATCH", body });
-      NovelUI.toast("シーンを保存しました。");
-      await loadSceneContext(selectedSceneId);
+      if (selectedSceneId) {
+        await NovelUI.api(`/api/v1/scenes/${selectedSceneId}`, { method: "PATCH", body });
+        NovelUI.toast("シーンを保存しました。");
+        await loadSceneContext(selectedSceneId);
+      } else {
+        const scene = await NovelUI.api(`/api/v1/projects/${projectId}/scenes`, { method: "POST", body });
+        NovelUI.toast("シーンを作成しました。");
+        await loadSceneContext(scene.id);
+      }
     } catch (error) {
       NovelUI.toast(error.message || "保存に失敗しました。", "danger");
     }
@@ -179,7 +532,7 @@
 
   async function runSceneAction(path, successMessage) {
     if (!selectedSceneId) {
-      NovelUI.toast("先にシーンを選択してください。", "warning");
+      NovelUI.toast("先にシーンを保存してください。", "warning");
       return;
     }
     setSceneBusy(true);
@@ -194,39 +547,53 @@
     }
   }
 
-  sceneGenerateButton.addEventListener("click", () => runSceneAction("generate", "本文生成が完了しました。"));
-  sceneRegenerateButton.addEventListener("click", () => runSceneAction("generate", "再生成が完了しました。"));
-  sceneExtractButton.addEventListener("click", () => runSceneAction("extract-state", "状態JSON抽出が完了しました。"));
+  sceneNarrationGenerateButton.addEventListener("click", () => runSceneAction("generate-narration", "地の文生成が完了しました。"));
+  sceneDialogueGenerateButton.addEventListener("click", () => runSceneAction("generate-dialogue", "セリフ生成が完了しました。"));
+  sceneExtractButton.addEventListener("click", () => runSceneAction("extract-state", "状態 JSON 抽出が完了しました。"));
+
   document.getElementById("sceneImageButton").addEventListener("click", () => {
     if (!selectedSceneId) {
-      NovelUI.toast("先にシーンを選択してください。", "warning");
+      NovelUI.toast("先にシーンを保存してください。", "warning");
       return;
     }
     location.href = `/scenes/${selectedSceneId}/images/review?project_id=${projectId}`;
   });
+
   document.getElementById("scenePreviewButton").addEventListener("click", () => {
     if (!selectedSceneId) {
-      NovelUI.toast("先にシーンを選択してください。", "warning");
+      NovelUI.toast("先にシーンを保存してください。", "warning");
       return;
     }
     location.href = `/scenes/${selectedSceneId}/preview?project_id=${projectId}`;
   });
+
   sceneFixButton.addEventListener("click", async () => {
     if (!selectedSceneId || !selectedScene) {
       NovelUI.toast("先にシーンを選択してください。", "warning");
       return;
     }
-    await runSceneAction(selectedScene.is_fixed ? "unfix" : "fix", selectedScene.is_fixed ? "固定を解除しました。" : "シーンを固定しました。");
+    await runSceneAction(
+      selectedScene.is_fixed ? "unfix" : "fix",
+      selectedScene.is_fixed ? "固定を解除しました。" : "シーンを固定しました。"
+    );
   });
 
   (async () => {
-    await loadSceneTree();
+    await Promise.all([loadCharacters(), loadSceneTree()]);
     if (!selectedSceneId) {
-      const scenes = await NovelUI.api(`/api/v1/projects/${projectId}/scenes`);
-      if (Array.isArray(scenes) && scenes.length) selectedSceneId = scenes[0].id;
+      if (Array.isArray(scenesCache) && scenesCache.length) {
+        selectedSceneId = scenesCache[0].id;
+      }
     }
-    if (selectedSceneId) await loadSceneContext(selectedSceneId);
-  })().catch((error) => NovelUI.toast(error.message || "シーン画面の初期化に失敗しました。", "danger"));
+    if (selectedSceneId) {
+      await loadSceneContext(selectedSceneId);
+    } else {
+      await loadChapters();
+      emptyEditor(chaptersCache[0]?.id || "");
+    }
+  })().catch((error) => {
+    NovelUI.toast(error.message || "シーン画面の初期化に失敗しました。", "danger");
+  });
 })();
 </script>
 {% endblock %}

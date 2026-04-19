@@ -4,8 +4,27 @@
   <div class="hero-panel">
     <div>
       <div class="eyebrow">Project Hub</div>
-      <h2 class="section-title" id="projectHomeTitle">作品情報を読み込み中...</h2>
-      <p class="section-copy" id="projectHomeSummary">制作全体の進行と次の一手をここで整理します。</p>
+      <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+        <div>
+          <h2 class="section-title" id="projectHomeTitle">作品情報を読み込み中...</h2>
+          <p class="section-copy" id="projectHomeSummary">制作全体の進行と次の一手をここで整理します。</p>
+        </div>
+        <button class="btn btn-light" type="button" id="projectEditToggleButton">作品名を変更</button>
+      </div>
+      <form id="projectEditForm" class="row g-2 mt-3" hidden>
+        <div class="col-md-5">
+          <label class="form-label" for="projectTitleInput">作品名</label>
+          <input class="form-control" id="projectTitleInput" name="title" placeholder="作品名">
+        </div>
+        <div class="col-md-7">
+          <label class="form-label" for="projectSummaryInput">概要</label>
+          <input class="form-control" id="projectSummaryInput" name="summary" placeholder="概要">
+        </div>
+        <div class="col-12 d-flex justify-content-end gap-2">
+          <button class="btn btn-outline-dark" type="button" id="projectEditCancelButton">閉じる</button>
+          <button class="btn btn-sunrise" type="submit">保存</button>
+        </div>
+      </form>
     </div>
   </div>
   <div class="stats-row" id="projectStatsRow"></div>
@@ -31,10 +50,27 @@
 <script>
 (() => {
   const projectId = Number({{ project_id }});
+  const editToggleButton = document.getElementById("projectEditToggleButton");
+  const editCancelButton = document.getElementById("projectEditCancelButton");
+  const editForm = document.getElementById("projectEditForm");
+  const titleInput = document.getElementById("projectTitleInput");
+  const summaryInput = document.getElementById("projectSummaryInput");
+
+  function setEditVisible(visible) {
+    editForm.hidden = !visible;
+    editToggleButton.textContent = visible ? "編集中" : "作品名を変更";
+    if (visible) {
+      titleInput.focus();
+      titleInput.select();
+    }
+  }
+
   async function loadOverview() {
     const overview = await NovelUI.api(`/api/v1/projects/${projectId}/overview`);
     document.getElementById("projectHomeTitle").textContent = overview.project?.title || "Untitled";
     document.getElementById("projectHomeSummary").textContent = overview.project?.summary || "概要はまだありません。";
+    titleInput.value = overview.project?.title || "";
+    summaryInput.value = overview.project?.summary || "";
     document.getElementById("projectStatsRow").innerHTML = [
       ["Characters", overview.stats?.character_count ?? 0],
       ["Scenes", overview.stats?.scene_count ?? 0],
@@ -54,6 +90,36 @@
       </a>
     `).join("") : `<div class="empty-panel">まだ更新されたシーンがありません。</div>`;
   }
+
+  editToggleButton.addEventListener("click", () => {
+    setEditVisible(editForm.hidden);
+  });
+
+  editCancelButton.addEventListener("click", () => {
+    setEditVisible(false);
+  });
+
+  editForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const body = {
+      title: titleInput.value.trim(),
+      summary: summaryInput.value.trim(),
+    };
+    if (!body.title) {
+      NovelUI.toast("作品名を入力してください。", "warning");
+      titleInput.focus();
+      return;
+    }
+    try {
+      await NovelUI.api(`/api/v1/projects/${projectId}`, { method: "PATCH", body });
+      setEditVisible(false);
+      await loadOverview();
+      NovelUI.toast("作品情報を更新しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "作品情報の更新に失敗しました。", "danger");
+    }
+  });
+
   loadOverview().catch((error) => NovelUI.toast(error.message || "作品概要の取得に失敗しました。", "danger"));
 })();
 </script>

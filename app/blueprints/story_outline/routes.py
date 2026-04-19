@@ -13,6 +13,7 @@ def _serialize_story_outline(outline):
         "id": outline.id,
         "project_id": outline.project_id,
         "premise": outline.premise,
+        "protagonist_name": outline.protagonist_name,
         "protagonist_position": outline.protagonist_position,
         "main_goal": outline.main_goal,
         "branching_policy": outline.branching_policy,
@@ -77,11 +78,18 @@ def generate_story_outline(project_id: int):
     from ...services.story_outline_service import StoryOutlineService
 
     payload = request.get_json(silent=True) or {}
-    job = StoryOutlineService().generate_outline(project_id, payload)
+    service = StoryOutlineService()
+    try:
+        job = service.generate_outline(project_id, payload)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    outline = service.get_outline(project_id)
     return json_response(
         {
             "project_id": project_id,
             "job": _serialize_generation_job(job),
+            "story_outline": _serialize_story_outline(outline),
         },
-        status=202,
     )

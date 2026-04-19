@@ -4,8 +4,8 @@
   <div class="toolbar-panel">
     <form class="row g-3 align-items-end" id="characterSearchForm">
       <div class="col-md-8">
-        <label class="form-label">キャラクター検索</label>
-        <input class="form-control" name="search" placeholder="名前、役割、外見キーワード">
+        <label class="form-label" for="characterSearchInput">キャラクター検索</label>
+        <input class="form-control" id="characterSearchInput" name="search" placeholder="名前、役割、口調、見た目で検索">
       </div>
       <div class="col-md-4 d-flex gap-2">
         <button class="btn btn-dark w-100" type="submit">検索</button>
@@ -13,6 +13,7 @@
       </div>
     </form>
   </div>
+
   <section class="panel-card">
     <div class="panel-head"><h3>キャラクター一覧</h3></div>
     <div class="project-card-grid" id="characterGrid"></div>
@@ -25,34 +26,60 @@
   const projectId = Number({{ project_id }});
   const form = document.getElementById("characterSearchForm");
   const host = document.getElementById("characterGrid");
+
+  function renderThumbnail(character) {
+    const mediaUrl = character.base_asset?.media_url;
+    if (mediaUrl) {
+      return `<img class="character-thumb-image" src="${mediaUrl}" alt="${NovelUI.escape(character.name || "character")}">`;
+    }
+    return `<div class="character-thumb-placeholder"><i class="bi bi-person"></i></div>`;
+  }
+
   async function loadCharacters() {
     const params = new URLSearchParams();
     const search = new FormData(form).get("search");
-    if (search) params.set("search", search);
+    if (search) {
+      params.set("search", search);
+    }
     const suffix = params.toString() ? `?${params.toString()}` : "";
     const data = await NovelUI.api(`/api/v1/projects/${projectId}/characters${suffix}`);
     const list = Array.isArray(data) ? data : [];
+
     if (!list.length) {
       host.innerHTML = `<div class="empty-panel">キャラクターがまだいません。</div>`;
       return;
     }
+
     host.innerHTML = list.map((character) => `
-      <article class="project-card">
-        <div class="project-card-top">
-          <span class="badge text-bg-light">${NovelUI.escape(character.role || "role")}</span>
-          ${character.has_image_rule ? '<span class="soft-code">image-rule</span>' : ''}
+      <article class="project-card character-card">
+        <div class="character-card-head">
+          <div class="character-thumb">
+            ${renderThumbnail(character)}
+          </div>
+          <div class="character-card-copy">
+            <div class="project-card-top">
+              <span class="badge text-bg-light">${NovelUI.escape(character.role || "role")}</span>
+            </div>
+            <h4>${NovelUI.escape(character.name || "No Name")}</h4>
+          </div>
         </div>
-        <h4>${NovelUI.escape(character.name || "No Name")}</h4>
-        <p>${NovelUI.escape(character.appearance_summary || character.speech_style || "設定未入力")}</p>
-        <div class="d-flex justify-content-between align-items-center mt-3">
-          <span class="soft-code">${NovelUI.escape(character.first_person || "一人称未設定")}</span>
+        <div class="d-flex justify-content-end mt-3">
           <a class="btn btn-sm btn-dark" href="/projects/${projectId}/characters/${character.id}/edit">編集</a>
         </div>
       </article>
     `).join("");
   }
-  form.addEventListener("submit", (event) => { event.preventDefault(); loadCharacters().catch((error) => NovelUI.toast(error.message || "取得に失敗しました。", "danger")); });
-  loadCharacters().catch((error) => NovelUI.toast(error.message || "取得に失敗しました。", "danger"));
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    loadCharacters().catch((error) => {
+      NovelUI.toast(error.message || "キャラクター一覧の読み込みに失敗しました。", "danger");
+    });
+  });
+
+  loadCharacters().catch((error) => {
+    NovelUI.toast(error.message || "キャラクター一覧の読み込みに失敗しました。", "danger");
+  });
 })();
 </script>
 {% endblock %}
