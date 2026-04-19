@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-grid">
+  <div class="toolbar-panel d-flex justify-content-between align-items-center gap-3 flex-wrap">
+    <div>
+      <h2 class="section-title h4 mb-1">章一覧・編集</h2>
+      <p class="section-copy">章タイトル、要約、目的、表示順をここでまとめて編集できます。</p>
+    </div>
+    <a class="btn btn-outline-dark" href="/projects/{{ project_id }}/story-outline">骨子画面へ戻る</a>
+  </div>
+
+  <section class="content-grid">
+    <section class="panel-card span-7">
+      <div class="panel-head">
+        <h3>章一覧</h3>
+        <button class="btn btn-sm btn-sunrise" type="button" id="chapterNewButton">新規章</button>
+      </div>
+      <div class="list-stack" id="chapterManageList"></div>
+    </section>
+
+    <section class="panel-card span-5">
+      <div class="panel-head">
+        <h3 id="chapterEditorTitle">章を追加</h3>
+      </div>
+
+      <form id="chapterManageForm" class="vstack gap-3">
+        <input type="hidden" name="chapter_id" value="">
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="chapterNoInput">章番号</label>
+            <input class="form-control" id="chapterNoInput" type="number" min="1" name="chapter_no">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="chapterSortOrderInput">表示順</label>
+            <input class="form-control" id="chapterSortOrderInput" type="number" min="1" name="sort_order">
+          </div>
+        </div>
+
+        <div>
+          <label class="form-label" for="chapterTitleInput">タイトル</label>
+          <input class="form-control" id="chapterTitleInput" name="title">
+        </div>
+
+        <div>
+          <label class="form-label" for="chapterSummaryInput">要約</label>
+          <textarea class="form-control" id="chapterSummaryInput" name="summary" rows="4"></textarea>
+        </div>
+
+        <div>
+          <label class="form-label" for="chapterObjectiveInput">目的</label>
+          <textarea class="form-control" id="chapterObjectiveInput" name="objective" rows="4"></textarea>
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-sunrise" type="submit" id="chapterSubmitButton">保存</button>
+          <button class="btn btn-outline-dark" type="button" id="chapterResetButton">入力をクリア</button>
+        </div>
+      </form>
+    </section>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const projectId = Number({{ project_id }});
+  const listHost = document.getElementById("chapterManageList");
+  const form = document.getElementById("chapterManageForm");
+  const editorTitle = document.getElementById("chapterEditorTitle");
+  const submitButton = document.getElementById("chapterSubmitButton");
+  const chapterNoInput = document.getElementById("chapterNoInput");
+  const chapterSortOrderInput = document.getElementById("chapterSortOrderInput");
+  const chapterTitleInput = document.getElementById("chapterTitleInput");
+  const chapterSummaryInput = document.getElementById("chapterSummaryInput");
+  const chapterObjectiveInput = document.getElementById("chapterObjectiveInput");
+  const chapterIdInput = form.querySelector('[name="chapter_id"]');
+  let chapters = [];
+
+  function resetEditor() {
+    form.reset();
+    chapterIdInput.value = "";
+    chapterNoInput.value = chapters.length + 1;
+    chapterSortOrderInput.value = chapters.length + 1;
+    editorTitle.textContent = "章を追加";
+    submitButton.textContent = "保存";
+    chapterTitleInput.focus();
+  }
+
+  function fillEditor(chapter) {
+    chapterIdInput.value = chapter.id;
+    chapterNoInput.value = chapter.chapter_no || "";
+    chapterSortOrderInput.value = chapter.sort_order || "";
+    chapterTitleInput.value = chapter.title || "";
+    chapterSummaryInput.value = chapter.summary || "";
+    chapterObjectiveInput.value = chapter.objective || "";
+    editorTitle.textContent = `第${chapter.chapter_no}章を編集`;
+    submitButton.textContent = "更新";
+    chapterTitleInput.focus();
+  }
+
+  function renderList() {
+    if (!chapters.length) {
+      listHost.innerHTML = `<div class="empty-panel">章はまだありません。</div>`;
+      return;
+    }
+
+    listHost.innerHTML = chapters.map((chapter) => `
+      <div class="list-row chapter-manage-row" data-chapter-id="${chapter.id}">
+        <div>
+          <div class="list-title">第${chapter.chapter_no}章 ${NovelUI.escape(chapter.title || "無題")}</div>
+          <div class="list-subtitle">${NovelUI.escape(chapter.summary || chapter.objective || "説明はまだありません。")}</div>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+          <span class="soft-code">sort ${chapter.sort_order || "-"}</span>
+          <button class="btn btn-sm btn-outline-dark" type="button" data-chapter-action="edit">編集</button>
+          <button class="btn btn-sm btn-outline-danger" type="button" data-chapter-action="delete">削除</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  async function loadChapters() {
+    const data = await NovelUI.api(`/api/v1/projects/${projectId}/chapters`);
+    chapters = Array.isArray(data) ? data : [];
+    renderList();
+    if (!chapterIdInput.value) {
+      resetEditor();
+    }
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+      chapter_no: Number(chapterNoInput.value || "0"),
+      sort_order: Number(chapterSortOrderInput.value || "0"),
+      title: chapterTitleInput.value.trim(),
+      summary: chapterSummaryInput.value.trim() || null,
+      objective: chapterObjectiveInput.value.trim() || null,
+    };
+
+    try {
+      const chapterId = chapterIdInput.value;
+      if (chapterId) {
+        await NovelUI.api(`/api/v1/chapters/${chapterId}`, { method: "PATCH", body: payload });
+        NovelUI.toast("章を更新しました。");
+      } else {
+        await NovelUI.api(`/api/v1/projects/${projectId}/chapters`, { method: "POST", body: payload });
+        NovelUI.toast("章を追加しました。");
+      }
+      await loadChapters();
+    } catch (error) {
+      NovelUI.toast(error.message || "章の保存に失敗しました。", "danger");
+    }
+  });
+
+  document.getElementById("chapterResetButton").addEventListener("click", resetEditor);
+  document.getElementById("chapterNewButton").addEventListener("click", () => {
+    resetEditor();
+    NovelUI.toast("新規章の入力モードに切り替えました。", "info");
+  });
+
+  listHost.addEventListener("click", async (event) => {
+    const row = event.target.closest("[data-chapter-id]");
+    const button = event.target.closest("[data-chapter-action]");
+    if (!row || !button) {
+      return;
+    }
+
+    const chapter = chapters.find((item) => String(item.id) === row.dataset.chapterId);
+    if (!chapter) {
+      return;
+    }
+
+    if (button.dataset.chapterAction === "edit") {
+      fillEditor(chapter);
+      return;
+    }
+
+    if (!window.confirm("この章を削除しますか？")) {
+      return;
+    }
+
+    try {
+      await NovelUI.api(`/api/v1/chapters/${chapter.id}`, { method: "DELETE", body: {} });
+      NovelUI.toast("章を削除しました。");
+      await loadChapters();
+    } catch (error) {
+      NovelUI.toast(error.message || "章の削除に失敗しました。", "danger");
+    }
+  });
+
+  loadChapters().catch((error) => {
+    NovelUI.toast(error.message || "章一覧の読み込みに失敗しました。", "danger");
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Novel Export</title>
+    <style>
+      :root {
+        --bg: #091118;
+        --panel: rgba(9, 17, 24, 0.18);
+        --line: rgba(255, 255, 255, 0.14);
+        --text: #fffaf2;
+        --muted: rgba(255, 250, 242, 0.76);
+        --accent: #f3a53b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Hiragino Sans", "Yu Gothic UI", sans-serif;
+        background: radial-gradient(circle at top, rgba(243,165,59,0.14), transparent 24rem), var(--bg);
+        color: var(--text);
+        display: grid;
+        place-items: center;
+        padding: 1rem;
+      }
+      .game-shell {
+        position: relative;
+        width: min(512px, calc(100vw - 1rem));
+        height: min(768px, calc(100vh - 1rem));
+        overflow: hidden;
+        border-radius: 28px;
+        background: #000;
+        box-shadow: 0 28px 80px rgba(0, 0, 0, 0.4);
+      }
+      .game-stage {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(0,0,0,0.1), rgba(0,0,0,0.55));
+      }
+      .game-stage img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .game-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(4,8,12,0.06), rgba(4,8,12,0.36) 55%, rgba(4,8,12,0.72));
+        pointer-events: none;
+      }
+      .game-title {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        right: 1rem;
+        z-index: 1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .textbox {
+        position: absolute;
+        left: 1rem;
+        right: 1rem;
+        bottom: 1rem;
+        z-index: 1;
+        min-height: 18rem;
+        max-height: 18rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.7rem;
+        padding: 1.1rem 1.15rem 1rem;
+        border-radius: 24px;
+        background: linear-gradient(180deg, rgba(12,18,23,0.08), rgba(8,12,16,0.14));
+        border: 1px solid var(--line);
+        backdrop-filter: blur(12px);
+      }
+      .speaker {
+        display: inline-flex;
+        width: fit-content;
+        min-width: 7rem;
+        padding: 0.45rem 0.9rem;
+        border-radius: 999px;
+        border: 1px solid rgba(243, 165, 59, 0.25);
+        background: rgba(243, 165, 59, 0.15);
+        color: #fff2d6;
+        font-weight: 700;
+      }
+      .speaker[hidden] { display: none; }
+      .text {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        white-space: pre-wrap;
+        line-height: 1.9;
+        font-size: 1.02rem;
+        text-shadow: 0 1px 10px rgba(0,0,0,0.28);
+      }
+      .choices {
+        display: grid;
+        gap: 0.65rem;
+      }
+      .choice-btn {
+        width: 100%;
+        padding: 0.8rem 0.9rem;
+        border-radius: 16px;
+        border: 1px solid rgba(255,255,255,0.18);
+        background: rgba(255,255,255,0.08);
+        color: var(--text);
+        text-align: left;
+        cursor: pointer;
+      }
+      .choice-btn:hover {
+        background: rgba(255,255,255,0.14);
+      }
+      .controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 0.8rem;
+        letter-spacing: 0.04em;
+      }
+      .next-btn {
+        padding: 0.55rem 1rem;
+        border-radius: 999px;
+        border: none;
+        background: var(--accent);
+        color: #251300;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .measure {
+        position: absolute;
+        left: -9999px;
+        top: -9999px;
+        visibility: hidden;
+        pointer-events: none;
+        width: 480px;
+        white-space: pre-wrap;
+        line-height: 1.9;
+        font-size: 1.02rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="game-shell" id="gameShell" tabindex="0">
+      <div class="game-stage" id="gameStage"></div>
+      <div class="game-overlay"></div>
+      <div class="game-title">
+        <div id="projectTitle"></div>
+        <div id="sceneCounter"></div>
+      </div>
+      <div class="textbox">
+        <div class="speaker" id="speaker" hidden></div>
+        <div class="text" id="text"></div>
+        <div class="choices" id="choices"></div>
+        <div class="controls">
+          <div class="hint" id="hint">Enter で進む</div>
+          <button type="button" class="next-btn" id="nextButton">次へ</button>
+        </div>
+      </div>
+      <div class="measure" id="measure"></div>
+    </div>
+
+    <script id="gameData" type="application/json">{{ export_data_json|safe }}</script>
+    <script>
+      (() => {
+        const exportData = JSON.parse(document.getElementById("gameData").textContent);
+        const stageEl = document.getElementById("gameStage");
+        const speakerEl = document.getElementById("speaker");
+        const textEl = document.getElementById("text");
+        const choicesEl = document.getElementById("choices");
+        const nextButton = document.getElementById("nextButton");
+        const hintEl = document.getElementById("hint");
+        const shellEl = document.getElementById("gameShell");
+        const measureEl = document.getElementById("measure");
+        const counterEl = document.getElementById("sceneCounter");
+        document.getElementById("projectTitle").textContent = exportData.project?.title || "Novel Export";
+
+        const scenes = Array.isArray(exportData.scenes) ? exportData.scenes : [];
+        const sceneMap = new Map(scenes.map((scene) => [scene.id, scene]));
+
+        let currentSceneId = exportData.meta?.start_scene_id || (scenes[0] && scenes[0].id);
+        let chunks = [];
+        let chunkCursor = 0;
+        let pages = [];
+        let pageCursor = 0;
+        let revealed = 0;
+        let timer = null;
+
+        function normalizeDialogue(dialogue) {
+          if (typeof dialogue === "string") {
+            return { speaker: "", text: dialogue };
+          }
+          if (!dialogue || typeof dialogue !== "object") {
+            return null;
+          }
+          return {
+            speaker: dialogue.speaker || dialogue.speaker_name || "",
+            text: dialogue.text || dialogue.dialogue_text || "",
+          };
+        }
+
+        function splitNarration(text) {
+          return String(text || "")
+            .split(/\n\s*\n/)
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .map((item) => ({ speaker: "", text: item }));
+        }
+
+        function buildSceneChunks(scene) {
+          const result = [];
+          if (scene.narration_text) {
+            result.push(...splitNarration(scene.narration_text));
+          }
+          (scene.dialogues || []).map(normalizeDialogue).filter(Boolean).forEach((item) => result.push(item));
+          return result;
+        }
+
+        function stopTyping() {
+          if (timer) {
+            clearTimeout(timer);
+            timer = null;
+          }
+        }
+
+        function splitPages(text) {
+          const value = String(text || "");
+          if (!value) {
+            return [""];
+          }
+          const maxHeight = textEl.clientHeight;
+          measureEl.style.width = `${textEl.clientWidth}px`;
+          const result = [];
+          let start = 0;
+          while (start < value.length) {
+            let low = start + 1;
+            let high = value.length;
+            let best = start + 1;
+            while (low <= high) {
+              const mid = Math.floor((low + high) / 2);
+              measureEl.textContent = value.slice(start, mid);
+              if (measureEl.scrollHeight <= maxHeight + 1) {
+                best = mid;
+                low = mid + 1;
+              } else {
+                high = mid - 1;
+              }
+            }
+            if (best < value.length) {
+              const pageText = value.slice(start, best);
+              const preferredBreak = Math.max(pageText.lastIndexOf("\n"), pageText.lastIndexOf("。"), pageText.lastIndexOf("！"), pageText.lastIndexOf("？"), pageText.lastIndexOf("」"));
+              if (preferredBreak > pageText.length * 0.55) {
+                best = start + preferredBreak + 1;
+              }
+            }
+            result.push(value.slice(start, best).trimStart());
+            start = best;
+          }
+          return result.filter(Boolean);
+        }
+
+        function currentChunk() {
+          return chunks[chunkCursor] || null;
+        }
+
+        function currentPageText() {
+          return pages[pageCursor] || "";
+        }
+
+        function renderChoices(scene) {
+          const lastChunk = chunkCursor >= chunks.length - 1 && pageCursor >= pages.length - 1 && revealed >= currentPageText().length;
+          const choices = Array.isArray(scene.choices) ? scene.choices : [];
+          if (!lastChunk || !choices.length) {
+            choicesEl.innerHTML = "";
+            return;
+          }
+          choicesEl.innerHTML = choices.map((choice) => `
+            <button type="button" class="choice-btn" data-next-scene="${choice.next_scene_id || ""}">
+              ${String(choice.choice_text || "選択肢").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}
+            </button>
+          `).join("");
+        }
+
+        function updateCounter() {
+          const sceneIndex = scenes.findIndex((scene) => scene.id === currentSceneId);
+          counterEl.textContent = sceneIndex >= 0 ? `${sceneIndex + 1} / ${scenes.length}` : "";
+        }
+
+        function renderCurrent() {
+          const scene = sceneMap.get(currentSceneId);
+          if (!scene) {
+            textEl.textContent = "表示できるシーンがありません。";
+            choicesEl.innerHTML = "";
+            return;
+          }
+          const chunk = currentChunk();
+          if (!chunk) {
+            textEl.textContent = "本文がありません。";
+            choicesEl.innerHTML = "";
+            return;
+          }
+          speakerEl.hidden = !chunk.speaker;
+          speakerEl.textContent = chunk.speaker || "";
+          textEl.textContent = currentPageText().slice(0, revealed);
+          if (revealed < currentPageText().length) {
+            hintEl.textContent = "Enter で全文表示";
+          } else if (pageCursor < pages.length - 1) {
+            hintEl.textContent = "Enter で次のページへ";
+          } else if ((scene.choices || []).length) {
+            hintEl.textContent = "選択肢を選んで進む";
+          } else {
+            hintEl.textContent = "Enter で次の文へ";
+          }
+          renderChoices(scene);
+          updateCounter();
+        }
+
+        function startTyping() {
+          stopTyping();
+          const chunk = currentChunk();
+          if (!chunk) {
+            renderCurrent();
+            return;
+          }
+          pages = splitPages(chunk.text);
+          if (pageCursor >= pages.length) {
+            pageCursor = 0;
+          }
+          revealed = 0;
+          const text = currentPageText();
+          const step = () => {
+            revealed = Math.min(revealed + 3, text.length);
+            renderCurrent();
+            if (revealed < text.length) {
+              timer = window.setTimeout(step, 24);
+            } else {
+              timer = null;
+            }
+          };
+          step();
+        }
+
+        function loadScene(sceneId) {
+          const scene = sceneMap.get(sceneId);
+          if (!scene) {
+            return;
+          }
+          currentSceneId = sceneId;
+          chunks = buildSceneChunks(scene);
+          chunkCursor = 0;
+          pageCursor = 0;
+          if (scene.image_path) {
+            stageEl.innerHTML = `<img src="${scene.image_path}" alt="">`;
+          } else {
+            stageEl.innerHTML = "";
+          }
+          startTyping();
+        }
+
+        function advance() {
+          const scene = sceneMap.get(currentSceneId);
+          if (!scene) {
+            return;
+          }
+          if (revealed < currentPageText().length) {
+            stopTyping();
+            revealed = currentPageText().length;
+            renderCurrent();
+            return;
+          }
+          if (pageCursor < pages.length - 1) {
+            pageCursor += 1;
+            startTyping();
+            return;
+          }
+          if ((scene.choices || []).length) {
+            return;
+          }
+          if (chunkCursor < chunks.length - 1) {
+            chunkCursor += 1;
+            pageCursor = 0;
+            startTyping();
+          }
+        }
+
+        nextButton.addEventListener("click", advance);
+        shellEl.addEventListener("click", (event) => {
+          if (event.target.closest(".choice-btn")) {
+            return;
+          }
+          advance();
+        });
+        window.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter") {
+            return;
+          }
+          event.preventDefault();
+          advance();
+        });
+        choicesEl.addEventListener("click", (event) => {
+          const button = event.target.closest("[data-next-scene]");
+          if (!button) {
+            return;
+          }
+          const nextSceneId = Number(button.dataset.nextScene || "0");
+          if (!nextSceneId) {
+            return;
+          }
+          loadScene(nextSceneId);
+        });
+
+        loadScene(currentSceneId);
+        shellEl.focus();
+      })();
+    </script>
+  </body>
+</html>
