@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="scene-shell" data-selected-scene="{{ selected_scene_id or '' }}">
+  <aside class="panel-card scene-tree-panel">
+    <div class="panel-head">
+      <h3>章・シーンツリー</h3>
+      <button class="btn btn-sm btn-sunrise" id="newSceneButton">新規シーン</button>
+    </div>
+    <div class="list-stack" id="sceneTree"></div>
+  </aside>
+
+  <section class="panel-card scene-editor-panel">
+    <div class="panel-head">
+      <h3 id="sceneEditorTitle">シーン本文エディタ</h3>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-dark" id="scenePreviewButton">Preview</button>
+        <button class="btn btn-sm btn-sunrise" id="sceneSaveButton">保存</button>
+      </div>
+    </div>
+    <form id="sceneForm" class="vstack gap-3">
+      <input type="hidden" name="chapter_id">
+      <div class="row g-3">
+        <div class="col-md-8"><label class="form-label">タイトル</label><input class="form-control" name="title"></div>
+        <div class="col-md-4"><label class="form-label">scene_key</label><input class="form-control font-mono-sm" name="scene_key"></div>
+      </div>
+      <label class="form-label">要約</label><textarea class="form-control" name="summary" rows="2"></textarea>
+      <label class="form-label">地の文</label><textarea class="form-control" name="narration_text" rows="8"></textarea>
+      <label class="form-label">セリフJSON</label><textarea class="form-control font-mono-sm" name="dialogue_json" rows="6"></textarea>
+      <label class="form-label">選択肢メモ</label><div class="mini-board" id="sceneChoicesBoard"></div>
+      <div class="action-row">
+        <button class="btn btn-dark" type="button" id="sceneGenerateButton">本文を生成</button>
+        <button class="btn btn-outline-dark" type="button" id="sceneRegenerateButton">再生成</button>
+        <button class="btn btn-outline-dark" type="button" id="sceneExtractButton">状態JSON抽出</button>
+        <button class="btn btn-outline-dark" type="button" id="sceneImageButton">画像生成へ</button>
+        <button class="btn btn-outline-dark" type="button" id="sceneFixButton">固定 / 解除</button>
+      </div>
+    </form>
+  </section>
+
+  <aside class="panel-card scene-side-panel">
+    <div class="panel-head"><h3>補助情報</h3></div>
+    <div class="mini-section">
+      <div class="mini-section-title">現在のキャラクター</div>
+      <div class="mini-board" id="sceneCharacterBoard"></div>
+    </div>
+    <div class="mini-section">
+      <div class="mini-section-title">世界観メモ</div>
+      <div class="mini-board" id="sceneWorldBoard"></div>
+    </div>
+    <div class="mini-section">
+      <div class="mini-section-title">状態JSON</div>
+      <pre class="json-board" id="sceneStateBoard"></pre>
+    </div>
+    <div class="mini-section">
+      <div class="mini-section-title">画像用プロンプト</div>
+      <div class="mini-board" id="sceneImagePromptBoard"></div>
+    </div>
+  </aside>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const projectId = Number({{ project_id }});
+  let selectedSceneId = {{ selected_scene_id if selected_scene_id else "null" }};
+  let selectedScene = null;
+
+  const treeHost = document.getElementById("sceneTree");
+  const form = document.getElementById("sceneForm");
+  const sceneGenerateButton = document.getElementById("sceneGenerateButton");
+  const sceneRegenerateButton = document.getElementById("sceneRegenerateButton");
+  const sceneExtractButton = document.getElementById("sceneExtractButton");
+  const sceneFixButton = document.getElementById("sceneFixButton");
+
+  function formatJson(value, fallback = "まだありません。") {
+    if (value === null || value === undefined || value === "") {
+      return fallback;
+    }
+    if (typeof value === "string") {
+      try {
+        return JSON.stringify(JSON.parse(value), null, 2);
+      } catch (_) {
+        return value;
+      }
+    }
+    return JSON.stringify(value, null, 2);
+  }
+
+  function setSceneBusy(active) {
+    [sceneGenerateButton, sceneRegenerateButton, sceneExtractButton, sceneFixButton].forEach((button) => {
+      button.disabled = active;
+    });
+  }
+
+  async function loadSceneTree() {
+    const [chapters, scenes] = await Promise.all([
+      NovelUI.api(`/api/v1/projects/${projectId}/chapters`),
+      NovelUI.api(`/api/v1/projects/${projectId}/scenes`),
+    ]);
+    const sceneMap = new Map((Array.isArray(scenes) ? scenes : []).map((scene) => [scene.chapter_id, []]));
+    for (const scene of scenes || []) {
+      if (!sceneMap.has(scene.chapter_id)) sceneMap.set(scene.chapter_id, []);
+      sceneMap.get(scene.chapter_id).push(scene);
+    }
+    treeHost.innerHTML = (chapters || []).map((chapter) => `
+      <div class="chapter-block">
+        <div class="chapter-title">第${chapter.chapter_no}章 ${NovelUI.escape(chapter.title)}</div>
+        <div class="vstack gap-2">
+          ${(sceneMap.get(chapter.id) || []).map((scene) => `
+            <button class="scene-chip ${selectedSceneId === scene.id ? "active" : ""}" data-scene-id="${scene.id}" data-scene-chapter="${chapter.id}">
+              <span>${NovelUI.escape(scene.title || "未命名シーン")}</span>
+              <span class="soft-code">${scene.is_fixed ? "fixed" : "edit"}</span>
+            </button>
+          `).join("")}
+        </div>
+      </div>
+    `).join("") || `<div class="empty-panel">章を先に登録してください。</div>`;
+  }
+
+  async function loadSceneContext(sceneId) {
+    const payload = await NovelUI.api(`/api/v1/scenes/${sceneId}/editor-context`);
+    selectedSceneId = sceneId;
+    selectedScene = payload.scene;
+    NovelUI.fillForm(form, payload.scene);
+    if (typeof payload.scene.dialogue_json === "object" && payload.scene.dialogue_json !== null) {
+      form.querySelector('[name="dialogue_json"]').value = JSON.stringify(payload.scene.dialogue_json, null, 2);
+    }
+    document.getElementById("sceneEditorTitle").textContent = payload.scene.title || "未命名シーン";
+    document.getElementById("sceneChoicesBoard").innerHTML = (payload.choices || []).map((choice) => `
+      <div class="mini-pill">${NovelUI.escape(choice.choice_text || "選択肢")}</div>
+    `).join("") || `<span class="text-secondary">選択肢はまだありません。</span>`;
+    document.getElementById("sceneCharacterBoard").innerHTML = (payload.characters || []).map((character) => `
+      <div class="mini-pill">${NovelUI.escape(character.name)}</div>
+    `).join("") || `<span class="text-secondary">キャラクター未設定</span>`;
+    document.getElementById("sceneWorldBoard").innerHTML = `
+      <div class="mini-meta"><strong>${NovelUI.escape(payload.world_memo?.name || "world")}</strong></div>
+      <div>${NovelUI.escape(payload.world_memo?.overview || "")}</div>
+    `;
+    document.getElementById("sceneStateBoard").textContent = formatJson(payload.scene.scene_state_json);
+    document.getElementById("sceneImagePromptBoard").textContent = payload.scene.image_prompt_text || "画像用プロンプトはまだありません。";
+    await loadSceneTree();
+  }
+
+  treeHost.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-scene-id]");
+    if (!button) return;
+    loadSceneContext(Number(button.dataset.sceneId)).catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
+  });
+
+  document.getElementById("newSceneButton").addEventListener("click", async () => {
+    const chapterId = form.querySelector('[name="chapter_id"]').value || prompt("chapter_id を入力してください");
+    if (!chapterId) return;
+    try {
+      const scene = await NovelUI.api(`/api/v1/projects/${projectId}/scenes`, {
+        method: "POST",
+        body: { chapter_id: Number(chapterId), title: "新規シーン" },
+      });
+      await loadSceneContext(scene.id);
+      NovelUI.toast("シーンを作成しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "シーン作成に失敗しました。", "danger");
+    }
+  });
+
+  document.getElementById("sceneSaveButton").addEventListener("click", async () => {
+    if (!selectedSceneId) {
+      NovelUI.toast("先にシーンを選択してください。", "warning");
+      return;
+    }
+    const body = Object.fromEntries(new FormData(form).entries());
+    try {
+      await NovelUI.api(`/api/v1/scenes/${selectedSceneId}`, { method: "PATCH", body });
+      NovelUI.toast("シーンを保存しました。");
+      await loadSceneContext(selectedSceneId);
+    } catch (error) {
+      NovelUI.toast(error.message || "保存に失敗しました。", "danger");
+    }
+  });
+
+  async function runSceneAction(path, successMessage) {
+    if (!selectedSceneId) {
+      NovelUI.toast("先にシーンを選択してください。", "warning");
+      return;
+    }
+    setSceneBusy(true);
+    try {
+      await NovelUI.api(`/api/v1/scenes/${selectedSceneId}/${path}`, { method: "POST", body: {} });
+      await loadSceneContext(selectedSceneId);
+      NovelUI.toast(successMessage);
+    } catch (error) {
+      NovelUI.toast(error.message || "処理に失敗しました。", "danger");
+    } finally {
+      setSceneBusy(false);
+    }
+  }
+
+  sceneGenerateButton.addEventListener("click", () => runSceneAction("generate", "本文生成が完了しました。"));
+  sceneRegenerateButton.addEventListener("click", () => runSceneAction("generate", "再生成が完了しました。"));
+  sceneExtractButton.addEventListener("click", () => runSceneAction("extract-state", "状態JSON抽出が完了しました。"));
+  document.getElementById("sceneImageButton").addEventListener("click", () => {
+    if (!selectedSceneId) {
+      NovelUI.toast("先にシーンを選択してください。", "warning");
+      return;
+    }
+    location.href = `/scenes/${selectedSceneId}/images/review?project_id=${projectId}`;
+  });
+  document.getElementById("scenePreviewButton").addEventListener("click", () => {
+    if (!selectedSceneId) {
+      NovelUI.toast("先にシーンを選択してください。", "warning");
+      return;
+    }
+    location.href = `/scenes/${selectedSceneId}/preview?project_id=${projectId}`;
+  });
+  sceneFixButton.addEventListener("click", async () => {
+    if (!selectedSceneId || !selectedScene) {
+      NovelUI.toast("先にシーンを選択してください。", "warning");
+      return;
+    }
+    await runSceneAction(selectedScene.is_fixed ? "unfix" : "fix", selectedScene.is_fixed ? "固定を解除しました。" : "シーンを固定しました。");
+  });
+
+  (async () => {
+    await loadSceneTree();
+    if (!selectedSceneId) {
+      const scenes = await NovelUI.api(`/api/v1/projects/${projectId}/scenes`);
+      if (Array.isArray(scenes) && scenes.length) selectedSceneId = scenes[0].id;
+    }
+    if (selectedSceneId) await loadSceneContext(selectedSceneId);
+  })().catch((error) => NovelUI.toast(error.message || "シーン画面の初期化に失敗しました。", "danger"));
+})();
+</script>
+{% endblock %}

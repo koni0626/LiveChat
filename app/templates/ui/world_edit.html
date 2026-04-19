@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="editor-grid">
+  <section class="panel-card">
+    <div class="panel-head"><h3>世界観設定</h3></div>
+    <form id="worldForm" class="vstack gap-3">
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">世界名</label><input class="form-control" name="world_name"></div>
+        <div class="col-md-6"><label class="form-label">世界のトーン</label><input class="form-control" name="world_tone"></div>
+      </div>
+      <label class="form-label">時代背景</label><textarea class="form-control" name="time_period" rows="3"></textarea>
+      <label class="form-label">場所説明</label><textarea class="form-control" name="place_description" rows="4"></textarea>
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">技術水準</label><textarea class="form-control" name="technology_level" rows="3"></textarea></div>
+        <div class="col-md-6"><label class="form-label">社会構造</label><textarea class="form-control" name="social_structure" rows="3"></textarea></div>
+      </div>
+      <label class="form-label">重要施設 / ルール</label><textarea class="form-control font-mono-sm" name="important_facilities" rows="4"></textarea>
+      <label class="form-label">禁止設定</label><textarea class="form-control font-mono-sm" name="forbidden_settings" rows="4"></textarea>
+      <div class="d-flex gap-2 justify-content-end">
+        <button class="btn btn-outline-dark" type="button" id="worldAiSummary">AI要約生成</button>
+        <button class="btn btn-sunrise" type="submit">保存</button>
+      </div>
+    </form>
+  </section>
+  <section class="panel-card">
+    <div class="panel-head"><h3>固有名詞辞書</h3></div>
+    <form id="glossaryQuickForm" class="row g-2 mb-3">
+      <div class="col-md-4"><input class="form-control" name="term" placeholder="用語"></div>
+      <div class="col-md-4"><input class="form-control" name="category" placeholder="カテゴリ"></div>
+      <div class="col-md-4 d-grid"><button class="btn btn-dark" type="submit">追加</button></div>
+    </form>
+    <div class="list-stack" id="worldGlossaryList"></div>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const projectId = Number({{ project_id }});
+  const worldForm = document.getElementById("worldForm");
+  const glossaryQuickForm = document.getElementById("glossaryQuickForm");
+  const glossaryList = document.getElementById("worldGlossaryList");
+
+  async function loadWorldContext() {
+    const payload = await NovelUI.api(`/api/v1/projects/${projectId}/world-context`);
+    if (payload.world?.ui_fields) NovelUI.fillForm(worldForm, payload.world.ui_fields);
+    const terms = payload.glossary_terms || [];
+    glossaryList.innerHTML = terms.length ? terms.map((term) => `
+      <div class="list-row">
+        <div>
+          <div class="list-title">${NovelUI.escape(term.term)}</div>
+          <div class="list-subtitle">${NovelUI.escape(term.description || term.category || "")}</div>
+        </div>
+        <span class="soft-code">${NovelUI.escape(term.category || "term")}</span>
+      </div>
+    `).join("") : `<div class="empty-panel">用語辞書はまだ空です。</div>`;
+  }
+
+  worldForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const body = Object.fromEntries(new FormData(worldForm).entries());
+    try {
+      await NovelUI.api(`/api/v1/projects/${projectId}/world`, { method: "PUT", body });
+      NovelUI.toast("世界観を保存しました。");
+      loadWorldContext();
+    } catch (error) {
+      NovelUI.toast(error.message || "保存に失敗しました。", "danger");
+    }
+  });
+
+  glossaryQuickForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const body = Object.fromEntries(new FormData(glossaryQuickForm).entries());
+    if (!body.term) return;
+    try {
+      await NovelUI.api(`/api/v1/projects/${projectId}/glossary`, { method: "POST", body });
+      glossaryQuickForm.reset();
+      loadWorldContext();
+      NovelUI.toast("用語を追加しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "用語追加に失敗しました。", "danger");
+    }
+  });
+
+  document.getElementById("worldAiSummary").addEventListener("click", () => {
+    NovelUI.toast("AI要約生成は GPT 実接続タスクで有効化します。", "warning");
+  });
+
+  loadWorldContext().catch((error) => NovelUI.toast(error.message || "読込に失敗しました。", "danger"));
+})();
+</script>
+{% endblock %}

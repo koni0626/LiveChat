@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="login-stage">
+  <div class="login-card card border-0 shadow-lg">
+    <div class="card-body p-5">
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <div class="brand-chip brand-chip-xl">NC</div>
+        <div>
+          <div class="eyebrow">AI Story Studio</div>
+          <h1 class="h3 mb-0">制作をはじめる</h1>
+        </div>
+      </div>
+      <p class="text-secondary mb-4">ノベルゲーム制作の管理画面へログインします。初回利用なら新規登録から始められます。</p>
+      <form id="loginForm" class="vstack gap-3">
+        <div>
+          <label class="form-label">メールアドレス</label>
+          <input class="form-control form-control-lg" type="email" name="email" placeholder="creator@example.com" required>
+        </div>
+        <div>
+          <label class="form-label">パスワード</label>
+          <input class="form-control form-control-lg" type="password" name="password" placeholder="********" required>
+        </div>
+        <div class="alert alert-danger d-none" id="loginError"></div>
+        <button class="btn btn-sunrise btn-lg" type="submit">
+          <i class="bi bi-box-arrow-in-right"></i>
+          <span>ログイン</span>
+        </button>
+      </form>
+      <div class="text-center mt-4">
+        <span class="text-secondary small">初めて利用しますか</span>
+        <a class="link-light-emphasis text-decoration-none fw-semibold" href="{{ url_for('ui.register_page') }}">新規登録</a>
+      </div>
+      <div class="login-footnote mt-4">
+        <div class="mini-status"><span class="status-dot"></span><span>セッション認証</span></div>
+        <a href="/health" class="link-secondary text-decoration-none">health</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const form = document.getElementById("loginForm");
+  const errorBox = document.getElementById("loginError");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    errorBox.classList.add("d-none");
+    const formData = new FormData(form);
+    try {
+      await NovelUI.api("/api/v1/auth/login", {
+        method: "POST",
+        body: Object.fromEntries(formData.entries()),
+      });
+      location.href = "{{ url_for('ui.dashboard_page') }}";
+    } catch (error) {
+      errorBox.textContent = error.message || "ログインに失敗しました。";
+      errorBox.classList.remove("d-none");
+    }
+  });
+})();
+</script>
+{% endblock %}

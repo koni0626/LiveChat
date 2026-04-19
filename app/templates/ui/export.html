@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-grid narrow-grid">
+  <section class="panel-card">
+    <div class="panel-head"><h3>エクスポート実行</h3></div>
+    <form id="exportForm" class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">出力形式</label>
+        <select class="form-select" name="export_type">
+          <option value="json">JSON</option>
+          <option value="html">HTML</option>
+          <option value="text">TEXT</option>
+          <option value="images">IMAGES</option>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">オプションJSON</label>
+        <input class="form-control font-mono-sm" name="options_json" placeholder='{"include_images": true}'>
+      </div>
+      <div class="col-12 d-flex justify-content-end">
+        <button class="btn btn-sunrise" type="submit">エクスポート開始</button>
+      </div>
+    </form>
+  </section>
+  <section class="panel-card">
+    <div class="panel-head"><h3>エクスポート履歴</h3></div>
+    <div class="list-stack" id="exportHistory"></div>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const projectId = Number({{ project_id }});
+  async function loadExports() {
+    const list = await NovelUI.api(`/api/v1/projects/${projectId}/exports`);
+    document.getElementById("exportHistory").innerHTML = Array.isArray(list) && list.length ? list.map((item) => `
+      <div class="list-row">
+        <div>
+          <div class="list-title">${NovelUI.escape(item.export_type || "export")}</div>
+          <div class="list-subtitle">${NovelUI.escape(item.error_message || "")}</div>
+        </div>
+        <span class="soft-code">${NovelUI.escape(item.status || "queued")}</span>
+      </div>
+    `).join("") : `<div class="empty-panel">エクスポート履歴はまだありません。</div>`;
+  }
+  document.getElementById("exportForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+    try {
+      await NovelUI.api(`/api/v1/projects/${projectId}/exports`, { method: "POST", body });
+      NovelUI.toast("エクスポートジョブを起票しました。");
+      loadExports();
+    } catch (error) {
+      NovelUI.toast(error.message || "エクスポートに失敗しました。", "danger");
+    }
+  });
+  loadExports().catch((error) => NovelUI.toast(error.message || "履歴取得に失敗しました。", "danger"));
+})();
+</script>
+{% endblock %}

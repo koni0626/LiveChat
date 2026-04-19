@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="editor-grid">
+  <section class="panel-card">
+    <div class="panel-head"><h3>ストーリー骨子</h3></div>
+    <form id="outlineForm" class="vstack gap-3">
+      <label class="form-label">導入 / premise</label><textarea class="form-control" name="premise" rows="4"></textarea>
+      <label class="form-label">主人公の立場</label><textarea class="form-control" name="protagonist_position" rows="3"></textarea>
+      <label class="form-label">主目的</label><textarea class="form-control" name="main_goal" rows="3"></textarea>
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">分岐方針</label><textarea class="form-control" name="branching_policy" rows="4"></textarea></div>
+        <div class="col-md-6"><label class="form-label">エンディング方針</label><textarea class="form-control" name="ending_policy" rows="4"></textarea></div>
+      </div>
+      <label class="form-label">骨子本文</label><textarea class="form-control" name="outline_text" rows="8"></textarea>
+      <div class="d-flex gap-2 justify-content-end">
+        <button class="btn btn-outline-dark" type="button" id="outlineGenerate">AIで骨子生成</button>
+        <button class="btn btn-sunrise" type="submit">保存</button>
+      </div>
+    </form>
+  </section>
+  <section class="panel-card">
+    <div class="panel-head"><h3>章一覧</h3></div>
+    <div class="list-stack mb-3" id="chapterList"></div>
+    <form id="chapterCreateForm" class="row g-2">
+      <div class="col-md-2"><input class="form-control" type="number" name="chapter_no" placeholder="章番号"></div>
+      <div class="col-md-6"><input class="form-control" name="title" placeholder="章タイトル"></div>
+      <div class="col-md-4 d-grid"><button class="btn btn-dark" type="submit">章追加</button></div>
+    </form>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const projectId = Number({{ project_id }});
+  const outlineForm = document.getElementById("outlineForm");
+  const chapterList = document.getElementById("chapterList");
+
+  async function loadOutline() {
+    const outlinePayload = await NovelUI.api(`/api/v1/projects/${projectId}/story-outline`);
+    if (outlinePayload.story_outline) NovelUI.fillForm(outlineForm, outlinePayload.story_outline);
+    const chapters = await NovelUI.api(`/api/v1/projects/${projectId}/chapters`);
+    chapterList.innerHTML = Array.isArray(chapters) && chapters.length ? chapters.map((chapter) => `
+      <div class="list-row">
+        <div>
+          <div class="list-title">第${chapter.chapter_no}章 ${NovelUI.escape(chapter.title)}</div>
+          <div class="list-subtitle">${NovelUI.escape(chapter.summary || chapter.objective || "")}</div>
+        </div>
+        <span class="soft-code">sort ${chapter.sort_order}</span>
+      </div>
+    `).join("") : `<div class="empty-panel">章はまだ登録されていません。</div>`;
+  }
+
+  outlineForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const body = Object.fromEntries(new FormData(outlineForm).entries());
+    try {
+      await NovelUI.api(`/api/v1/projects/${projectId}/story-outline`, { method: "PUT", body });
+      NovelUI.toast("骨子を保存しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "保存に失敗しました。", "danger");
+    }
+  });
+
+  document.getElementById("chapterCreateForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+    try {
+      await NovelUI.api(`/api/v1/projects/${projectId}/chapters`, { method: "POST", body });
+      event.currentTarget.reset();
+      loadOutline();
+      NovelUI.toast("章を追加しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "章追加に失敗しました。", "danger");
+    }
+  });
+
+  document.getElementById("outlineGenerate").addEventListener("click", async () => {
+    try {
+      await NovelUI.api(`/api/v1/projects/${projectId}/story-outline/generate`, { method: "POST", body: {} });
+      NovelUI.toast("骨子生成ジョブを起票しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "生成に失敗しました。", "danger");
+    }
+  });
+
+  loadOutline().catch((error) => NovelUI.toast(error.message || "読込に失敗しました。", "danger"));
+})();
+</script>
+{% endblock %}

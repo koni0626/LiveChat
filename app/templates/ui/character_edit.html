@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="editor-grid" data-character-id="{{ character_id or '' }}">
+  <section class="panel-card">
+    <div class="panel-head"><h3>基本情報</h3></div>
+    <form id="characterForm" class="vstack gap-3">
+      <input type="hidden" name="base_asset_id">
+      <div class="row g-3">
+        <div class="col-md-8"><label class="form-label">名前</label><input class="form-control" name="name" required></div>
+        <div class="col-md-4"><label class="form-label">役割</label><input class="form-control" name="role"></div>
+        <div class="col-md-4"><label class="form-label">年齢印象</label><input class="form-control" name="age_impression"></div>
+        <div class="col-md-4"><label class="form-label">一人称</label><input class="form-control" name="first_person"></div>
+        <div class="col-md-4"><label class="form-label">二人称</label><input class="form-control" name="second_person"></div>
+      </div>
+      <label class="form-label">外見説明</label><textarea class="form-control" name="appearance_summary" rows="4"></textarea>
+      <label class="form-label">性格</label><textarea class="form-control" name="personality" rows="4"></textarea>
+      <label class="form-label">話し方</label><textarea class="form-control" name="speech_style" rows="4"></textarea>
+      <label class="form-label">会話サンプル</label><textarea class="form-control" name="speech_sample" rows="3"></textarea>
+      <label class="form-label">NG表現</label><textarea class="form-control" name="ng_rules" rows="3"></textarea>
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" name="is_guide" value="1" id="isGuideSwitch">
+        <label class="form-check-label" for="isGuideSwitch">案内役キャラクターにする</label>
+      </div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button class="btn btn-outline-dark" type="button" id="characterAiAssist">AI補完</button>
+        <button class="btn btn-sunrise" type="submit">保存</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head"><h3>基準画像</h3></div>
+    <div class="vstack gap-3">
+      <div class="small text-secondary">自作した画像を登録すると、後続の画像生成で reference image として利用します。</div>
+      <div id="baseAssetPreview" class="empty-panel">基準画像はまだ登録されていません。</div>
+      <form id="baseAssetUploadForm" class="vstack gap-3">
+        <div id="baseAssetDropzone" class="dropzone" tabindex="0" role="button" aria-label="基準画像をドラッグアンドドロップ、またはクリックして選択">
+          <div class="dropzone-copy">
+            <div class="dropzone-title">ここに画像をドラッグ&ドロップ</div>
+            <div class="dropzone-hint">クリックして選択することもできます。PNG / JPEG / WebP に対応しています。</div>
+          </div>
+          <div>
+            <label class="form-label">画像ファイル</label>
+            <input class="form-control" type="file" name="file" accept="image/png,image/jpeg,image/webp">
+          </div>
+        </div>
+        <div class="d-flex gap-2 justify-content-end">
+          <button class="btn btn-outline-dark" type="submit">基準画像をアップロード</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head"><h3>画像生成ルール</h3></div>
+    <form id="imageRuleForm" class="vstack gap-3">
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">髪型ルール</label><input class="form-control" name="hair_rule"></div>
+        <div class="col-md-6"><label class="form-label">顔ルール</label><input class="form-control" name="face_rule"></div>
+        <div class="col-md-6"><label class="form-label">耳ルール</label><input class="form-control" name="ear_rule"></div>
+        <div class="col-md-6"><label class="form-label">装飾ルール</label><input class="form-control" name="accessory_rule"></div>
+        <div class="col-md-6"><label class="form-label">衣装ルール</label><input class="form-control" name="outfit_rule"></div>
+        <div class="col-md-6"><label class="form-label">スタイルルール</label><input class="form-control" name="style_rule"></div>
+        <div class="col-md-6"><label class="form-label">品質</label><select class="form-select" name="default_quality"><option>low</option><option>medium</option><option>high</option></select></div>
+        <div class="col-md-6"><label class="form-label">サイズ</label><select class="form-select" name="default_size"><option>1024x1024</option><option>1024x1536</option><option>1536x1024</option></select></div>
+      </div>
+      <label class="form-label">ネガティブルール</label><textarea class="form-control" name="negative_rule" rows="3"></textarea>
+      <label class="form-label">Prompt Prefix</label><textarea class="form-control" name="prompt_prefix" rows="2" placeholder="based on the reference image"></textarea>
+      <label class="form-label">Prompt Suffix</label><textarea class="form-control" name="prompt_suffix" rows="2"></textarea>
+      <div class="small text-secondary">基準画像がある場合、画像生成は OpenAI の reference image / image edit フローを優先して利用します。</div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button class="btn btn-outline-dark" type="button" id="characterImageTest">画像テスト生成へ</button>
+        <button class="btn btn-dark" type="submit">画像ルール保存</button>
+      </div>
+    </form>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const projectId = Number({{ project_id }});
+  const characterId = {{ character_id if character_id is not none else "null" }};
+  const form = document.getElementById("characterForm");
+  const imageRuleForm = document.getElementById("imageRuleForm");
+  const baseAssetUploadForm = document.getElementById("baseAssetUploadForm");
+  const baseAssetPreview = document.getElementById("baseAssetPreview");
+  const baseAssetDropzone = document.getElementById("baseAssetDropzone");
+  const baseAssetFileInput = baseAssetUploadForm.querySelector('[name="file"]');
+
+  function setCheckbox(name, value) {
+    const element = form.querySelector(`[name="${name}"]`);
+    if (element) element.checked = Boolean(value);
+  }
+
+  function renderBaseAsset(asset) {
+    if (!asset?.media_url) {
+      baseAssetPreview.innerHTML = `<div class="empty-panel">基準画像はまだ登録されていません。</div>`;
+      return;
+    }
+    baseAssetPreview.innerHTML = `
+      <div class="vstack gap-2">
+        <img src="${asset.media_url}" alt="${NovelUI.escape(asset.file_name || "base asset")}" class="img-fluid rounded-4 border">
+        <div class="small text-secondary">${NovelUI.escape(asset.file_name || "")}</div>
+      </div>
+    `;
+  }
+
+  function setDropzoneActive(active) {
+    baseAssetDropzone.classList.toggle("is-dragover", active);
+  }
+
+  function ensureImageFile(file) {
+    if (!file) {
+      NovelUI.toast("アップロードする画像を選択してください。", "warning");
+      return false;
+    }
+    if (!file.type.startsWith("image/")) {
+      NovelUI.toast("画像ファイルのみアップロードできます。", "warning");
+      return false;
+    }
+    return true;
+  }
+
+  async function uploadBaseAsset(file) {
+    if (!ensureImageFile(file)) return;
+
+    const uploadPayload = new FormData();
+    uploadPayload.append("file", file);
+    uploadPayload.append("project_id", String(projectId));
+    uploadPayload.append("asset_type", "reference_image");
+
+    try {
+      const response = await fetch("/api/v1/assets/upload", {
+        method: "POST",
+        body: uploadPayload,
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      const asset = payload?.data;
+      if (!response.ok || !asset) {
+        throw new Error(asset?.message || payload?.message || `HTTP ${response.status}`);
+      }
+
+      form.querySelector('[name="base_asset_id"]').value = asset.id;
+      renderBaseAsset(asset);
+
+      if (characterId) {
+        await NovelUI.api(`/api/v1/characters/${characterId}`, {
+          method: "PATCH",
+          body: { base_asset_id: asset.id },
+        });
+      }
+
+      baseAssetFileInput.value = "";
+      NovelUI.toast("基準画像をアップロードしました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "基準画像のアップロードに失敗しました。", "danger");
+    } finally {
+      setDropzoneActive(false);
+    }
+  }
+
+  async function loadCharacter() {
+    if (!characterId) return;
+    const character = await NovelUI.api(`/api/v1/characters/${characterId}`);
+    NovelUI.fillForm(form, character);
+    setCheckbox("is_guide", character.is_guide);
+    renderBaseAsset(character.base_asset);
+    const rulePayload = await NovelUI.api(`/api/v1/characters/${characterId}/image-rule`);
+    if (rulePayload?.image_rule) NovelUI.fillForm(imageRuleForm, rulePayload.image_rule);
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const body = Object.fromEntries(new FormData(form).entries());
+    body.is_guide = form.querySelector('[name="is_guide"]').checked ? 1 : 0;
+    body.base_asset_id = body.base_asset_id ? Number(body.base_asset_id) : null;
+    try {
+      let character;
+      if (characterId) {
+        character = await NovelUI.api(`/api/v1/characters/${characterId}`, { method: "PATCH", body });
+      } else {
+        character = await NovelUI.api(`/api/v1/projects/${projectId}/characters`, { method: "POST", body });
+      }
+      NovelUI.toast("キャラクターを保存しました。");
+      if (!characterId) {
+        location.href = `/projects/${projectId}/characters/${character.id}/edit`;
+        return;
+      }
+      renderBaseAsset(character.base_asset);
+    } catch (error) {
+      NovelUI.toast(error.message || "保存に失敗しました。", "danger");
+    }
+  });
+
+  baseAssetUploadForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await uploadBaseAsset(baseAssetFileInput.files[0]);
+  });
+
+  baseAssetDropzone.addEventListener("click", (event) => {
+    if (event.target !== baseAssetFileInput) {
+      baseAssetFileInput.click();
+    }
+  });
+
+  baseAssetDropzone.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      baseAssetFileInput.click();
+    }
+  });
+
+  ["dragenter", "dragover"].forEach((eventName) => {
+    baseAssetDropzone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setDropzoneActive(true);
+    });
+  });
+
+  ["dragleave", "dragend"].forEach((eventName) => {
+    baseAssetDropzone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!baseAssetDropzone.contains(event.relatedTarget)) {
+        setDropzoneActive(false);
+      }
+    });
+  });
+
+  baseAssetDropzone.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const [file] = event.dataTransfer?.files || [];
+    await uploadBaseAsset(file);
+  });
+
+  imageRuleForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!characterId) {
+      NovelUI.toast("先にキャラクター本体を保存してください。", "warning");
+      return;
+    }
+    const body = Object.fromEntries(new FormData(imageRuleForm).entries());
+    try {
+      await NovelUI.api(`/api/v1/characters/${characterId}/image-rule`, { method: "PUT", body });
+      NovelUI.toast("画像生成ルールを保存しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "画像ルール保存に失敗しました。", "danger");
+    }
+  });
+
+  document.getElementById("characterAiAssist").addEventListener("click", () => {
+    NovelUI.toast("AI補完は次段階で OpenAI 接続と合わせて実装します。", "warning");
+  });
+
+  document.getElementById("characterImageTest").addEventListener("click", () => {
+    if (!characterId) {
+      NovelUI.toast("先にキャラクターを保存してください。", "warning");
+      return;
+    }
+    location.href = `/scenes/1/images/review?project_id=${projectId}`;
+  });
+
+  loadCharacter().catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
+})();
+</script>
+{% endblock %}

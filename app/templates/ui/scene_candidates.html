@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-grid">
+  <div class="hero-panel">
+    <div>
+      <div class="eyebrow">Candidate Review</div>
+      <h2 class="section-title">シーン生成結果確認</h2>
+      <p class="section-copy">候補比較UIは作成済みですが、候補取得と採用の専用APIはこれから接続します。</p>
+    </div>
+    <div class="soft-code">scene {{ scene_id }}</div>
+  </div>
+  <div class="content-grid">
+    <section class="panel-card span-4"><div class="panel-head"><h3>元シーン</h3></div><div class="candidate-column">現行本文を表示する領域</div></section>
+    <section class="panel-card span-4"><div class="panel-head"><h3>生成案A</h3></div><div class="candidate-column">候補Aを表示する領域</div></section>
+    <section class="panel-card span-4"><div class="panel-head"><h3>生成案B / C</h3></div><div class="candidate-column">候補B/Cを表示する領域</div></section>
+  </div>
+  <div class="d-flex justify-content-end gap-2">
+    <a class="btn btn-outline-dark" href="/projects/{{ project_id or 1 }}/scenes?scene_id={{ scene_id }}">編集画面へ戻る</a>
+    <button class="btn btn-sunrise" type="button" onclick="NovelUI.toast('候補API接続後に有効化します。', 'warning')">採用</button>
+  </div>
+</section>
+{% endblock %}

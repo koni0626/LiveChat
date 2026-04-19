@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="preview-stage">
+  <div class="preview-frame">
+    <div class="preview-hero" id="previewHero">Loading preview...</div>
+    <div class="preview-dialogue">
+      <div class="preview-meta">
+        <span id="previewProjectTitle">Project</span>
+        <span class="soft-code" id="previewChapterTitle">Chapter</span>
+      </div>
+      <h2 class="preview-scene-title" id="previewSceneTitle">Scene</h2>
+      <div class="preview-text" id="previewText"></div>
+      <div class="preview-choices" id="previewChoices"></div>
+      <div class="d-flex gap-2 mt-4">
+        <button class="btn btn-dark" type="button" id="previewNextButton">次へ</button>
+        <a class="btn btn-outline-dark" href="/projects/{{ project_id or 1 }}/scenes?scene_id={{ scene_id }}">編集画面へ戻る</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const sceneId = Number({{ scene_id }});
+  let previewPayload = null;
+  let textCursor = 0;
+  let chunks = [];
+
+  function renderCurrentChunk() {
+    document.getElementById("previewText").textContent = chunks.slice(0, textCursor + 1).join("\n\n");
+  }
+
+  async function loadPreview() {
+    previewPayload = await NovelUI.api(`/api/v1/scenes/${sceneId}/preview`);
+    document.getElementById("previewProjectTitle").textContent = previewPayload.project?.title || "NovelCreatetor";
+    document.getElementById("previewChapterTitle").textContent = previewPayload.chapter?.title || "";
+    document.getElementById("previewSceneTitle").textContent = previewPayload.scene?.title || "無題シーン";
+    const narration = previewPayload.scene?.narration_text || "";
+    const dialogues = Array.isArray(previewPayload.scene?.dialogues) ? previewPayload.scene.dialogues.map((item) => typeof item === "string" ? item : JSON.stringify(item)) : [];
+    chunks = [narration, ...dialogues].filter(Boolean);
+    textCursor = chunks.length ? 0 : -1;
+    renderCurrentChunk();
+    const image = previewPayload.scene?.image;
+    if (image?.asset?.media_url) {
+      document.getElementById("previewHero").innerHTML = `<img src="${image.asset.media_url}" alt="preview image">`;
+    } else {
+      document.getElementById("previewHero").innerHTML = `<div class="empty-panel">プレビュー用画像はまだありません。</div>`;
+    }
+    const choices = previewPayload.scene?.choices || [];
+    document.getElementById("previewChoices").innerHTML = choices.map((choice) => `
+      <button class="btn btn-outline-light text-start w-100">${NovelUI.escape(choice.choice_text || "選択肢")}</button>
+    `).join("");
+  }
+
+  document.getElementById("previewNextButton").addEventListener("click", () => {
+    if (textCursor < chunks.length - 1) {
+      textCursor += 1;
+      renderCurrentChunk();
+    } else {
+      NovelUI.toast("このシーンの末尾です。", "info");
+    }
+  });
+
+  loadPreview().catch((error) => NovelUI.toast(error.message || "プレビュー取得に失敗しました。", "danger"));
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,14 @@
+from ..extensions import db
+from .base import TimestampMixin
+
+
+class UserSetting(db.Model, TimestampMixin):
+    __tablename__ = "user_setting"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, unique=True, index=True)
+    text_ai_model = db.Column(db.String(100), nullable=False, default="gpt-5.4-mini")
+    image_ai_model = db.Column(db.String(100), nullable=False, default="gpt-image-1.5")
+    default_quality = db.Column(db.String(20), nullable=False, default="medium")
+    default_size = db.Column(db.String(20), nullable=False, default="1024x1024")
+    autosave_interval = db.Column(db.String(20), nullable=False, default="off")

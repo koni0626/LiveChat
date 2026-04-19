@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-grid">
+  <div class="toolbar-panel">
+    <form class="row g-3 align-items-end" id="projectSearchForm">
+      <div class="col-md-6">
+        <label class="form-label">検索</label>
+        <input class="form-control" type="text" name="search" placeholder="タイトルや slug で検索">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">ステータス</label>
+        <select class="form-select" name="status">
+          <option value="">すべて</option>
+          <option value="draft">draft</option>
+          <option value="active">active</option>
+          <option value="published">published</option>
+        </select>
+      </div>
+      <div class="col-md-3 d-flex gap-2">
+        <button class="btn btn-dark w-100" type="submit">検索</button>
+        <a class="btn btn-sunrise w-100" href="{{ url_for('ui.project_create_page') }}">新規</a>
+      </div>
+    </form>
+  </div>
+  <section class="panel-card">
+    <div class="panel-head">
+      <h3>作品一覧</h3>
+      <span class="soft-code" id="projectCountLabel">0 items</span>
+    </div>
+    <div class="project-card-grid" id="projectList"></div>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const form = document.getElementById("projectSearchForm");
+  const host = document.getElementById("projectList");
+  const countLabel = document.getElementById("projectCountLabel");
+
+  async function loadProjects() {
+    const params = new URLSearchParams();
+    const formData = new FormData(form);
+    for (const [key, value] of formData.entries()) {
+      if (value) params.set(key, value);
+    }
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    const data = await NovelUI.api(`/api/v1/projects${suffix}`);
+    const list = Array.isArray(data) ? data : [];
+    countLabel.textContent = `${list.length} items`;
+    if (!list.length) {
+      host.innerHTML = `<div class="empty-panel">条件に合う作品がありません。</div>`;
+      return;
+    }
+    host.innerHTML = list.map((project) => `
+      <article class="project-card">
+        <div class="project-card-top">
+          <span class="badge text-bg-light">${NovelUI.escape(project.genre || "genre")}</span>
+          <span class="soft-code">${NovelUI.escape(project.status || "draft")}</span>
+        </div>
+        <h4>${NovelUI.escape(project.title || "Untitled")}</h4>
+        <p>${NovelUI.escape(project.summary || "概要はまだありません。")}</p>
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <a class="btn btn-sm btn-dark" href="/projects/${project.id}/home">開く</a>
+          <button class="btn btn-sm btn-outline-danger" data-project-delete="${project.id}">削除</button>
+        </div>
+      </article>
+    `).join("");
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    loadProjects().catch((error) => NovelUI.toast(error.message || "作品一覧の取得に失敗しました。", "danger"));
+  });
+
+  host.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-project-delete]");
+    if (!button) return;
+    if (!confirm("この作品を削除しますか？")) return;
+    try {
+      await NovelUI.api(`/api/v1/projects/${button.dataset.projectDelete}`, { method: "DELETE" });
+      NovelUI.toast("作品を削除しました。");
+      loadProjects();
+    } catch (error) {
+      NovelUI.toast(error.message || "削除に失敗しました。", "danger");
+    }
+  });
+
+  loadProjects().catch((error) => NovelUI.toast(error.message || "作品一覧の取得に失敗しました。", "danger"));
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-grid narrow-grid">
+  <section class="panel-card">
+    <div class="panel-head"><h3>ユーザー設定</h3></div>
+    <form id="settingsForm" class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">既定のテキストモデル</label>
+        <input class="form-control" name="text_ai_model" value="gpt-5.4-mini">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">既定の画像モデル</label>
+        <input class="form-control" name="image_ai_model" value="gpt-image-1.5">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">既定の画像品質</label>
+        <select class="form-select" name="default_quality">
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">既定の画像サイズ</label>
+        <select class="form-select" name="default_size">
+          <option value="1024x1024">1024x1024</option>
+          <option value="1024x1536">1024x1536</option>
+          <option value="1536x1024">1536x1024</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">自動保存間隔</label>
+        <select class="form-select" name="autosave_interval">
+          <option value="off">off</option>
+          <option value="30">30 sec</option>
+          <option value="60">60 sec</option>
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label">メモ</label>
+        <textarea class="form-control" rows="4" readonly>この画面はログイン中ユーザーの既定値を保存します。API キーやストレージ先のようなサーバ設定はここでは変更しません。</textarea>
+      </div>
+      <div class="col-12 d-flex justify-content-end gap-2">
+        <button class="btn btn-outline-dark" type="button" id="settingsResetButton">初期値に戻す</button>
+        <button class="btn btn-sunrise" type="submit">保存</button>
+      </div>
+    </form>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const form = document.getElementById("settingsForm");
+
+  async function loadSettings() {
+    const settings = await NovelUI.api("/api/v1/settings");
+    NovelUI.fillForm(form, settings);
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const body = Object.fromEntries(new FormData(form).entries());
+    try {
+      const settings = await NovelUI.api("/api/v1/settings", {
+        method: "PUT",
+        body,
+      });
+      NovelUI.fillForm(form, settings);
+      NovelUI.toast("ユーザー設定を保存しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "設定保存に失敗しました。", "danger");
+    }
+  });
+
+  document.getElementById("settingsResetButton").addEventListener("click", async () => {
+    try {
+      const settings = await NovelUI.api("/api/v1/settings/reset", {
+        method: "POST",
+        body: {},
+      });
+      NovelUI.fillForm(form, settings);
+      NovelUI.toast("設定を初期値に戻しました。", "warning");
+    } catch (error) {
+      NovelUI.toast(error.message || "設定の初期化に失敗しました。", "danger");
+    }
+  });
+
+  loadSettings().catch((error) => {
+    NovelUI.toast(error.message || "設定の読み込みに失敗しました。", "danger");
+  });
+})();
+</script>
+{% endblock %}

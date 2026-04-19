@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="editor-grid">
+  <section class="panel-card">
+    <div class="panel-head"><h3>シーン情報</h3></div>
+    <div class="vstack gap-3">
+      <div><div class="mini-section-title">要約</div><div id="imageSceneSummary" class="mini-board"></div></div>
+      <div><div class="mini-section-title">本文</div><div id="imageSceneNarration" class="mini-board"></div></div>
+      <div><div class="mini-section-title">登場キャラクター</div><div id="imageCharacters" class="mini-board"></div></div>
+      <div><div class="mini-section-title">感情 / 場所 / 時間帯</div><div id="imageMeta" class="mini-board"></div></div>
+      <div><div class="mini-section-title">基準画像</div><div id="referenceCharacters" class="mini-board"></div></div>
+    </div>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head"><h3>生成画像プレビュー</h3></div>
+    <div class="image-stage" id="imageStage">画像を読み込み中...</div>
+    <div class="list-stack mt-3" id="imageHistory"></div>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head"><h3>生成設定</h3></div>
+    <form id="imageGenerateForm" class="vstack gap-3">
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">品質</label><select class="form-select" name="quality"><option>low</option><option>medium</option><option>high</option></select></div>
+        <div class="col-md-6"><label class="form-label">サイズ</label><select class="form-select" name="size"><option>1024x1024</option><option>1024x1536</option><option>1536x1024</option></select></div>
+      </div>
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="useCharacterBase" name="use_character_base" checked>
+        <label class="form-check-label" for="useCharacterBase">キャラクターの基準画像を reference image として使う</label>
+      </div>
+      <label class="form-label">プロンプトプレビュー</label>
+      <textarea class="form-control font-mono-sm" id="promptPreview" rows="8" readonly></textarea>
+      <div class="d-flex gap-2 justify-content-end">
+        <button class="btn btn-outline-dark" type="button" id="imageRefreshButton">再生成</button>
+        <button class="btn btn-sunrise" type="submit">画像を生成</button>
+      </div>
+    </form>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const sceneId = Number({{ scene_id }});
+  const historyHost = document.getElementById("imageHistory");
+  const form = document.getElementById("imageGenerateForm");
+  const imageRefreshButton = document.getElementById("imageRefreshButton");
+  let latestImageId = null;
+
+  function renderReferenceCharacters(characters) {
+    const withBase = (characters || []).filter((character) => character.base_asset?.media_url);
+    const host = document.getElementById("referenceCharacters");
+    if (!withBase.length) {
+      host.innerHTML = `<div class="empty-panel">このシーンで参照に使える基準画像はまだありません。</div>`;
+      return;
+    }
+    host.innerHTML = withBase.map((character) => `
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <img src="${character.base_asset.media_url}" alt="${NovelUI.escape(character.name)}" style="width:64px;height:64px;object-fit:cover" class="rounded-3 border">
+        <div>
+          <div class="fw-semibold">${NovelUI.escape(character.name)}</div>
+          <div class="small text-secondary">${NovelUI.escape(character.base_asset.file_name || "")}</div>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  function setGenerating(active) {
+    form.querySelector('[type="submit"]').disabled = active;
+    imageRefreshButton.disabled = active;
+  }
+
+  async function loadImageContext() {
+    const payload = await NovelUI.api(`/api/v1/scenes/${sceneId}/image-context`);
+    document.getElementById("imageSceneSummary").textContent = payload.image_generation?.scene_summary || "";
+    document.getElementById("imageSceneNarration").textContent = payload.scene?.narration_text || "";
+    document.getElementById("imageCharacters").innerHTML = (payload.characters || []).map((character) => `<span class="mini-pill">${NovelUI.escape(character.name)}</span>`).join("");
+    document.getElementById("imageMeta").innerHTML = `
+      <span class="mini-pill">emotion: ${NovelUI.escape(payload.image_generation?.emotion || "-")}</span>
+      <span class="mini-pill">place: ${NovelUI.escape(payload.image_generation?.place || "-")}</span>
+      <span class="mini-pill">time: ${NovelUI.escape(payload.image_generation?.time_of_day || "-")}</span>
+    `;
+    document.getElementById("promptPreview").value = payload.image_generation?.prompt_preview || "";
+    renderReferenceCharacters(payload.characters || []);
+
+    const selected = payload.selected_image;
+    if (selected?.asset?.media_url) {
+      latestImageId = selected.id;
+      document.getElementById("imageStage").innerHTML = `<img src="${selected.asset.media_url}" alt="scene image">`;
+    } else {
+      document.getElementById("imageStage").innerHTML = `<div class="empty-panel">まだ選択済み画像がありません。</div>`;
+    }
+  }
+
+  async function loadImageHistory() {
+    const list = await NovelUI.api(`/api/v1/scenes/${sceneId}/images`);
+    historyHost.innerHTML = Array.isArray(list) && list.length ? list.map((item) => `
+      <button class="list-row selectable-row ${item.is_selected ? 'active' : ''}" data-select-image="${item.id}">
+        <div>
+          <div class="list-title">${NovelUI.escape(item.image_type || "scene image")}</div>
+          <div class="list-subtitle">${NovelUI.escape(item.size || "")} / ${NovelUI.escape(item.quality || "")}</div>
+        </div>
+        <span class="soft-code">${item.is_selected ? "selected" : "candidate"}</span>
+      </button>
+    `).join("") : `<div class="empty-panel">画像履歴はまだありません。</div>`;
+  }
+
+  async function refreshAll() {
+    await Promise.all([loadImageContext(), loadImageHistory()]);
+  }
+
+  async function generateImage(body, successMessage) {
+    setGenerating(true);
+    try {
+      await NovelUI.api(`/api/v1/scenes/${sceneId}/images/generate`, { method: "POST", body });
+      await refreshAll();
+      NovelUI.toast(successMessage);
+    } catch (error) {
+      NovelUI.toast(error.message || "画像生成に失敗しました。", "danger");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+    body.use_character_base = document.getElementById("useCharacterBase").checked;
+    await generateImage(body, "画像生成が完了しました。");
+  });
+
+  imageRefreshButton.addEventListener("click", async () => {
+    if (!latestImageId) {
+      NovelUI.toast("再生成対象の画像がありません。", "warning");
+      return;
+    }
+    await generateImage(
+      {
+        source_scene_image_id: latestImageId,
+        use_character_base: document.getElementById("useCharacterBase").checked,
+      },
+      "再生成が完了しました。"
+    );
+  });
+
+  historyHost.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-select-image]");
+    if (!button) return;
+    try {
+      await NovelUI.api(`/api/v1/scene-images/${button.dataset.selectImage}/select`, { method: "POST", body: {} });
+      NovelUI.toast("画像を採用しました。");
+      await refreshAll();
+    } catch (error) {
+      NovelUI.toast(error.message || "採用に失敗しました。", "danger");
+    }
+  });
+
+  refreshAll().catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
+})();
+</script>
+{% endblock %}

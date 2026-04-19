@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="login-stage">
+  <div class="login-card card border-0 shadow-lg">
+    <div class="card-body p-5">
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <div class="brand-chip brand-chip-xl">NC</div>
+        <div>
+          <div class="eyebrow">AI Story Studio</div>
+          <h1 class="h3 mb-0">新規ユーザー登録</h1>
+        </div>
+      </div>
+      <p class="text-secondary mb-4">制作を始めるためのアカウントを作成します。登録後はそのままダッシュボードへ進みます。</p>
+      <form id="registerForm" class="vstack gap-3">
+        <div>
+          <label class="form-label">表示名</label>
+          <input class="form-control form-control-lg" type="text" name="display_name" placeholder="クリエイター名" required>
+        </div>
+        <div>
+          <label class="form-label">メールアドレス</label>
+          <input class="form-control form-control-lg" type="email" name="email" placeholder="creator@example.com" required>
+        </div>
+        <div>
+          <label class="form-label">パスワード</label>
+          <input class="form-control form-control-lg" type="password" name="password" placeholder="8文字以上を推奨" required>
+        </div>
+        <div class="alert alert-danger d-none" id="registerError"></div>
+        <button class="btn btn-sunrise btn-lg" type="submit">
+          <i class="bi bi-person-plus"></i>
+          <span>登録してはじめる</span>
+        </button>
+      </form>
+      <div class="text-center mt-4">
+        <span class="text-secondary small">すでにアカウントがありますか</span>
+        <a class="link-light-emphasis text-decoration-none fw-semibold" href="{{ url_for('ui.login_page') }}">ログインへ戻る</a>
+      </div>
+      <div class="login-footnote mt-4">
+        <div class="mini-status"><span class="status-dot"></span><span>セッション認証</span></div>
+        <a href="/health" class="link-secondary text-decoration-none">health</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const form = document.getElementById("registerForm");
+  const errorBox = document.getElementById("registerError");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    errorBox.classList.add("d-none");
+    const formData = new FormData(form);
+    try {
+      await NovelUI.api("/api/v1/auth/register", {
+        method: "POST",
+        body: Object.fromEntries(formData.entries()),
+      });
+      location.href = "{{ url_for('ui.dashboard_page') }}";
+    } catch (error) {
+      errorBox.textContent = error.message || "ユーザー登録に失敗しました。";
+      errorBox.classList.remove("d-none");
+    }
+  });
+})();
+</script>
+{% endblock %}
