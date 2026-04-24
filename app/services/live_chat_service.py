@@ -207,6 +207,8 @@ class LiveChatService:
         serialized = []
         for item in items:
             messages = self._chat_message_service.list_messages(item.id)
+            images = self._session_image_service.list_session_images(item.id)
+            selected_image_row = next((image for image in images if image.is_selected), None)
             session_characters = self._select_characters(item.id)
             serialized.append(
                 {
@@ -214,6 +216,7 @@ class LiveChatService:
                     "message_count": len(messages),
                     "last_message_text": messages[-1].message_text if messages else None,
                     "characters": session_characters,
+                    "selected_image": self._serialize_session_image(selected_image_row) if selected_image_row else None,
                 }
             )
         return serialized

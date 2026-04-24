@@ -66,6 +66,17 @@
       .filter((value, index, array) => Number.isInteger(value) && value > 0 && array.indexOf(value) === index);
   }
 
+  function truncateText(value, maxLength = 68) {
+    const text = String(value || "").replace(/\s+/g, " ").trim();
+    if (!text) {
+      return "まだメッセージはありません。";
+    }
+    if (text.length <= maxLength) {
+      return text;
+    }
+    return `${text.slice(0, maxLength).trimEnd()}…`;
+  }
+
   async function loadCharacterOptions() {
     const data = await NovelUI.api(`/api/v1/projects/${projectId}/characters`);
     const list = Array.isArray(data) ? data : [];
@@ -88,15 +99,25 @@
       const selectedName = Array.isArray(item.characters) && item.characters.length
         ? (selectedIds.length ? item.characters[0]?.name : `${item.characters.length} characters`)
         : "character not set";
+      const selectedImageUrl = item.selected_image?.asset?.media_url || "";
       return `
-        <article class="project-card">
+        <article class="project-card live-chat-session-card">
           <div class="project-card-top">
             <span class="badge text-bg-light">${NovelUI.escape(item.status || "active")}</span>
             <span class="soft-code">${item.message_count || 0} messages</span>
           </div>
-          <h4>${NovelUI.escape(item.title || "Live Chat")}</h4>
-          <p>${NovelUI.escape(item.last_message_text || "まだメッセージはありません。")}</p>
-          <div class="small text-secondary mb-3">話す相手: ${NovelUI.escape(selectedName || "-")}</div>
+          <div class="live-chat-session-head">
+            <div class="live-chat-session-copy">
+              <h4>${NovelUI.escape(item.title || "Live Chat")}</h4>
+              <p class="live-chat-session-excerpt">${NovelUI.escape(truncateText(item.last_message_text))}</p>
+            </div>
+            <div class="live-chat-session-thumb-wrap">
+              ${selectedImageUrl
+                ? `<img class="live-chat-session-thumb" src="${NovelUI.escape(selectedImageUrl)}" alt="selected scene thumbnail">`
+                : '<div class="live-chat-session-thumb live-chat-session-thumb-placeholder">No Image</div>'}
+            </div>
+          </div>
+          <div class="small text-secondary">話す相手: ${NovelUI.escape(selectedName || "-")}</div>
           <div class="d-flex justify-content-between align-items-center mt-3 gap-2">
             <span class="soft-code">${NovelUI.escape(item.player_name || "player")}</span>
             <div class="d-flex gap-2">
