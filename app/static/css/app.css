@@ -564,14 +564,27 @@ body {
   justify-content: center;
   min-height: 0;
   flex: 1;
+  position: relative;
 }
 
 .live-chat-image-panel {
   --stage-width: 1024;
   --stage-height: 1536;
-  min-height: 560px;
+  --rendered-stage-height: 560px;
   width: 100%;
   max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.85rem;
+  margin: 0 auto;
+}
+
+.live-chat-stage-frame {
+  min-height: var(--rendered-stage-height);
+  height: var(--rendered-stage-height);
+  width: 100%;
   border-radius: 1.25rem;
   overflow: hidden;
   background: linear-gradient(180deg, rgba(23, 33, 54, 0.9), rgba(12, 18, 33, 0.96));
@@ -579,7 +592,6 @@ body {
   align-items: center;
   justify-content: center;
   position: relative;
-  margin: 0 auto;
 }
 
 .live-chat-novel-box {
@@ -617,10 +629,37 @@ body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
+.live-chat-novel-continue {
+  margin-top: auto;
+  align-self: flex-end;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(255, 244, 218, 0.92);
+  letter-spacing: 0.04em;
+  animation: liveChatNovelContinueBlink 1s ease-in-out infinite alternate;
+}
+
+.live-chat-novel-text-measure {
+  position: fixed;
+  left: -99999px;
+  top: -99999px;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+@keyframes liveChatNovelContinueBlink {
+  from { opacity: 0.45; }
+  to { opacity: 1; }
+}
+
 .live-chat-image-panel.is-loading::after {
   content: "画像を生成中...";
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: calc(3.9rem + 0.85rem);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -635,15 +674,14 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: inherit;
 }
 
 .live-chat-eval-badge {
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
-  z-index: 3;
+  position: relative;
   min-width: 180px;
-  max-width: min(280px, calc(100% - 2rem));
+  width: 100%;
+  max-width: 100%;
   padding: 0.75rem 0.9rem;
   border-radius: 1rem;
   background: rgba(10, 16, 28, 0.52);
@@ -723,6 +761,13 @@ body {
 .live-chat-eval-badge.is-hidden,
 .live-chat-eval-badge[hidden] {
   display: none;
+}
+
+@media (max-width: 1200px) {
+  .live-chat-eval-badge {
+    width: 100%;
+    max-width: 100%;
+  }
 }
 
 .live-chat-message-wrap.is-hidden {

@@ -19,11 +19,7 @@
         <label class="form-label" for="liveChatSessionObjectiveInput">会話の目的</label>
         <textarea class="form-control" id="liveChatSessionObjectiveInput" name="conversation_objective" rows="2" placeholder="例: プレイヤーがあなたに恋愛感情を持つようにする / プレイヤーが唐辛子に興味を持つようにする"></textarea>
       </div>
-      <div class="col-lg-9 col-md-8">
-        <label class="form-label" for="liveChatSessionCharacterSelect">登場キャラクター</label>
-        <select class="form-select live-chat-character-select" id="liveChatSessionCharacterSelect" name="character_ids" multiple size="4"></select>
-      </div>
-      <div class="col-lg-3 col-md-4 d-grid align-self-end">
+      <div class="col-12 d-grid justify-content-md-end">
         <button class="btn btn-sunrise" type="submit">設定を保存</button>
       </div>
       <div class="col-12">
@@ -126,9 +122,9 @@
         <div class="col-6">
           <label class="form-label" for="liveChatImageSizeSelect">サイズ</label>
           <select class="form-select" id="liveChatImageSizeSelect" name="size">
-            <option value="1024x1536">1024x1536</option>
+            <option value="1536x1024" selected>1536x1024</option>
             <option value="1024x1024">1024x1024</option>
-            <option value="1536x1024">1536x1024</option>
+            <option value="1024x1536">1024x1536</option>
           </select>
         </div>
         <div class="col-6">
@@ -170,7 +166,6 @@
   const composeInput = document.getElementById("liveChatComposeInput");
   const imageForm = document.getElementById("liveChatImageForm");
   const uploadForm = document.getElementById("liveChatImageUploadForm");
-  const characterSelect = document.getElementById("liveChatSessionCharacterSelect");
   const toggleMessagesButton = document.getElementById("liveChatToggleMessagesButton");
   const toggleTextboxButton = document.getElementById("liveChatToggleTextboxButton");
   const sendButton = document.getElementById("liveChatSendButton");
@@ -181,6 +176,11 @@
   let currentContext = null;
   let messagesVisible = false;
   let textboxVisible = true;
+  let novelPageState = {
+    messageId: null,
+    pages: [],
+    pageIndex: 0,
+  };
 
   function formatJson(value) {
     if (!value) return "{}";
@@ -228,15 +228,118 @@
     return null;
   }
 
+  function ensureNovelTextMeasurer(sourceElement) {
+    let measurer = document.getElementById("liveChatNovelTextMeasure");
+    if (!measurer) {
+      measurer = document.createElement("div");
+      measurer.id = "liveChatNovelTextMeasure";
+      measurer.className = "live-chat-novel-text live-chat-novel-text-measure";
+      document.body.appendChild(measurer);
+    }
+    const style = window.getComputedStyle(sourceElement);
+    measurer.style.width = `${sourceElement.clientWidth}px`;
+    measurer.style.font = style.font;
+    measurer.style.lineHeight = style.lineHeight;
+    measurer.style.letterSpacing = style.letterSpacing;
+    measurer.style.whiteSpace = style.whiteSpace;
+    return measurer;
+  }
+
+  function fitNovelPageBreak(text, start, end) {
+    if (end >= text.length) return end;
+    const min = Math.max(start + 1, start + Math.floor((end - start) * 0.6));
+    for (let index = end; index > min; index -= 1) {
+      const pair = text.slice(index - 1, index + 1);
+      const ch = text[index - 1];
+      if (pair === "\n\n") return index;
+      if (" \n。！？!?、,.】）」』".includes(ch)) return index;
+    }
+    return end;
+  }
+
+  function paginateNovelText(text) {
+    const box = document.getElementById("liveChatNovelBox");
+    const textElement = document.getElementById("liveChatNovelText");
+    const speakerElement = document.getElementById("liveChatNovelSpeaker");
+    if (!box || !textElement || !speakerElement) return [String(text || "")];
+    const normalized = String(text || "").replace(/\r\n/g, "\n").trim();
+    if (!normalized) return [""];
+
+    const measurer = ensureNovelTextMeasurer(textElement);
+    const boxStyle = window.getComputedStyle(box);
+    const paddingTop = parseFloat(boxStyle.paddingTop || "0");
+    const paddingBottom = parseFloat(boxStyle.paddingBottom || "0");
+    const gap = parseFloat(boxStyle.gap || "0");
+    const cueHeight = 26;
+    const availableHeight = Math.max(
+      48,
+      box.clientHeight - paddingTop - paddingBottom - speakerElement.offsetHeight - gap - cueHeight
+    );
+    const pages = [];
+    let start = 0;
+
+    while (start < normalized.length) {
+      let low = start + 1;
+      let high = normalized.length;
+      let best = low;
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        measurer.textContent = normalized.slice(start, mid).trim();
+        if (measurer.scrollHeight <= availableHeight) {
+          best = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      let end = fitNovelPageBreak(normalized, start, best);
+      if (end <= start) {
+        end = Math.min(normalized.length, start + 1);
+      }
+      pages.push(normalized.slice(start, end).trim());
+      start = end;
+      while (start < normalized.length && /\s/.test(normalized[start])) {
+        start += 1;
+      }
+    }
+    return pages.length ? pages : [normalized];
+  }
+
+  function renderNovelPage() {
+    const textElement = document.getElementById("liveChatNovelText");
+    const cueElement = document.getElementById("liveChatNovelContinue");
+    if (!textElement) return;
+    const pages = novelPageState.pages || [];
+    const pageIndex = Math.max(0, Math.min(novelPageState.pageIndex || 0, Math.max(0, pages.length - 1)));
+    novelPageState.pageIndex = pageIndex;
+    textElement.textContent = pages[pageIndex] || "";
+    if (cueElement) {
+      cueElement.hidden = !(pages.length > 1 && pageIndex < pages.length - 1);
+    }
+  }
+
   function renderNovelBox(messages) {
     const item = getLatestDisplayMessage(messages);
+    const speakerElement = document.getElementById("liveChatNovelSpeaker");
+    const textElement = document.getElementById("liveChatNovelText");
+    const cueElement = document.getElementById("liveChatNovelContinue");
+    if (!speakerElement || !textElement) return;
     if (!item) {
-      novelSpeaker.textContent = "";
-      novelText.textContent = "まだセリフがありません。";
+      speakerElement.textContent = "";
+      textElement.textContent = "まだセリフがありません。";
+      novelPageState = { messageId: null, pages: [], pageIndex: 0 };
+      if (cueElement) cueElement.hidden = true;
       return;
     }
-    novelSpeaker.textContent = item.speaker_name || "";
-    novelText.textContent = item.message_text || "";
+    speakerElement.textContent = item.speaker_name || "";
+    const pages = paginateNovelText(item.message_text || "");
+    const isSameMessage = novelPageState.messageId === item.id;
+    novelPageState = {
+      messageId: item.id,
+      pages,
+      pageIndex: isSameMessage ? Math.min(novelPageState.pageIndex, Math.max(0, pages.length - 1)) : 0,
+    };
+    renderNovelPage();
   }
 
   function renderMessages(messages) {
@@ -296,7 +399,8 @@
     }
 
     selectedImagePanel.style.width = `${Math.round(width)}px`;
-    selectedImagePanel.style.height = `${Math.round(height)}px`;
+    selectedImagePanel.style.height = "auto";
+    selectedImagePanel.style.setProperty("--rendered-stage-height", `${Math.round(height)}px`);
   }
 
   function renderSelectedImage(selectedImage) {
@@ -319,6 +423,7 @@
       <div class="live-chat-novel-box ${textboxVisible ? "" : "is-hidden"}" id="liveChatNovelBox">
         <div class="live-chat-novel-speaker" id="liveChatNovelSpeaker">${NovelUI.escape(novelSpeaker.textContent || "")}</div>
         <div class="live-chat-novel-text" id="liveChatNovelText">${NovelUI.escape(novelText.textContent || "")}</div>
+        <div class="live-chat-novel-continue" id="liveChatNovelContinue" hidden>Enterで続きを読む</div>
       </div>
     `;
     const loadingHidden = currentContext?.ui?.reply_loading ? "" : "hidden";
@@ -331,11 +436,17 @@
         <div class="live-chat-message-panel" id="liveChatMessageList">${messageList.innerHTML}</div>
       </aside>
     `;
-    if (!mediaUrl) {
-      selectedImagePanel.innerHTML = `<div class="empty-panel">まだ画像がありません。</div>${evaluationMarkup}${novelMarkup}${messageMarkup}`;
-    } else {
-      selectedImagePanel.innerHTML = `<img class="live-chat-stage-image" src="${mediaUrl}" alt="selected image">${evaluationMarkup}${novelMarkup}${messageMarkup}`;
-    }
+    const stageBody = !mediaUrl
+      ? `<div class="empty-panel">まだ画像がありません。</div>`
+      : `<img class="live-chat-stage-image" src="${mediaUrl}" alt="selected image">`;
+    selectedImagePanel.innerHTML = `
+      ${evaluationMarkup}
+      <div class="live-chat-stage-frame">
+        ${stageBody}
+        ${novelMarkup}
+        ${messageMarkup}
+      </div>
+    `;
   }
 
   function renderImageGrid(images) {
@@ -351,15 +462,6 @@
         </button>
       `;
     }).join("");
-  }
-
-  function renderCharacterSelect(available, selected) {
-    const selectedIds = new Set((selected || []).map((item) => Number(item.id)));
-    characterSelect.innerHTML = (available || []).map((character) => `
-      <option value="${character.id}" ${selectedIds.has(Number(character.id)) ? "selected" : ""}>
-        ${NovelUI.escape(character.name)}${character.role ? ` / ${NovelUI.escape(character.role)}` : ""}
-      </option>
-    `).join("");
   }
 
   function setMessagesVisible(visible) {
@@ -398,8 +500,8 @@
     imageForm.prompt_text.value = context.state.visual_prompt_text || "";
     renderMessages(context.messages || []);
     renderSelectedImage(context.selected_image);
+    renderNovelBox(context.messages || []);
     renderImageGrid(context.images || []);
-    renderCharacterSelect(context.available_characters || [], context.characters || []);
     setMessagesVisible(messagesVisible);
     setTextboxVisible(textboxVisible);
   }
@@ -411,7 +513,6 @@
 
   sessionMetaForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const characterIds = Array.from(characterSelect.selectedOptions).map((option) => Number(option.value));
     try {
       const updated = await NovelUI.api(`/api/v1/chat/sessions/${sessionId}`, {
         method: "PATCH",
@@ -422,7 +523,6 @@
             ...(currentContext?.session?.settings_json || {}),
             conversation_objective: sessionMetaForm.conversation_objective.value,
           },
-          character_ids: characterIds,
         },
       });
       applyContext(updated);
@@ -584,6 +684,20 @@
     setTextboxVisible(!textboxVisible);
   });
 
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    if (!textboxVisible) return;
+    const activeElement = document.activeElement;
+    if (activeElement && ["TEXTAREA", "INPUT", "SELECT"].includes(activeElement.tagName)) {
+      return;
+    }
+    const pages = novelPageState.pages || [];
+    if (novelPageState.pageIndex >= pages.length - 1) return;
+    event.preventDefault();
+    novelPageState.pageIndex += 1;
+    renderNovelPage();
+  });
+
   setMessagesVisible(false);
   setTextboxVisible(true);
 
@@ -594,6 +708,7 @@
   window.addEventListener("resize", () => {
     if (currentContext) {
       renderSelectedImage(currentContext.selected_image);
+      renderNovelBox(currentContext.messages || []);
       setMessagesVisible(messagesVisible);
       setTextboxVisible(textboxVisible);
     }

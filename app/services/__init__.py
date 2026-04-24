@@ -13,7 +13,6 @@ __all__ = [
     "live_chat_prompt_visual_support",
     "scene_service",
     "scene_character_service",
-    "session_character_service",
     "session_image_service",
     "session_state_service",
     "asset_service",

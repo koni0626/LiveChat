@@ -13,7 +13,6 @@ __all__ = [
     "scene_choice_repository",
     "scene_version_repository",
     "scene_image_repository",
-    "session_character_repository",
     "session_image_repository",
     "session_state_repository",
     "ending_condition_repository",

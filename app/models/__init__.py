@@ -17,7 +17,6 @@ from .scene_character import SceneCharacter
 from .scene_choice import SceneChoice
 from .scene_image import SceneImage
 from .scene_version import SceneVersion
-from .session_character import SessionCharacter
 from .session_image import SessionImage
 from .session_state import SessionState
 from .story_outline import StoryOutline
@@ -46,7 +45,6 @@ __all__ = [
     "SceneChoice",
     "SceneImage",
     "SceneVersion",
-    "SessionCharacter",
     "SessionImage",
     "SessionState",
     "StoryOutline",

@@ -15,7 +15,6 @@ from .character_service import CharacterService
 from .chat_message_service import ChatMessageService
 from .chat_session_service import ChatSessionService
 from .project_service import ProjectService
-from .session_character_service import SessionCharacterService
 from .session_image_service import SessionImageService
 from .session_state_service import SessionStateService
 from .story_outline_service import StoryOutlineService
@@ -28,7 +27,6 @@ class LiveChatService:
         chat_session_service: ChatSessionService | None = None,
         chat_message_service: ChatMessageService | None = None,
         session_state_service: SessionStateService | None = None,
-        session_character_service: SessionCharacterService | None = None,
         session_image_service: SessionImageService | None = None,
         project_service: ProjectService | None = None,
         character_service: CharacterService | None = None,
@@ -41,7 +39,6 @@ class LiveChatService:
         self._chat_session_service = chat_session_service or ChatSessionService()
         self._chat_message_service = chat_message_service or ChatMessageService()
         self._session_state_service = session_state_service or SessionStateService()
-        self._session_character_service = session_character_service or SessionCharacterService()
         self._session_image_service = session_image_service or SessionImageService()
         self._project_service = project_service or ProjectService()
         self._character_service = character_service or CharacterService()
@@ -174,15 +171,11 @@ class LiveChatService:
         }
 
     def _select_characters(self, session_id: int):
-        character_ids = self._session_character_service.list_character_ids(session_id)
         session = self._chat_session_service.get_session(session_id)
         if not session:
             return []
         all_characters = self._character_service.list_characters(session.project_id)
-        if not character_ids:
-            return [self._serialize_character(character) for character in all_characters]
-        selected = [character for character in all_characters if character.id in set(character_ids)]
-        return [self._serialize_character(character) for character in selected]
+        return [self._serialize_character(character) for character in all_characters]
 
     def list_sessions(self, project_id: int):
         items = self._chat_session_service.list_sessions(project_id)
@@ -205,8 +198,6 @@ class LiveChatService:
         session = self._chat_session_service.create_session(project_id, payload)
         if not session:
             return None
-        character_ids = payload.get("character_ids") or payload.get("session_character_ids") or []
-        self._session_character_service.replace_session_characters(session.id, character_ids)
         self._session_state_service.upsert_state(session.id, {"state_json": {}})
         return self.get_session_context(session.id)
 
@@ -215,11 +206,6 @@ class LiveChatService:
         session = self._chat_session_service.update_session(session_id, payload)
         if not session:
             return None
-        if "character_ids" in payload or "session_character_ids" in payload:
-            self._session_character_service.replace_session_characters(
-                session_id,
-                payload.get("character_ids") or payload.get("session_character_ids"),
-            )
         return self.get_session_context(session_id)
 
     def delete_message(self, session_id: int, message_id: int):
@@ -240,10 +226,6 @@ class LiveChatService:
         images = self._session_image_service.list_session_images(session_id)
         selected_image = next((item for item in images if item.is_selected), None)
         characters = self._select_characters(session_id)
-        available_characters = [
-            self._serialize_character(character)
-            for character in self._character_service.list_characters(session.project_id)
-        ]
         story_outline = self._story_outline_service.get_outline(session.project_id)
         world = self._world_service.get_world(session.project_id)
         if not messages and characters:
@@ -266,7 +248,6 @@ class LiveChatService:
                 "messages": [],
                 "state": self._serialize_state(state),
                 "characters": characters,
-                "available_characters": available_characters,
             }
             self._create_opening_message(session, opening_context)
             messages = self._chat_message_service.list_messages(session_id)
@@ -289,7 +270,6 @@ class LiveChatService:
             "messages": [self._serialize_message(item) for item in messages],
             "state": self._serialize_state(state),
             "characters": characters,
-            "available_characters": available_characters,
             "images": [self._serialize_session_image(item) for item in images],
             "selected_image": self._serialize_session_image(selected_image) if selected_image else None,
         }
@@ -459,7 +439,7 @@ class LiveChatService:
         reference_paths, reference_asset_ids = image_support.collect_reference_assets(active_characters, limit=2)
         result = self._image_ai_client.generate_image(
             prompt,
-            size=payload.get("size") or "1024x1536",
+            size=payload.get("size") or "1536x1024",
             quality=payload.get("quality") or "low",
             input_image_paths=reference_paths,
             input_fidelity="high" if reference_paths else None,
@@ -502,7 +482,7 @@ class LiveChatService:
                 "prompt_text": prompt,
                 "state_json": state.get("state_json") or {},
                 "quality": payload.get("quality") or "low",
-                "size": payload.get("size") or "1024x1536",
+                "size": payload.get("size") or "1536x1024",
                 "is_selected": 1,
             },
         )
