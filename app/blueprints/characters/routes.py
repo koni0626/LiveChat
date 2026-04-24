@@ -4,6 +4,7 @@ from ...api import json_response
 from ...services.asset_service import AssetService
 from ...services.character_image_rule_service import CharacterImageRuleService
 from ...services.character_service import CharacterService
+from ...utils import json_util
 import os
 from flask import current_app
 
@@ -51,6 +52,21 @@ def _build_media_url(file_path: str | None):
 def _serialize_character(character, *, include_image_rule_summary: bool = False):
     if character is None:
         return None
+    try:
+        favorite_items = json_util.loads(character.favorite_items_json) if character.favorite_items_json else []
+    except Exception:
+        favorite_items = []
+    if not isinstance(favorite_items, list):
+        favorite_items = []
+    try:
+        memory_profile = json_util.loads(character.memory_profile_json) if character.memory_profile_json else {}
+    except Exception:
+        memory_profile = {}
+    if not isinstance(memory_profile, dict):
+        memory_profile = {}
+    romance = memory_profile.get("romance_preferences") or {}
+    if not isinstance(romance, dict):
+        romance = {}
     image_rule = None
     if include_image_rule_summary:
         image_rule = character_image_rule_service.get_image_rule(character.id)
@@ -67,6 +83,19 @@ def _serialize_character(character, *, include_image_rule_summary: bool = False)
         "speech_sample": character.speech_sample,
         "ng_rules": character.ng_rules,
         "appearance_summary": character.appearance_summary,
+        "memory_notes": character.memory_notes,
+        "favorite_items": favorite_items,
+        "favorite_items_text": "\n".join(str(item) for item in favorite_items if str(item).strip()),
+        "memory_profile": memory_profile,
+        "likes_text": "\n".join(memory_profile.get("likes") or favorite_items),
+        "dislikes_text": "\n".join(memory_profile.get("dislikes") or []),
+        "hobbies_text": "\n".join(memory_profile.get("hobbies") or []),
+        "taboos_text": "\n".join(memory_profile.get("taboos") or []),
+        "memorable_events_text": "\n".join(memory_profile.get("memorable_events") or []),
+        "romance_favorite_approach_text": "\n".join(romance.get("favorite_approach") or []),
+        "romance_avoid_approach_text": "\n".join(romance.get("avoid_approach") or []),
+        "romance_attraction_points_text": "\n".join(romance.get("attraction_points") or []),
+        "romance_boundaries_text": "\n".join(romance.get("boundaries") or []),
         "base_asset_id": character.base_asset_id,
         "base_asset": _serialize_asset_summary(character.base_asset_id),
         "is_guide": bool(character.is_guide),

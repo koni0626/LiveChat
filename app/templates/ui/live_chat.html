@@ -54,6 +54,30 @@
               </div>
             </div>
           </div>
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="liveChatMemoryHeading">
+              <button
+                class="accordion-button collapsed"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#liveChatMemoryCollapse"
+                aria-expanded="false"
+                aria-controls="liveChatMemoryCollapse"
+              >
+                会話メモ
+              </button>
+            </h2>
+            <div
+              id="liveChatMemoryCollapse"
+              class="accordion-collapse collapse"
+              aria-labelledby="liveChatMemoryHeading"
+              data-bs-parent="#liveChatMetaAccordion"
+            >
+              <div class="accordion-body">
+                <pre class="json-board mb-0" id="liveChatMemoryBoard"></pre>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </form>
@@ -156,6 +180,7 @@
   const sessionId = Number({{ session_id }});
   const messageList = document.getElementById("liveChatMessageList");
   const stateBoard = document.getElementById("liveChatStateBoard");
+  const memoryBoard = document.getElementById("liveChatMemoryBoard");
   const imageGrid = document.getElementById("liveChatImageGrid");
   const selectedImagePanel = document.getElementById("liveChatSelectedImagePanel");
   const sessionMetaForm = document.getElementById("liveChatSessionMetaForm");
@@ -343,6 +368,15 @@
     if (cueElement) {
       cueElement.hidden = !(pages.length > 1 && pageIndex < pages.length - 1);
     }
+  }
+
+  function advanceNovelPage() {
+    if (!textboxVisible) return false;
+    const pages = novelPageState.pages || [];
+    if (novelPageState.pageIndex >= pages.length - 1) return false;
+    novelPageState.pageIndex += 1;
+    renderNovelPage();
+    return true;
   }
 
   function renderNovelBox(messages) {
@@ -533,6 +567,7 @@
       NovelUI.toast(error.message || "キャラクター一覧の読み込みに失敗しました。", "danger");
     });
     stateBoard.textContent = formatJson(context.state.state_json || {});
+    memoryBoard.textContent = formatJson((context.state.state_json || {}).session_memory || {});
     imageForm.prompt_text.value = context.state.visual_prompt_text || "";
     renderMessages(context.messages || []);
     renderSelectedImage(context.selected_image);
@@ -745,16 +780,19 @@
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
-    if (!textboxVisible) return;
     const activeElement = document.activeElement;
     if (activeElement && ["TEXTAREA", "INPUT", "SELECT"].includes(activeElement.tagName)) {
       return;
     }
-    const pages = novelPageState.pages || [];
-    if (novelPageState.pageIndex >= pages.length - 1) return;
+    if (!advanceNovelPage()) return;
     event.preventDefault();
-    novelPageState.pageIndex += 1;
-    renderNovelPage();
+  });
+
+  document.addEventListener("click", (event) => {
+    const novelBox = event.target.closest("#liveChatNovelBox");
+    if (!novelBox) return;
+    if (event.target.closest("button, a, input, textarea, select, label")) return;
+    advanceNovelPage();
   });
 
   setMessagesVisible(false);

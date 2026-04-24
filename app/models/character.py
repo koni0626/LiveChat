@@ -17,5 +17,8 @@ class Character(db.Model, TimestampMixin, SoftDeleteMixin):
     speech_sample = db.Column(db.Text)
     ng_rules = db.Column(db.Text)
     appearance_summary = db.Column(db.Text)
+    memory_notes = db.Column(db.Text)
+    favorite_items_json = db.Column(db.Text)
+    memory_profile_json = db.Column(db.Text)
     base_asset_id = db.Column(db.Integer, db.ForeignKey("asset.id"))
     is_guide = db.Column(db.Integer, nullable=False, default=0)
