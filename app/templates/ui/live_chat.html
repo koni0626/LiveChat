@@ -15,6 +15,12 @@
         <label class="form-label" for="liveChatSessionPlayerInput">プレイヤー名</label>
         <input class="form-control" id="liveChatSessionPlayerInput" name="player_name">
       </div>
+      <div class="col-lg-3 col-md-6">
+        <label class="form-label" for="liveChatSessionCharacterSelect">会話相手</label>
+        <select class="form-select" id="liveChatSessionCharacterSelect" name="selected_character_id">
+          <option value="">キャラクターを選択</option>
+        </select>
+      </div>
       <div class="col-lg-6 col-12">
         <label class="form-label" for="liveChatSessionObjectiveInput">会話の目的</label>
         <textarea class="form-control" id="liveChatSessionObjectiveInput" name="conversation_objective" rows="2" placeholder="例: プレイヤーがあなたに恋愛感情を持つようにする / プレイヤーが唐辛子に興味を持つようにする"></textarea>
@@ -162,6 +168,7 @@
   const imageGrid = document.getElementById("liveChatImageGrid");
   const selectedImagePanel = document.getElementById("liveChatSelectedImagePanel");
   const sessionMetaForm = document.getElementById("liveChatSessionMetaForm");
+  const sessionCharacterSelect = document.getElementById("liveChatSessionCharacterSelect");
   const composeForm = document.getElementById("liveChatComposeForm");
   const composeInput = document.getElementById("liveChatComposeInput");
   const imageForm = document.getElementById("liveChatImageForm");
@@ -181,6 +188,29 @@
     pages: [],
     pageIndex: 0,
   };
+
+  function normalizeSelectedCharacterIds(settingsJson) {
+    if (!settingsJson || typeof settingsJson !== "object") {
+      return [];
+    }
+    const source = Array.isArray(settingsJson.selected_character_ids)
+      ? settingsJson.selected_character_ids
+      : (settingsJson.selected_character_id ? [settingsJson.selected_character_id] : []);
+    return source
+      .map((value) => Number(value))
+      .filter((value, index, array) => Number.isInteger(value) && value > 0 && array.indexOf(value) === index);
+  }
+
+  async function loadSessionCharacterOptions(selectedIds = []) {
+    const projectId = Number(currentContext?.project?.id || {{ project_id }});
+    const data = await NovelUI.api(`/api/v1/projects/${projectId}/characters`);
+    const list = Array.isArray(data) ? data : [];
+    sessionCharacterSelect.innerHTML = [
+      '<option value="">キャラクターを選択</option>',
+      ...list.map((item) => `<option value="${item.id}">${NovelUI.escape(item.name || "Unnamed")}</option>`),
+    ].join("");
+    sessionCharacterSelect.value = selectedIds.length ? String(selectedIds[0]) : "";
+  }
 
   function formatJson(value) {
     if (!value) return "{}";
@@ -496,6 +526,9 @@
     sessionMetaForm.title.value = context.session.title || "";
     sessionMetaForm.player_name.value = context.session.player_name || "";
     sessionMetaForm.conversation_objective.value = context.session.settings_json?.conversation_objective || "";
+    loadSessionCharacterOptions(normalizeSelectedCharacterIds(context.session.settings_json)).catch((error) => {
+      NovelUI.toast(error.message || "キャラクター一覧の読み込みに失敗しました。", "danger");
+    });
     stateBoard.textContent = formatJson(context.state.state_json || {});
     imageForm.prompt_text.value = context.state.visual_prompt_text || "";
     renderMessages(context.messages || []);
@@ -522,6 +555,7 @@
           settings_json: {
             ...(currentContext?.session?.settings_json || {}),
             conversation_objective: sessionMetaForm.conversation_objective.value,
+            selected_character_ids: sessionCharacterSelect.value ? [Number(sessionCharacterSelect.value)] : [],
           },
         },
       });

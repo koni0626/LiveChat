@@ -1,13 +1,11 @@
 from flask import Blueprint, request, session
 
 from ...api import json_response
-from ...services.project_overview_service import ProjectOverviewService
 from ...services.project_service import ProjectService
 
 
 projects_bp = Blueprint("projects", __name__)
 project_service = ProjectService()
-project_overview_service = ProjectOverviewService()
 def _serialize_project(project):
     if project is None:
         return None
@@ -74,12 +72,6 @@ def get_project(project_id: int):
     if not project:
         return json_response({"message": "not_found"}, status=404)
     return json_response(_serialize_project(project))
-
-
-@projects_bp.route("/<int:project_id>/overview", methods=["GET"])
-def get_project_overview(project_id: int):
-    overview = project_overview_service.get_overview(project_id)
-    return json_response(overview)
 
 
 @projects_bp.route("/<int:project_id>", methods=["PATCH"])

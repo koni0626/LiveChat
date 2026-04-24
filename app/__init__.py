@@ -14,16 +14,10 @@ from .blueprints.chat import chat_bp
 from .blueprints.projects import projects_bp
 from .blueprints.worlds import worlds_bp
 from .blueprints.characters import characters_bp
-from .blueprints.scenes import scenes_bp
 from .blueprints.assets import assets_bp
 from .blueprints.jobs import jobs_bp
 from .blueprints.glossary import glossary_bp
-from .blueprints.story_outline import story_outline_bp
-from .blueprints.chapters import chapters_bp
-from .blueprints.scene_versions import scene_versions_bp
-from .blueprints.scene_images import scene_images_bp
 from .blueprints.ending_conditions import ending_conditions_bp
-from .blueprints.exports import exports_bp
 from .blueprints.settings import settings_bp
 
 
@@ -76,16 +70,10 @@ def create_app(config_object=Config):
     app.register_blueprint(projects_bp, url_prefix="/api/v1/projects")
     app.register_blueprint(worlds_bp, url_prefix="/api/v1")
     app.register_blueprint(characters_bp, url_prefix="/api/v1")
-    app.register_blueprint(scenes_bp, url_prefix="/api/v1")
     app.register_blueprint(assets_bp, url_prefix="/api/v1")
     app.register_blueprint(jobs_bp, url_prefix="/api/v1")
     app.register_blueprint(glossary_bp, url_prefix="/api/v1")
-    app.register_blueprint(story_outline_bp, url_prefix="/api/v1")
-    app.register_blueprint(chapters_bp, url_prefix="/api/v1")
-    app.register_blueprint(scene_versions_bp, url_prefix="/api/v1")
-    app.register_blueprint(scene_images_bp, url_prefix="/api/v1")
     app.register_blueprint(ending_conditions_bp, url_prefix="/api/v1")
-    app.register_blueprint(exports_bp, url_prefix="/api/v1")
     app.register_blueprint(settings_bp, url_prefix="/api/v1")
 
     @app.route("/", methods=["GET"])

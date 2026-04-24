@@ -89,6 +89,15 @@ def update_chat_session(session_id: int):
     return json_response(updated)
 
 
+@chat_bp.route("/chat/sessions/<int:session_id>", methods=["DELETE"])
+def delete_chat_session(session_id: int):
+    _require_session(session_id)
+    deleted = chat_session_service.delete_session(session_id)
+    if not deleted:
+        raise NotFoundError()
+    return json_response({"session_id": session_id, "deleted": True})
+
+
 @chat_bp.route("/chat/sessions/<int:session_id>/messages", methods=["GET"])
 def list_chat_messages(session_id: int):
     _require_session(session_id)

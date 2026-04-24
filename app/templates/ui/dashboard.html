@@ -4,38 +4,38 @@
   <div class="hero-panel">
     <div>
       <div class="eyebrow">Dashboard</div>
-      <h2 class="section-title">制作中の作品へ、最短で戻れます。</h2>
-      <p class="section-copy">最近の作品を確認して、そのまま世界観・キャラクター・シーン編集へ進めます。</p>
+      <h2 class="section-title">ライブ会話用のプロジェクトをすぐ開けます。</h2>
+      <p class="section-copy">世界観とキャラクターを整えたら、そのままライブ会話セッションを作って会話と画像生成を試せます。</p>
     </div>
     <div class="hero-actions">
       <a href="{{ url_for('ui.project_create_page') }}" class="btn btn-sunrise">
-        <i class="bi bi-plus-lg"></i><span>新規作品を作成</span>
+        <i class="bi bi-plus-lg"></i><span>新規プロジェクト</span>
       </a>
       <a href="{{ url_for('ui.project_list_page') }}" class="btn btn-outline-light">
-        <i class="bi bi-collection"></i><span>作品一覧</span>
+        <i class="bi bi-collection"></i><span>プロジェクト一覧</span>
       </a>
     </div>
   </div>
 
   <div class="stats-row">
     <article class="metric-card">
-      <div class="metric-label">Recent Works</div>
+      <div class="metric-label">Projects</div>
       <div class="metric-value" id="dashboardProjectCount">0</div>
     </article>
     <article class="metric-card">
-      <div class="metric-label">Image Mode</div>
-      <div class="metric-value">low</div>
+      <div class="metric-label">Core Flow</div>
+      <div class="metric-value">Chat</div>
     </article>
     <article class="metric-card">
-      <div class="metric-label">Text Model</div>
-      <div class="metric-value">GPT</div>
+      <div class="metric-label">Image Mode</div>
+      <div class="metric-value">Reference</div>
     </article>
   </div>
 
   <div class="content-grid">
     <section class="panel-card span-8">
       <div class="panel-head">
-        <h3>最近の作品</h3>
+        <h3>最近のプロジェクト</h3>
         <a class="btn btn-sm btn-outline-dark" href="{{ url_for('ui.project_list_page') }}">すべて見る</a>
       </div>
       <div class="project-card-grid" id="recentProjects"></div>
@@ -44,9 +44,9 @@
     <section class="panel-card span-4">
       <div class="panel-head"><h3>Quick Start</h3></div>
       <div class="quick-actions">
-        <a class="quick-link" href="{{ url_for('ui.project_create_page') }}"><i class="bi bi-stars"></i><span>新しいタイトルを立ち上げる</span></a>
-        <a class="quick-link" href="{{ url_for('ui.settings_page') }}"><i class="bi bi-sliders"></i><span>モデル設定を見る</span></a>
-        <a class="quick-link" href="/health"><i class="bi bi-heart-pulse"></i><span>起動状態を確認する</span></a>
+        <a class="quick-link" href="{{ url_for('ui.project_create_page') }}"><i class="bi bi-stars"></i><span>新しい会話プロジェクトを作る</span></a>
+        <a class="quick-link" href="{{ url_for('ui.settings_page') }}"><i class="bi bi-sliders"></i><span>接続設定を確認する</span></a>
+        <a class="quick-link" href="/health"><i class="bi bi-heart-pulse"></i><span>ヘルスチェックを見る</span></a>
       </div>
     </section>
   </div>
@@ -62,7 +62,7 @@
 
     const host = document.getElementById("recentProjects");
     if (!list.length) {
-      host.innerHTML = `<div class="empty-panel">まだ作品がありません。最初の1本をここから始めましょう。</div>`;
+      host.innerHTML = `<div class="empty-panel">まだプロジェクトがありません。新規作成から始めてください。</div>`;
       return;
     }
 

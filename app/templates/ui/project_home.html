@@ -6,15 +6,15 @@
       <div class="eyebrow">Project Hub</div>
       <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
         <div>
-          <h2 class="section-title" id="projectHomeTitle">作品情報を読み込み中...</h2>
-          <p class="section-copy" id="projectHomeSummary">制作全体の進行と次の一手をここで整理します。</p>
+          <h2 class="section-title" id="projectHomeTitle">プロジェクト情報を読み込み中...</h2>
+          <p class="section-copy" id="projectHomeSummary">世界観、キャラクター、ライブ会話セッションをここから管理します。</p>
         </div>
-        <button class="btn btn-light" type="button" id="projectEditToggleButton">作品名を変更</button>
+        <button class="btn btn-light" type="button" id="projectEditToggleButton">プロジェクト名を編集</button>
       </div>
       <form id="projectEditForm" class="row g-2 mt-3" hidden>
         <div class="col-md-5">
-          <label class="form-label" for="projectTitleInput">作品名</label>
-          <input class="form-control" id="projectTitleInput" name="title" placeholder="作品名">
+          <label class="form-label" for="projectTitleInput">タイトル</label>
+          <input class="form-control" id="projectTitleInput" name="title" placeholder="プロジェクト名">
         </div>
         <div class="col-md-7">
           <label class="form-label" for="projectSummaryInput">概要</label>
@@ -27,21 +27,20 @@
       </form>
     </div>
   </div>
+
   <div class="stats-row" id="projectStatsRow"></div>
+
   <div class="content-grid">
     <section class="panel-card span-7">
-      <div class="panel-head"><h3>最近更新したシーン</h3></div>
-      <div class="list-stack" id="recentSceneList"></div>
+      <div class="panel-head"><h3>最近のライブ会話セッション</h3></div>
+      <div class="list-stack" id="recentLiveChatList"></div>
     </section>
     <section class="panel-card span-5">
-      <div class="panel-head"><h3>編集メニュー</h3></div>
+      <div class="panel-head"><h3>主要メニュー</h3></div>
       <div class="quick-actions quick-actions-tall">
-        <a class="quick-link" href="/projects/{{ project_id }}/characters"><i class="bi bi-people"></i><span>キャラクター編集</span></a>
+        <a class="quick-link" href="/projects/{{ project_id }}/characters"><i class="bi bi-people"></i><span>キャラクター管理</span></a>
         <a class="quick-link" href="/projects/{{ project_id }}/world"><i class="bi bi-globe2"></i><span>世界観設定</span></a>
-        <a class="quick-link" href="/projects/{{ project_id }}/story-outline"><i class="bi bi-diagram-3"></i><span>ストーリー骨子</span></a>
         <a class="quick-link" href="/projects/{{ project_id }}/live-chat"><i class="bi bi-chat-dots"></i><span>ライブ会話</span></a>
-        <a class="quick-link" href="/projects/{{ project_id }}/scenes"><i class="bi bi-film"></i><span>シーン編集</span></a>
-        <a class="quick-link" href="/projects/{{ project_id }}/exports"><i class="bi bi-box-arrow-up-right"></i><span>エクスポート</span></a>
       </div>
     </section>
   </div>
@@ -59,7 +58,7 @@
 
   function setEditVisible(visible) {
     editForm.hidden = !visible;
-    editToggleButton.textContent = visible ? "編集中" : "作品名を変更";
+    editToggleButton.textContent = visible ? "編集中" : "プロジェクト名を編集";
     if (visible) {
       titleInput.focus();
       titleInput.select();
@@ -67,29 +66,43 @@
   }
 
   async function loadOverview() {
-    const overview = await NovelUI.api(`/api/v1/projects/${projectId}/overview`);
-    document.getElementById("projectHomeTitle").textContent = overview.project?.title || "Untitled";
-    document.getElementById("projectHomeSummary").textContent = overview.project?.summary || "概要はまだありません。";
-    titleInput.value = overview.project?.title || "";
-    summaryInput.value = overview.project?.summary || "";
+    const [project, characters, sessions] = await Promise.all([
+      NovelUI.api(`/api/v1/projects/${projectId}`),
+      NovelUI.api(`/api/v1/projects/${projectId}/characters`),
+      NovelUI.api(`/api/v1/chat/sessions?project_id=${projectId}`),
+    ]);
+
+    const characterList = Array.isArray(characters) ? characters : [];
+    const sessionList = Array.isArray(sessions) ? sessions : [];
+
+    document.getElementById("projectHomeTitle").textContent = project?.title || "Untitled";
+    document.getElementById("projectHomeSummary").textContent = project?.summary || "概要はまだありません。";
+    titleInput.value = project?.title || "";
+    summaryInput.value = project?.summary || "";
+
     document.getElementById("projectStatsRow").innerHTML = [
-      ["Characters", overview.stats?.character_count ?? 0],
-      ["Scenes", overview.stats?.scene_count ?? 0],
-      ["Branches", overview.stats?.branch_count ?? 0],
-      ["Need Images", overview.stats?.ungenerated_image_count ?? 0],
+      ["Characters", characterList.length],
+      ["Live Sessions", sessionList.length],
+      ["Status", project?.status || "draft"],
+      ["Genre", project?.genre || "-"],
     ].map(([label, value]) => `
-      <article class="metric-card"><div class="metric-label">${label}</div><div class="metric-value">${value}</div></article>
+      <article class="metric-card"><div class="metric-label">${label}</div><div class="metric-value">${NovelUI.escape(String(value))}</div></article>
     `).join("");
-    const list = overview.recent_scenes || [];
-    document.getElementById("recentSceneList").innerHTML = list.length ? list.map((scene) => `
-      <a class="list-row" href="/projects/${projectId}/scenes?scene_id=${scene.id}">
+
+    const recentList = sessionList
+      .slice()
+      .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
+      .slice(0, 5);
+
+    document.getElementById("recentLiveChatList").innerHTML = recentList.length ? recentList.map((item) => `
+      <a class="list-row" href="/projects/${projectId}/live-chat/${item.id}">
         <div>
-          <div class="list-title">${NovelUI.escape(scene.title || "無題シーン")}</div>
-          <div class="list-subtitle">${NovelUI.escape(scene.summary || "概要なし")}</div>
+          <div class="list-title">${NovelUI.escape(item.title || "Live Chat")}</div>
+          <div class="list-subtitle">${NovelUI.escape(item.last_message_text || "まだ会話メッセージがありません。")}</div>
         </div>
-        <span class="soft-code">${scene.is_fixed ? "fixed" : "editable"}</span>
+        <span class="soft-code">${NovelUI.escape(String(item.message_count || 0))} messages</span>
       </a>
-    `).join("") : `<div class="empty-panel">まだ更新されたシーンがありません。</div>`;
+    `).join("") : `<div class="empty-panel">まだライブ会話セッションがありません。</div>`;
   }
 
   editToggleButton.addEventListener("click", () => {
@@ -107,7 +120,7 @@
       summary: summaryInput.value.trim(),
     };
     if (!body.title) {
-      NovelUI.toast("作品名を入力してください。", "warning");
+      NovelUI.toast("プロジェクト名を入力してください。", "warning");
       titleInput.focus();
       return;
     }
@@ -115,13 +128,15 @@
       await NovelUI.api(`/api/v1/projects/${projectId}`, { method: "PATCH", body });
       setEditVisible(false);
       await loadOverview();
-      NovelUI.toast("作品情報を更新しました。");
+      NovelUI.toast("プロジェクト情報を更新しました。");
     } catch (error) {
-      NovelUI.toast(error.message || "作品情報の更新に失敗しました。", "danger");
+      NovelUI.toast(error.message || "プロジェクト情報の更新に失敗しました。", "danger");
     }
   });
 
-  loadOverview().catch((error) => NovelUI.toast(error.message || "作品概要の取得に失敗しました。", "danger"));
+  loadOverview().catch((error) => {
+    NovelUI.toast(error.message || "プロジェクトホームの読み込みに失敗しました。", "danger");
+  });
 })();
 </script>
 {% endblock %}

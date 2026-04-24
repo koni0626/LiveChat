@@ -5,11 +5,29 @@
     <form class="row g-3 align-items-end" id="liveChatSessionForm">
       <div class="col-md-4">
         <label class="form-label" for="liveChatTitleInput">セッション名</label>
-        <input class="form-control" id="liveChatTitleInput" name="title" placeholder="例: 導巫女との会話">
+        <input
+          class="form-control"
+          id="liveChatTitleInput"
+          name="title"
+          placeholder="例: ノアとの会話"
+          required
+        >
       </div>
       <div class="col-md-4">
         <label class="form-label" for="liveChatPlayerNameInput">プレイヤー名</label>
-        <input class="form-control" id="liveChatPlayerNameInput" name="player_name" placeholder="任意">
+        <input
+          class="form-control"
+          id="liveChatPlayerNameInput"
+          name="player_name"
+          placeholder="主人公名"
+          required
+        >
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="liveChatCharacterSelect">話す相手</label>
+        <select class="form-select" id="liveChatCharacterSelect" name="selected_character_id" required>
+          <option value="">キャラクターを選択</option>
+        </select>
       </div>
       <div class="col-12 d-flex gap-2">
         <button class="btn btn-sunrise" type="submit">新規セッションを作成</button>
@@ -34,40 +52,108 @@
   const form = document.getElementById("liveChatSessionForm");
   const grid = document.getElementById("liveChatSessionGrid");
   const countLabel = document.getElementById("liveChatSessionCount");
+  const characterSelect = document.getElementById("liveChatCharacterSelect");
+
+  function normalizeSelectedCharacterIds(settingsJson) {
+    if (!settingsJson || typeof settingsJson !== "object") {
+      return [];
+    }
+    const source = Array.isArray(settingsJson.selected_character_ids)
+      ? settingsJson.selected_character_ids
+      : (settingsJson.selected_character_id ? [settingsJson.selected_character_id] : []);
+    return source
+      .map((value) => Number(value))
+      .filter((value, index, array) => Number.isInteger(value) && value > 0 && array.indexOf(value) === index);
+  }
+
+  async function loadCharacterOptions() {
+    const data = await NovelUI.api(`/api/v1/projects/${projectId}/characters`);
+    const list = Array.isArray(data) ? data : [];
+    characterSelect.innerHTML = [
+      '<option value="">キャラクターを選択</option>',
+      ...list.map((item) => `<option value="${item.id}">${NovelUI.escape(item.name || "Unnamed")}</option>`),
+    ].join("");
+  }
 
   async function loadSessions() {
     const data = await NovelUI.api(`/api/v1/chat/sessions?project_id=${projectId}`);
     const list = Array.isArray(data) ? data : [];
     countLabel.textContent = `${list.length} sessions`;
     if (!list.length) {
-      grid.innerHTML = `<div class="empty-panel">まだライブ会話セッションがありません。</div>`;
+      grid.innerHTML = '<div class="empty-panel">まだライブ会話セッションがありません。</div>';
       return;
     }
-    grid.innerHTML = list.map((item) => `
-      <article class="project-card">
-        <div class="project-card-top">
-          <span class="badge text-bg-light">${NovelUI.escape(item.status || "active")}</span>
-          <span class="soft-code">${item.message_count || 0} messages</span>
-        </div>
-        <h4>${NovelUI.escape(item.title || "Live Chat")}</h4>
-        <p>${NovelUI.escape(item.last_message_text || "まだメッセージはありません。")}</p>
-        <div class="d-flex justify-content-between align-items-center mt-3">
-          <span class="soft-code">${NovelUI.escape(item.player_name || "player")}</span>
-          <a class="btn btn-sm btn-dark" href="/projects/${projectId}/live-chat/${item.id}">開く</a>
-        </div>
-      </article>
-    `).join("");
+    grid.innerHTML = list.map((item) => {
+      const selectedIds = normalizeSelectedCharacterIds(item.settings_json);
+      const selectedName = Array.isArray(item.characters) && item.characters.length
+        ? (selectedIds.length ? item.characters[0]?.name : `${item.characters.length} characters`)
+        : "character not set";
+      return `
+        <article class="project-card">
+          <div class="project-card-top">
+            <span class="badge text-bg-light">${NovelUI.escape(item.status || "active")}</span>
+            <span class="soft-code">${item.message_count || 0} messages</span>
+          </div>
+          <h4>${NovelUI.escape(item.title || "Live Chat")}</h4>
+          <p>${NovelUI.escape(item.last_message_text || "まだメッセージはありません。")}</p>
+          <div class="small text-secondary mb-3">話す相手: ${NovelUI.escape(selectedName || "-")}</div>
+          <div class="d-flex justify-content-between align-items-center mt-3 gap-2">
+            <span class="soft-code">${NovelUI.escape(item.player_name || "player")}</span>
+            <div class="d-flex gap-2">
+              <a class="btn btn-sm btn-dark" href="/projects/${projectId}/live-chat/${item.id}">開く</a>
+              <button class="btn btn-sm btn-outline-danger" type="button" data-session-delete="${item.id}">削除</button>
+            </div>
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  async function deleteSession(sessionId) {
+    if (!window.confirm("このライブ会話セッションを削除しますか？")) {
+      return;
+    }
+    try {
+      await NovelUI.api(`/api/v1/chat/sessions/${sessionId}`, { method: "DELETE", body: {} });
+      NovelUI.toast("ライブ会話セッションを削除しました。");
+      await loadSessions();
+    } catch (error) {
+      NovelUI.toast(error.message || "セッションの削除に失敗しました。", "danger");
+    }
   }
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const title = form.title.value.trim();
+    const playerName = form.player_name.value.trim();
+    const selectedCharacterId = Number(characterSelect.value || "0");
+
+    if (!title) {
+      NovelUI.toast("セッション名を入力してください。", "warning");
+      form.title.focus();
+      return;
+    }
+    if (!playerName) {
+      NovelUI.toast("プレイヤー名を入力してください。", "warning");
+      form.player_name.focus();
+      return;
+    }
+    if (!selectedCharacterId) {
+      NovelUI.toast("話す相手を選択してください。", "warning");
+      characterSelect.focus();
+      return;
+    }
+
     try {
       const created = await NovelUI.api("/api/v1/chat/sessions", {
         method: "POST",
         body: {
           project_id: projectId,
-          title: form.title.value,
-          player_name: form.player_name.value,
+          title,
+          player_name: playerName,
+          settings_json: {
+            selected_character_ids: [selectedCharacterId],
+          },
         },
       });
       NovelUI.toast("ライブ会話セッションを作成しました。");
@@ -78,13 +164,21 @@
   });
 
   document.getElementById("liveChatReloadButton").addEventListener("click", () => {
-    loadSessions().catch((error) => {
-      NovelUI.toast(error.message || "セッション一覧の再読み込みに失敗しました。", "danger");
+    Promise.all([loadCharacterOptions(), loadSessions()]).catch((error) => {
+      NovelUI.toast(error.message || "再読み込みに失敗しました。", "danger");
     });
   });
 
-  loadSessions().catch((error) => {
-    NovelUI.toast(error.message || "ライブ会話一覧の初期化に失敗しました。", "danger");
+  grid.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-session-delete]");
+    if (!button) {
+      return;
+    }
+    deleteSession(Number(button.dataset.sessionDelete));
+  });
+
+  Promise.all([loadCharacterOptions(), loadSessions()]).catch((error) => {
+    NovelUI.toast(error.message || "ライブ会話一覧の初期表示に失敗しました。", "danger");
   });
 })();
 </script>

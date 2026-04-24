@@ -17,7 +17,6 @@ from .chat_session_service import ChatSessionService
 from .project_service import ProjectService
 from .session_image_service import SessionImageService
 from .session_state_service import SessionStateService
-from .story_outline_service import StoryOutlineService
 from .world_service import WorldService
 
 
@@ -31,7 +30,6 @@ class LiveChatService:
         project_service: ProjectService | None = None,
         character_service: CharacterService | None = None,
         asset_service: AssetService | None = None,
-        story_outline_service: StoryOutlineService | None = None,
         world_service: WorldService | None = None,
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
@@ -43,7 +41,6 @@ class LiveChatService:
         self._project_service = project_service or ProjectService()
         self._character_service = character_service or CharacterService()
         self._asset_service = asset_service or AssetService()
-        self._story_outline_service = story_outline_service or StoryOutlineService()
         self._world_service = world_service or WorldService()
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
@@ -170,12 +167,40 @@ class LiveChatService:
             "asset": self._serialize_asset(asset),
         }
 
+    def _selected_character_ids_from_session(self, session) -> list[int]:
+        settings_json = self._load_json(getattr(session, "settings_json", None)) or {}
+        if not isinstance(settings_json, dict):
+            return []
+        raw_value = settings_json.get("selected_character_ids")
+        if raw_value is None and settings_json.get("selected_character_id") is not None:
+            raw_value = [settings_json.get("selected_character_id")]
+        if not isinstance(raw_value, list):
+            return []
+        normalized = []
+        seen = set()
+        for item in raw_value:
+            try:
+                character_id = int(item)
+            except (TypeError, ValueError):
+                continue
+            if character_id <= 0 or character_id in seen:
+                continue
+            seen.add(character_id)
+            normalized.append(character_id)
+        return normalized
+
     def _select_characters(self, session_id: int):
         session = self._chat_session_service.get_session(session_id)
         if not session:
             return []
         all_characters = self._character_service.list_characters(session.project_id)
-        return [self._serialize_character(character) for character in all_characters]
+        selected_ids = set(self._selected_character_ids_from_session(session))
+        scoped_characters = [
+            character for character in all_characters
+            if not selected_ids or character.id in selected_ids
+        ]
+        target_characters = scoped_characters or all_characters
+        return [self._serialize_character(character) for character in target_characters]
 
     def list_sessions(self, project_id: int):
         items = self._chat_session_service.list_sessions(project_id)
@@ -198,7 +223,11 @@ class LiveChatService:
         session = self._chat_session_service.create_session(project_id, payload)
         if not session:
             return None
-        self._session_state_service.upsert_state(session.id, {"state_json": {}})
+        initial_state = {}
+        selected_character_ids = self._selected_character_ids_from_session(session)
+        if selected_character_ids:
+            initial_state["active_character_ids"] = selected_character_ids
+        self._session_state_service.upsert_state(session.id, {"state_json": initial_state})
         return self.get_session_context(session.id)
 
     def update_session(self, session_id: int, payload: dict | None = None):
@@ -206,6 +235,14 @@ class LiveChatService:
         session = self._chat_session_service.update_session(session_id, payload)
         if not session:
             return None
+        selected_character_ids = self._selected_character_ids_from_session(session)
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        if selected_character_ids:
+            state_json["active_character_ids"] = selected_character_ids
+        else:
+            state_json.pop("active_character_ids", None)
+        self._session_state_service.upsert_state(session_id, {"state_json": state_json})
         return self.get_session_context(session_id)
 
     def delete_message(self, session_id: int, message_id: int):
@@ -226,7 +263,6 @@ class LiveChatService:
         images = self._session_image_service.list_session_images(session_id)
         selected_image = next((item for item in images if item.is_selected), None)
         characters = self._select_characters(session_id)
-        story_outline = self._story_outline_service.get_outline(session.project_id)
         world = self._world_service.get_world(session.project_id)
         if not messages and characters:
             opening_context = {
@@ -235,10 +271,7 @@ class LiveChatService:
                     "title": project.title if project else None,
                     "genre": project.genre if project else None,
                 },
-                "story_outline": {
-                    "protagonist_name": getattr(story_outline, "protagonist_name", None) if story_outline else None,
-                    "premise": getattr(story_outline, "premise", None) if story_outline else None,
-                },
+                "story_outline": {},
                 "world": {
                     "name": getattr(world, "name", None) if world else None,
                     "overview": getattr(world, "overview", None) if world else None,
@@ -257,10 +290,7 @@ class LiveChatService:
                 "title": project.title if project else None,
                 "genre": project.genre if project else None,
             },
-            "story_outline": {
-                "protagonist_name": getattr(story_outline, "protagonist_name", None) if story_outline else None,
-                "premise": getattr(story_outline, "premise", None) if story_outline else None,
-            },
+            "story_outline": {},
             "world": {
                 "name": getattr(world, "name", None) if world else None,
                 "overview": getattr(world, "overview", None) if world else None,
