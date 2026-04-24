@@ -9,6 +9,7 @@ from .ending_condition import EndingCondition
 from .glossary_term import GlossaryTerm
 from .project import Project
 from .session_image import SessionImage
+from .session_gift_event import SessionGiftEvent
 from .session_state import SessionState
 from .usage_log import UsageLog
 from .user import User
@@ -26,6 +27,7 @@ __all__ = [
     "GlossaryTerm",
     "Project",
     "SessionImage",
+    "SessionGiftEvent",
     "SessionState",
     "UsageLog",
     "User",

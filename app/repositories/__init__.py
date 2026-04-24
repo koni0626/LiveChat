@@ -7,6 +7,7 @@ __all__ = [
     "asset_repository",
     "glossary_term_repository",
     "session_image_repository",
+    "session_gift_event_repository",
     "session_state_repository",
     "ending_condition_repository",
     "usage_log_repository",

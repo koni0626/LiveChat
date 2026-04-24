@@ -1,5 +1,7 @@
 import json
 import os
+import base64
+import mimetypes
 from typing import Any, Optional
 
 import requests
@@ -20,6 +22,9 @@ class TextAIClient:
     def _resolve_model(self, model: Optional[str] = None) -> str:
         return model or self._model or os.getenv("TEXT_AI_MODEL") or "gpt-5.4-mini"
 
+    def _resolve_vision_model(self, model: Optional[str] = None) -> str:
+        return model or os.getenv("TEXT_AI_VISION_MODEL") or os.getenv("TEXT_AI_MODEL") or "gpt-4.1-mini"
+
     def _resolve_timeout(self) -> int:
         return int(os.getenv("TEXT_AI_TIMEOUT_SECONDS", "120"))
 
@@ -35,6 +40,12 @@ class TextAIClient:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
         return messages
+
+    def _build_image_data_url(self, file_path: str) -> str:
+        with open(file_path, "rb") as file_handle:
+            encoded = base64.b64encode(file_handle.read()).decode("ascii")
+        mime_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+        return f"data:{mime_type};base64,{encoded}"
 
     def _call_openai_chat(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -91,7 +102,7 @@ class TextAIClient:
         max_tokens: Optional[int] = None,
     ) -> dict[str, Any]:
         normalized_prompt = self._normalize_prompt(prompt)
-        resolved_model = self._resolve_model(model)
+        resolved_model = self._resolve_vision_model(model)
         payload: dict[str, Any] = {"model": resolved_model, "messages": self._build_messages(normalized_prompt, system_prompt)}
         if temperature is not None:
             payload["temperature"] = temperature
@@ -122,3 +133,45 @@ class TextAIClient:
         )
         result["parsed_json"] = self._try_parse_json(result["text"])
         return result
+
+    def analyze_image(
+        self,
+        file_path: str,
+        *,
+        prompt: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> dict[str, Any]:
+        if not file_path or not os.path.exists(file_path):
+            raise ValueError("file_path is required")
+        resolved_model = self._resolve_model(model)
+        user_prompt = self._normalize_prompt(
+            prompt
+            or (
+                "Return only JSON. "
+                "Describe the main object in the image for a gift scene. "
+                'Required keys: label, short_description, tags, likely_categories. '
+                "tags and likely_categories must be arrays of short strings."
+            )
+        )
+        content = [
+            {"type": "text", "text": user_prompt},
+            {"type": "image_url", "image_url": {"url": self._build_image_data_url(file_path)}},
+        ]
+        payload: dict[str, Any] = {
+            "model": resolved_model,
+            "messages": ([{"role": "system", "content": system_prompt}] if system_prompt else []) + [
+                {"role": "user", "content": content}
+            ],
+            "response_format": {"type": "json_object"},
+        }
+        response_json = self._call_openai_chat(payload)
+        text = self._extract_text(response_json)
+        return {
+            "provider": self._provider,
+            "model": resolved_model,
+            "text": text,
+            "parsed_json": self._try_parse_json(text),
+            "usage": self._extract_usage(response_json),
+            "raw_response": response_json,
+        }

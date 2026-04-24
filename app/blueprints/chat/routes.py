@@ -192,6 +192,33 @@ def upload_chat_image(session_id: int):
     return json_response(result, status=201)
 
 
+@chat_bp.route("/chat/sessions/<int:session_id>/gifts/upload", methods=["POST"])
+def upload_chat_gift(session_id: int):
+    chat_session, project = _require_session(session_id)
+    upload_file = request.files.get("file")
+    if upload_file is None:
+        raise ValidationError("file is required")
+    asset = asset_service.create_asset(
+        project.id,
+        {
+            "asset_type": "uploaded_live_chat_gift",
+            "upload_file": upload_file,
+            "metadata_json": '{"source":"gift_upload","mode":"live_chat"}',
+        },
+    )
+    result = live_chat_service.upload_gift(
+        chat_session.id,
+        asset.id,
+        {
+            "character_id": request.form.get("character_id", type=int),
+            "message_text": request.form.get("message_text") or None,
+        },
+    )
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
 @chat_bp.route("/chat/sessions/<int:session_id>/images/<int:image_id>/select", methods=["POST"])
 def select_chat_image(session_id: int, image_id: int):
     _require_session(session_id)
