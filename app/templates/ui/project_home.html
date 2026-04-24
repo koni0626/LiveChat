@@ -7,7 +7,7 @@
       <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
         <div>
           <h2 class="section-title" id="projectHomeTitle">プロジェクト情報を読み込み中...</h2>
-          <p class="section-copy" id="projectHomeSummary">世界観、キャラクター、ライブ会話セッションをここから管理します。</p>
+    <p class="section-copy" id="projectHomeSummary">世界観、キャラクター、ライブチャットセッションをここから管理します。</p>
         </div>
         <button class="btn btn-light" type="button" id="projectEditToggleButton">プロジェクト名を編集</button>
       </div>
@@ -32,7 +32,7 @@
 
   <div class="content-grid">
     <section class="panel-card span-7">
-      <div class="panel-head"><h3>最近のライブ会話セッション</h3></div>
+      <div class="panel-head"><h3>最近のライブチャットセッション</h3></div>
       <div class="list-stack" id="recentLiveChatList"></div>
     </section>
     <section class="panel-card span-5">
@@ -40,7 +40,7 @@
       <div class="quick-actions quick-actions-tall">
         <a class="quick-link" href="/projects/{{ project_id }}/characters"><i class="bi bi-people"></i><span>キャラクター管理</span></a>
         <a class="quick-link" href="/projects/{{ project_id }}/world"><i class="bi bi-globe2"></i><span>世界観設定</span></a>
-        <a class="quick-link" href="/projects/{{ project_id }}/live-chat"><i class="bi bi-chat-dots"></i><span>ライブ会話</span></a>
+        <a class="quick-link" href="/projects/{{ project_id }}/live-chat"><i class="bi bi-chat-dots"></i><span>ライブチャット</span></a>
       </div>
     </section>
   </div>
@@ -97,12 +97,12 @@
     document.getElementById("recentLiveChatList").innerHTML = recentList.length ? recentList.map((item) => `
       <a class="list-row" href="/projects/${projectId}/live-chat/${item.id}">
         <div>
-          <div class="list-title">${NovelUI.escape(item.title || "Live Chat")}</div>
+          <div class="list-title">${NovelUI.escape(item.title || "Live Chat Session")}</div>
           <div class="list-subtitle">${NovelUI.escape(item.last_message_text || "まだ会話メッセージがありません。")}</div>
         </div>
         <span class="soft-code">${NovelUI.escape(String(item.message_count || 0))} messages</span>
       </a>
-    `).join("") : `<div class="empty-panel">まだライブ会話セッションがありません。</div>`;
+      `).join("") : `<div class="empty-panel">まだライブチャットセッションがありません。</div>`;
   }
 
   editToggleButton.addEventListener("click", () => {

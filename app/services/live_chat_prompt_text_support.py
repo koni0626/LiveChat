@@ -549,11 +549,11 @@ def fallback_conversation_evaluation(context: dict) -> dict:
     state_json = context["state"].get("state_json") or {}
     relationship_state = state_json.get("relationship_state") or {}
     score = 18
-    mood = "gentle opening"
-    label = "Progress"
+    mood = "導入段階"
+    label = "進捗"
     theme = "general"
     if any(token in objective for token in ("恋愛", "好き", "惚れ", "感情")):
-        label = "Love Progress"
+        label = "恋愛進捗"
         theme = "romance"
         metrics = next((value for value in relationship_state.values() if isinstance(value, dict)), {})
         score = max(
@@ -563,21 +563,21 @@ def fallback_conversation_evaluation(context: dict) -> dict:
                 int((metrics.get("affection", 0) * 0.45) + (metrics.get("interest", 0) * 0.35) + (metrics.get("trust", 0) * 0.2)),
             ),
         )
-        mood = "romantic tension" if score >= 45 else "warming up"
+        mood = "恋愛の熱が高まりつつある" if score >= 45 else "少しずつ距離が縮まっている"
     elif objective:
-        label = "Interest Progress"
+        label = "関心進捗"
         metrics = next((value for value in relationship_state.values() if isinstance(value, dict)), {})
         score = max(0, min(100, int((metrics.get("interest", 0) * 0.6) + (metrics.get("trust", 0) * 0.2) + 10)))
-        mood = "curious" if score >= 40 else "probing"
+        mood = "関心が高まっている" if score >= 40 else "探り合いの段階"
     memory_match = _analyze_player_memory_match(context)
     score = max(0, min(100, score + memory_match["bonus"] - memory_match["penalty"]))
     if memory_match["penalty"] > 0:
-        mood = "guarded"
+        mood = "少し警戒している"
     elif memory_match["bonus"] > 0 and theme == "romance":
-        mood = "softening"
-    reason = "Current conversation progress was estimated from recent exchange and relationship state."
+        mood = "気持ちがやわらいでいる"
+    reason = "直近の会話内容と関係性の状態から、現在の進み具合を評価しています。"
     if memory_match["reasons"]:
-        reason = f"{reason} Memory factors: {', '.join(memory_match['reasons'])}."
+        reason = f"{reason} 記憶要素: {', '.join(memory_match['reasons'])}。"
     return {
         "score": score,
         "label": label,

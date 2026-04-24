@@ -13,7 +13,7 @@ def _project_nav(project_id: int | None):
         {"label": "ホーム", "icon": "bi-grid-1x2", "href": url_for("ui.project_home_page", project_id=project_id)},
         {"label": "世界観", "icon": "bi-globe2", "href": url_for("ui.world_page", project_id=project_id)},
         {"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)},
-        {"label": "ライブ会話", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)},
+        {"label": "ライブチャット", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)},
     ]
 
 
@@ -99,14 +99,14 @@ def world_page(project_id: int):
 
 @ui_bp.route("/projects/<int:project_id>/live-chat", methods=["GET"])
 def live_chat_sessions_page(project_id: int):
-    return _render("ui/live_chat_sessions.html", title="ライブ会話", screen_id="live-chat-sessions", project_id=project_id)
+    return _render("ui/live_chat_sessions.html", title="ライブチャット", screen_id="live-chat-sessions", project_id=project_id)
 
 
 @ui_bp.route("/projects/<int:project_id>/live-chat/<int:session_id>", methods=["GET"])
 def live_chat_page(project_id: int, session_id: int):
     return _render(
         "ui/live_chat.html",
-        title="ライブ会話",
+        title="ライブチャット",
         screen_id="live-chat",
         project_id=project_id,
         session_id=session_id,

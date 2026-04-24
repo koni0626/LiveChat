@@ -11,6 +11,30 @@
     return JSON.stringify(value, null, 2);
   }
 
+  function localizeEvaluationLabel(label, isRomance) {
+    const text = String(label || "").trim();
+    if (!text) {
+      return isRomance ? "\u604b\u611b\u5ea6" : "\u9032\u884c\u5ea6";
+    }
+    const lowered = text.toLowerCase();
+    if (lowered === "love progress") return "\u604b\u611b\u5ea6";
+    if (lowered === "good progress") return "\u826f\u597d";
+    if (lowered === "interest progress") return "\u95a2\u5fc3\u5ea6";
+    if (lowered === "progress") return "\u9032\u884c\u5ea6";
+    return text;
+  }
+
+  function localizeEvaluationReason(reason, isRomance) {
+    const text = String(reason || "").trim();
+    if (!text) return "";
+    if (!/[A-Za-z]/.test(text)) {
+      return text;
+    }
+    return isRomance
+      ? "\u4f1a\u8a71\u306e\u6d41\u308c\u304b\u3089\u3001\u73fe\u5728\u306e\u604b\u611b\u5ea6\u3092\u8a55\u4fa1\u3057\u3066\u3044\u307e\u3059\u3002"
+      : "\u4f1a\u8a71\u306e\u6d41\u308c\u304b\u3089\u3001\u73fe\u5728\u306e\u9032\u884c\u5ea6\u3092\u8a55\u4fa1\u3057\u3066\u3044\u307e\u3059\u3002";
+  }
+
   function normalizeSelectedCharacterIds(settingsJson) {
     if (!settingsJson || typeof settingsJson !== "object") {
       return [];
@@ -57,7 +81,7 @@
       const pair = text.slice(index - 1, index + 1);
       const ch = text[index - 1];
       if (pair === "\n\n") return index;
-      if (" \n。！？!?、】【）」』".includes(ch)) return index;
+      if (" \n\u3001\u3002\uff01\uff1f!?\u30fb\u300d\u300f\uff09)".includes(ch)) return index;
     }
     return end;
   }
@@ -178,7 +202,7 @@
       const activeCharacter = (currentContext?.characters || [])[0] || {};
       novelSpeaker.textContent = activeCharacter.name || item?.speaker_name || "";
       novelText.innerHTML = `
-        <span class="live-chat-typing" aria-label="キャラクターが考え中">
+        <span class="live-chat-typing" aria-label="\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304c\u8003\u3048\u4e2d">
           <span class="live-chat-typing-dot"></span>
           <span class="live-chat-typing-dot"></span>
           <span class="live-chat-typing-dot"></span>
@@ -189,7 +213,7 @@
     }
     if (!item) {
       novelSpeaker.textContent = "";
-      novelText.textContent = "まだセリフがありません。";
+      novelText.textContent = "\u307e\u3060\u30bb\u30ea\u30d5\u304c\u3042\u308a\u307e\u305b\u3093\u3002";
       if (novelContinue) novelContinue.hidden = true;
       return { messageId: null, pages: [], pageIndex: 0 };
     }
@@ -214,7 +238,7 @@
   function renderMessages(messages, messageListElement) {
     if (!messageListElement) return;
     if (!messages.length) {
-      messageListElement.innerHTML = '<div class="empty-panel">まだ会話ログがありません。</div>';
+      messageListElement.innerHTML = '<div class="empty-panel">\u307e\u3060\u4f1a\u8a71\u30ed\u30b0\u304c\u3042\u308a\u307e\u305b\u3093\u3002</div>';
       return;
     }
     messageListElement.innerHTML = messages.map((item) => {
@@ -223,7 +247,7 @@
         <div class="live-chat-gift-card">
           <img class="live-chat-gift-thumb" src="${gift.asset.media_url}" alt="${NovelUI.escape(gift.recognized_label || "gift")}">
           <div class="live-chat-gift-meta">
-            <div class="live-chat-gift-label">${NovelUI.escape(gift.recognized_label || "贈り物")}</div>
+            <div class="live-chat-gift-label">${NovelUI.escape(gift.recognized_label || "\u8d08\u308a\u7269")}</div>
             ${gift.reaction_summary ? `<div class="live-chat-gift-reaction">${NovelUI.escape(gift.reaction_summary)}</div>` : ""}
           </div>
         </div>
@@ -232,7 +256,7 @@
         <article class="live-chat-bubble ${item.sender_type === "user" ? "player" : "character"}" data-message-id="${item.id}">
           <div class="live-chat-bubble-head">
             <div class="live-chat-bubble-speaker">${NovelUI.escape(item.speaker_name || item.sender_type)}</div>
-            <button class="live-chat-bubble-delete" type="button" data-delete-message-id="${item.id}" aria-label="ログを削除" title="ログを削除">削除</button>
+            <button class="live-chat-bubble-delete" type="button" data-delete-message-id="${item.id}" aria-label="\u30ed\u30b0\u3092\u524a\u9664" title="\u30ed\u30b0\u3092\u524a\u9664">\u524a\u9664</button>
           </div>
           <div class="live-chat-bubble-text">${NovelUI.escape(item.message_text || "")}</div>
           ${giftMarkup}
@@ -248,6 +272,7 @@
       evaluation,
       isRomance,
       score,
+      progressDetailsVisible,
       textboxVisible,
       imageLoading,
       replyLoading,
@@ -260,19 +285,26 @@
     const mediaUrl = selectedImage?.asset?.media_url;
     const evaluationMarkup = evaluation ? `
       <div class="live-chat-eval-badge ${isRomance ? "is-romance" : ""}" id="liveChatEvalBadge">
-        <div class="live-chat-eval-label">${NovelUI.escape(evaluation.label || (isRomance ? "Love Progress" : "Progress"))}</div>
-        <div class="live-chat-eval-score">${isRomance ? "Love " : ""}${score}</div>
+        <div class="live-chat-eval-head">
+          <div>
+            <div class="live-chat-eval-label">${NovelUI.escape(localizeEvaluationLabel(evaluation.label, isRomance))}</div>
+            <div class="live-chat-eval-score">${isRomance ? "\u604b\u611b\u5ea6 " : ""}${score}</div>
+          </div>
+          <button class="live-chat-eval-toggle" id="liveChatEvalDetailButton" type="button">${progressDetailsVisible ? "\u8a73\u7d30\u3092\u9589\u3058\u308b" : "\u8a73\u7d30"}</button>
+        </div>
         <div class="live-chat-eval-bar">
           <div class="live-chat-eval-fill ${isRomance ? "is-romance" : ""}" style="width:${score}%"></div>
         </div>
-        ${evaluation.reason ? `<div class="live-chat-eval-reason">${NovelUI.escape(evaluation.reason)}</div>` : ""}
+        ${evaluation.reason && progressDetailsVisible
+          ? `<div class="live-chat-eval-reason">${NovelUI.escape(localizeEvaluationReason(evaluation.reason, isRomance))}</div>`
+          : ""}
       </div>
     ` : "";
     const novelMarkup = `
       <div class="live-chat-novel-box ${textboxVisible ? "" : "is-hidden"}" id="liveChatNovelBox">
         <div class="live-chat-novel-speaker" id="liveChatNovelSpeaker">${NovelUI.escape(novelSpeakerText || "")}</div>
         <div class="live-chat-novel-text" id="liveChatNovelText">${NovelUI.escape(novelTextValue || "")}</div>
-        <div class="live-chat-novel-continue" id="liveChatNovelContinue" hidden>Enterで続きを読む</div>
+        <div class="live-chat-novel-continue" id="liveChatNovelContinue" hidden>Enter\u304b\u30af\u30ea\u30c3\u30af\u3067\u7d9a\u304d\u3092\u8aad\u3080</div>
       </div>
     `;
     const loadingHidden = replyLoading ? "" : "hidden";
@@ -280,13 +312,13 @@
       <aside class="live-chat-message-wrap ${messagesVisible ? "" : "is-hidden"}" id="liveChatMessageWrap">
         <div class="live-chat-message-loading" id="liveChatReplyLoading" ${loadingHidden}>
           <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-          <span>返信を生成中...</span>
+          <span>\u4f1a\u8a71\u30ed\u30b0\u3092\u6574\u7406\u3057\u3066\u3044\u307e\u3059...</span>
         </div>
         <div class="live-chat-message-panel" id="liveChatMessageList">${currentMessageMarkup}</div>
       </aside>
     `;
     const stageBody = !mediaUrl
-      ? `<div class="empty-panel">まだ画像がありません。</div>`
+      ? `<div class="empty-panel">\u307e\u3060\u753b\u50cf\u304c\u3042\u308a\u307e\u305b\u3093\u3002</div>`
       : `<img class="live-chat-stage-image" src="${mediaUrl}" alt="selected image">`;
     selectedImagePanel.innerHTML = `
       ${evaluationMarkup}
@@ -301,7 +333,7 @@
   function renderImageGrid(images, imageGrid) {
     if (!imageGrid) return;
     if (!images.length) {
-      imageGrid.innerHTML = '<div class="empty-panel">画像候補がありません。</div>';
+      imageGrid.innerHTML = '<div class="empty-panel">\u753b\u50cf\u5019\u88dc\u304c\u3042\u308a\u307e\u305b\u3093\u3002</div>';
       return;
     }
     imageGrid.innerHTML = images.map((item) => {

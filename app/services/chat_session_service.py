@@ -26,7 +26,7 @@ class ChatSessionService:
 
     def _normalize_title(self, value):
         text = str(value or "").strip()
-        return text or f"Live Chat {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
+        return text or f"Live Chat Session {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
 
     def _normalize_required_player_name(self, value):
         text = str(value or "").strip()

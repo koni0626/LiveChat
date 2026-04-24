@@ -1,0 +1,217 @@
+(function () {
+  function createShellController(options) {
+    const {
+      view,
+      selectedImagePanel,
+      toggleMessagesButton,
+      toggleTextboxButton,
+      sendButton,
+      composeInput,
+      generateImageButton,
+      regenerateImageButton,
+      getMessageListElement,
+      getNovelElements,
+      onGiftInteractionChange,
+    } = options;
+
+    const state = {
+      messagesVisible: false,
+      progressDetailsVisible: false,
+      textboxVisible: true,
+      imageLoading: false,
+      replyLoading: false,
+      novelPageState: { messageId: null, pages: [], pageIndex: 0 },
+      currentContext: null,
+      selectedImage: null,
+    };
+
+    function renderNovel(messages, currentContext) {
+      state.novelPageState = view.renderNovelBox(messages, {
+        replyLoading: state.replyLoading,
+        currentContext,
+        novelPageState: state.novelPageState,
+        novelElements: getNovelElements(),
+      });
+      return state.novelPageState;
+    }
+
+    function setReplyLoading(active, currentContext) {
+      state.replyLoading = active;
+      const loading = document.getElementById("liveChatReplyLoading");
+      if (loading) loading.hidden = !active;
+      if (sendButton) {
+        sendButton.disabled = active;
+        sendButton.textContent = active ? "\u9001\u4fe1\u4e2d..." : "\u9001\u4fe1";
+      }
+      if (composeInput) composeInput.disabled = active;
+      if (typeof onGiftInteractionChange === "function") {
+        onGiftInteractionChange(active);
+      }
+      renderNovel(currentContext?.messages || [], currentContext);
+    }
+
+    function setImageLoading(active, mode = "generate") {
+      state.imageLoading = active;
+      if (generateImageButton) {
+        generateImageButton.disabled = active;
+        generateImageButton.innerHTML = active
+          ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>\u753b\u50cf\u751f\u6210\u4e2d...'
+          : "\u753b\u50cf\u3092\u751f\u6210";
+      }
+      if (regenerateImageButton) {
+        regenerateImageButton.disabled = active;
+        regenerateImageButton.innerHTML = active && mode === "regenerate"
+          ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>\u518d\u751f\u6210\u4e2d...'
+          : "\u518d\u751f\u6210";
+      }
+      const frame = selectedImagePanel?.querySelector(".live-chat-stage-frame");
+      if (frame) {
+        frame.classList.toggle("is-loading", active);
+      }
+    }
+
+    function setMessagesVisible(visible) {
+      state.messagesVisible = visible;
+      const panel = document.getElementById("liveChatMessageWrap");
+      if (panel) {
+        panel.classList.toggle("is-hidden", !visible);
+      }
+      if (toggleMessagesButton) {
+        toggleMessagesButton.textContent = visible ? "\u30ed\u30b0\u3092\u9589\u3058\u308b" : "\u30ed\u30b0\u3092\u958b\u304f";
+      }
+      if (state.currentContext) {
+        renderSelectedImage(state.selectedImage, state.currentContext);
+        renderMessages(state.currentContext.messages || [], state.currentContext);
+      }
+    }
+
+    function setProgressDetailsVisible(visible) {
+      state.progressDetailsVisible = visible;
+      if (state.currentContext) {
+        renderSelectedImage(state.selectedImage, state.currentContext);
+        renderMessages(state.currentContext.messages || [], state.currentContext);
+      }
+    }
+
+    function setTextboxVisible(visible) {
+      state.textboxVisible = visible;
+      const box = document.getElementById("liveChatNovelBox");
+      if (box) {
+        box.classList.toggle("is-hidden", !visible);
+      }
+      if (toggleTextboxButton) {
+        toggleTextboxButton.textContent = visible ? "\u30c6\u30ad\u30b9\u30c8\u30dc\u30c3\u30af\u30b9\u975e\u8868\u793a" : "\u30c6\u30ad\u30b9\u30c8\u30dc\u30c3\u30af\u30b9\u8868\u793a";
+      }
+      if (state.currentContext) {
+        renderSelectedImage(state.selectedImage, state.currentContext);
+        renderMessages(state.currentContext.messages || [], state.currentContext);
+      }
+    }
+
+    function renderSelectedImage(selectedImage, currentContext) {
+      state.selectedImage = selectedImage;
+      state.currentContext = currentContext;
+      const evaluation = currentContext?.state?.state_json?.conversation_evaluation || null;
+      const isRomance = (evaluation?.theme || "general") === "romance";
+      const score = Math.max(0, Math.min(100, Number(evaluation?.score || 0)));
+      const novelElements = getNovelElements();
+      view.renderSelectedImage(selectedImage, {
+        selectedImagePanel,
+        evaluation,
+        isRomance,
+        score,
+        progressDetailsVisible: state.progressDetailsVisible,
+        textboxVisible: state.textboxVisible,
+        imageLoading: state.imageLoading,
+        replyLoading: state.replyLoading,
+        messagesVisible: state.messagesVisible,
+        novelSpeakerText: novelElements.novelSpeaker?.textContent || "",
+        novelTextValue: novelElements.novelText?.textContent || "",
+        currentMessageMarkup: getMessageListElement()?.innerHTML || "",
+      });
+    }
+
+    function renderMessages(messages, currentContext) {
+      view.renderMessages(messages, getMessageListElement());
+      renderNovel(messages, currentContext);
+    }
+
+    function renderImageGrid(images) {
+      view.renderImageGrid(images, document.getElementById("liveChatImageGrid"));
+    }
+
+    function advanceNovelPage() {
+      const pages = state.novelPageState.pages || [];
+      if (!state.textboxVisible || state.novelPageState.pageIndex >= pages.length - 1) {
+        return false;
+      }
+      const novelElements = getNovelElements();
+      state.novelPageState.pageIndex += 1;
+      state.novelPageState = view.renderNovelPage(
+        state.novelPageState,
+        novelElements.novelText,
+        novelElements.novelContinue
+      );
+      return true;
+    }
+
+    function bindNovelAdvanceEvents() {
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        const activeElement = document.activeElement;
+        if (activeElement && ["TEXTAREA", "INPUT", "SELECT"].includes(activeElement.tagName)) {
+          return;
+        }
+        if (advanceNovelPage()) {
+          event.preventDefault();
+        }
+      });
+
+      document.addEventListener("click", (event) => {
+        const novelBox = event.target.closest("#liveChatNovelBox");
+        if (!novelBox) return;
+        if (event.target.closest("button, a, input, textarea, select, label")) return;
+        advanceNovelPage();
+      });
+    }
+
+    function bindToggleButtons() {
+      toggleMessagesButton?.addEventListener("click", () => {
+        setMessagesVisible(!state.messagesVisible);
+      });
+      toggleTextboxButton?.addEventListener("click", () => {
+        setTextboxVisible(!state.textboxVisible);
+      });
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest("#liveChatEvalDetailButton")) return;
+        setProgressDetailsVisible(!state.progressDetailsVisible);
+      });
+    }
+
+    function initialize() {
+      setMessagesVisible(false);
+      setProgressDetailsVisible(false);
+      setTextboxVisible(true);
+      bindToggleButtons();
+      bindNovelAdvanceEvents();
+    }
+
+    return {
+      initialize,
+      getState: () => ({ ...state }),
+      renderNovel,
+      renderSelectedImage,
+      renderMessages,
+      renderImageGrid,
+      setReplyLoading,
+      setImageLoading,
+      setMessagesVisible,
+      setProgressDetailsVisible,
+      setTextboxVisible,
+    };
+  }
+
+  window.LiveChatShell = {
+    createShellController,
+  };
+})();

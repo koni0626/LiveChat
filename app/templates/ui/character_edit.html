@@ -42,7 +42,7 @@
   <section class="panel-card">
     <div class="panel-head"><h3>基準画像</h3></div>
     <div class="vstack gap-3">
-      <div class="small text-secondary">作成した画像をアップロードして、ライブ会話の画像生成時に reference image として使います。</div>
+        <div class="small text-secondary">作成した画像をアップロードして、ライブチャットの画像生成時に reference image として使います。</div>
       <div id="baseAssetPreview" class="empty-panel">基準画像はまだ登録されていません。</div>
       <form id="baseAssetUploadForm" class="vstack gap-3">
         <div id="baseAssetDropzone" class="dropzone" tabindex="0" role="button" aria-label="基準画像をドラッグアンドドロップ、またはクリックして選択">
@@ -78,7 +78,7 @@
       <label class="form-label">ネガティブルール</label><textarea class="form-control" name="negative_rule" rows="3"></textarea>
       <label class="form-label">Prompt Prefix</label><textarea class="form-control" name="prompt_prefix" rows="2" placeholder="based on the reference image"></textarea>
       <label class="form-label">Prompt Suffix</label><textarea class="form-control" name="prompt_suffix" rows="2"></textarea>
-      <div class="small text-secondary">ここで指定したルールは、基準画像を使うライブ会話側の画像生成プロンプトに反映されます。</div>
+        <div class="small text-secondary">ここで指定したルールは、基準画像を使うライブチャット側の画像生成プロンプトに反映されます。</div>
       <div class="d-flex gap-2 justify-content-end">
         <button class="btn btn-dark" type="submit">画像ルールを保存</button>
       </div>

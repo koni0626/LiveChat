@@ -38,7 +38,7 @@
 
   <section class="panel-card">
     <div class="panel-head">
-      <h3>ライブ会話セッション</h3>
+      <h3>ライブチャットセッション</h3>
       <span class="soft-code" id="liveChatSessionCount">0 sessions</span>
     </div>
     <div class="project-card-grid" id="liveChatSessionGrid"></div>
@@ -91,7 +91,7 @@
     const list = Array.isArray(data) ? data : [];
     countLabel.textContent = `${list.length} sessions`;
     if (!list.length) {
-      grid.innerHTML = '<div class="empty-panel">まだライブ会話セッションがありません。</div>';
+        grid.innerHTML = '<div class="empty-panel">まだライブチャットセッションがありません。</div>';
       return;
     }
     grid.innerHTML = list.map((item) => {
@@ -108,7 +108,7 @@
           </div>
           <div class="live-chat-session-head">
             <div class="live-chat-session-copy">
-              <h4>${NovelUI.escape(item.title || "Live Chat")}</h4>
+              <h4>${NovelUI.escape(item.title || "Live Chat Session")}</h4>
               <p class="live-chat-session-excerpt">${NovelUI.escape(truncateText(item.last_message_text))}</p>
             </div>
             <div class="live-chat-session-thumb-wrap">
@@ -131,12 +131,12 @@
   }
 
   async function deleteSession(sessionId) {
-    if (!window.confirm("このライブ会話セッションを削除しますか？")) {
+        if (!window.confirm("このライブチャットセッションを削除しますか？")) {
       return;
     }
     try {
       await NovelUI.api(`/api/v1/chat/sessions/${sessionId}`, { method: "DELETE", body: {} });
-      NovelUI.toast("ライブ会話セッションを削除しました。");
+        NovelUI.toast("ライブチャットセッションを削除しました。");
       await loadSessions();
     } catch (error) {
       NovelUI.toast(error.message || "セッションの削除に失敗しました。", "danger");
@@ -177,7 +177,7 @@
           },
         },
       });
-      NovelUI.toast("ライブ会話セッションを作成しました。");
+        NovelUI.toast("ライブチャットセッションを作成しました。");
       window.location.href = `/projects/${projectId}/live-chat/${created.session.id}`;
     } catch (error) {
       NovelUI.toast(error.message || "セッション作成に失敗しました。", "danger");
@@ -199,7 +199,7 @@
   });
 
   Promise.all([loadCharacterOptions(), loadSessions()]).catch((error) => {
-    NovelUI.toast(error.message || "ライブ会話一覧の初期表示に失敗しました。", "danger");
+      NovelUI.toast(error.message || "ライブチャット一覧の初期表示に失敗しました。", "danger");
   });
 })();
 </script>

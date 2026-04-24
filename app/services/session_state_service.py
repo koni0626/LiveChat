@@ -53,7 +53,7 @@ class SessionStateService:
 
     def _build_state_prompt(self, *, session_title: str, characters: list[dict], messages: list[dict]):
         lines = [
-            "以下のライブ会話ログから、表示中の一枚絵に必要な状態だけを JSON で抽出してください。",
+            "以下のライブチャットログから、表示中の一枚絵に必要な状態だけを JSON で抽出してください。",
             "返答は JSON object のみ。",
             "キーは location, background, expression, pose, mood, time_of_day, camera, focus_summary, active_character_names。",
             "",
@@ -74,7 +74,7 @@ class SessionStateService:
         existing_state_json = json_util.loads(existing_row.state_json) if existing_row and getattr(existing_row, "state_json", None) else {}
         try:
             prompt = self._build_state_prompt(
-                session_title=getattr(session, "title", None) or "Live Chat",
+            session_title=getattr(session, "title", None) or "Live Chat Session",
                 characters=characters,
                 messages=messages,
             )

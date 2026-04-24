@@ -108,7 +108,7 @@ def generate_conversation_evaluation(text_ai_client, context: dict) -> dict | No
             raise RuntimeError("conversation evaluation response is invalid")
         score = int(parsed.get("score"))
         parsed["score"] = max(0, min(100, score))
-        parsed["label"] = str(parsed.get("label") or "Progress").strip() or "Progress"
+        parsed["label"] = str(parsed.get("label") or "進捗").strip() or "進捗"
         parsed["reason"] = str(parsed.get("reason") or "").strip()
         parsed["mood"] = str(parsed.get("mood") or "").strip()
         theme = str(parsed.get("theme") or "general").strip().lower()

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ page_title }} | LiveChat Tool</title>
+    <title>{{ page_title }} | LaplaceCity</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -19,7 +19,7 @@
           <a href="{{ url_for('ui.dashboard_page') }}" class="brand-lockup text-decoration-none">
             <span class="brand-chip">LC</span>
             <div>
-              <div class="brand-title">LiveChat Tool</div>
+              <div class="brand-title">LaplaceCity</div>
               <div class="brand-subtitle">Character Conversation Studio</div>
             </div>
           </a>
@@ -62,7 +62,7 @@
             {% if project_id %}
             <a class="btn btn-outline-light btn-sm" href="{{ url_for('ui.live_chat_sessions_page', project_id=project_id) }}">
               <i class="bi bi-chat-dots"></i>
-              <span>Live Chat</span>
+              <span>ライブチャット</span>
             </a>
             {% endif %}
             <a class="btn btn-sunrise btn-sm" href="{{ url_for('ui.project_create_page') }}">

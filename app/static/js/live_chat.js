@@ -16,11 +16,14 @@
   const sessionCharacterSelect = document.getElementById("liveChatSessionCharacterSelect");
   const composeForm = document.getElementById("liveChatComposeForm");
   const composeInput = document.getElementById("liveChatComposeInput");
+  const composeShell = document.getElementById("liveChatComposeShell");
+  const toggleComposeButton = document.getElementById("liveChatToggleComposeButton");
   const imageForm = document.getElementById("liveChatImageForm");
   const uploadForm = document.getElementById("liveChatImageUploadForm");
 
   let currentContext = null;
   let giftController = null;
+  let composeVisible = true;
 
   function getMessageListElement() {
     return document.getElementById("liveChatMessageList");
@@ -51,7 +54,7 @@
 
   function applyContext(context) {
     currentContext = context;
-    const title = context.session.title || "ライブ会話";
+    const title = context.session.title || "\u30e9\u30a4\u30d6\u30c1\u30e3\u30c3\u30c8";
     document.getElementById("liveChatTitle").textContent = title;
     sessionMetaForm.title.value = context.session.title || "";
     sessionMetaForm.player_name.value = context.session.player_name || "";
@@ -60,14 +63,14 @@
     LiveChatApi.loadSessionCharacterOptions(Number(context?.project?.id || projectId || 0))
       .then((list) => {
         sessionCharacterSelect.innerHTML = [
-          '<option value="">キャラクターを選択</option>',
+          '<option value="">\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u3092\u9078\u629e</option>',
           ...list.map((item) => `<option value="${item.id}">${NovelUI.escape(item.name || "Unnamed")}</option>`),
         ].join("");
         const selectedIds = LiveChatView.normalizeSelectedCharacterIds(context.session.settings_json);
         sessionCharacterSelect.value = selectedIds.length ? String(selectedIds[0]) : "";
       })
       .catch((error) => {
-        NovelUI.toast(error.message || "キャラクター一覧の読込に失敗しました。", "danger");
+        NovelUI.toast(error.message || "\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u4e00\u89a7\u306e\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
       });
 
     stateBoard.textContent = LiveChatView.formatJson(context.state.state_json || {});
@@ -102,6 +105,17 @@
     }
   }
 
+  function setComposeVisible(visible) {
+    composeVisible = visible;
+    if (composeShell) {
+      composeShell.classList.toggle("is-collapsed", !visible);
+    }
+    if (toggleComposeButton) {
+      toggleComposeButton.textContent = visible ? "\u30e1\u30c3\u30bb\u30fc\u30b8\u6b04\u3092\u9589\u3058\u308b" : "\u30e1\u30c3\u30bb\u30fc\u30b8\u6b04\u3092\u958b\u304f";
+      toggleComposeButton.setAttribute("aria-expanded", visible ? "true" : "false");
+    }
+  }
+
   composeForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const rawMessage = composeForm.message_text.value.trim();
@@ -110,19 +124,19 @@
       if (giftController?.hasSelectedGift()) {
         const uploaded = await giftController.uploadGiftImage(rawMessage);
         if (!uploaded) {
-          throw new Error("贈り物画像の送信に失敗しました。");
+          throw new Error("\u8d08\u308a\u7269\u753b\u50cf\u306e\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002");
         }
       } else {
         await LiveChatApi.postMessage(sessionId, {
-          message_text: rawMessage || "話を進めて",
+          message_text: rawMessage || "\u8a71\u3092\u9032\u3081\u3066",
           auto_reply: document.getElementById("liveChatAutoReplyCheck").checked,
         });
         await loadContext();
       }
       composeForm.message_text.value = "";
-      NovelUI.toast("メッセージを送信しました。");
+      NovelUI.toast("\u30e1\u30c3\u30bb\u30fc\u30b8\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f\u3002");
     } catch (error) {
-      NovelUI.toast(error.message || "メッセージ送信に失敗しました。", "danger");
+      NovelUI.toast(error.message || "\u30e1\u30c3\u30bb\u30fc\u30b8\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
     } finally {
       shell.setReplyLoading(false, currentContext);
     }
@@ -170,22 +184,27 @@
       const state = await LiveChatApi.extractState(sessionId);
       stateBoard.textContent = LiveChatView.formatJson(state.state_json || {});
       await loadContext();
-      NovelUI.toast("表示状態を更新しました。");
+      NovelUI.toast("\u8868\u793a\u72b6\u614b\u3092\u66f4\u65b0\u3057\u307e\u3057\u305f\u3002");
     } catch (error) {
-      NovelUI.toast(error.message || "表示状態の更新に失敗しました。", "danger");
+      NovelUI.toast(error.message || "\u8868\u793a\u72b6\u614b\u306e\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
     }
   });
 
   document.getElementById("liveChatRefreshContextButton").addEventListener("click", () => {
     loadContext().catch((error) => {
-      NovelUI.toast(error.message || "読込に失敗しました。", "danger");
+      NovelUI.toast(error.message || "\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
     });
   });
 
+  toggleComposeButton?.addEventListener("click", () => {
+    setComposeVisible(!composeVisible);
+  });
+
   shell.initialize();
+  setComposeVisible(true);
 
   loadContext().catch((error) => {
-    NovelUI.toast(error.message || "ライブ会話画面の初期化に失敗しました。", "danger");
+    NovelUI.toast(error.message || "\u30e9\u30a4\u30d6\u30c1\u30e3\u30c3\u30c8\u753b\u9762\u306e\u521d\u671f\u5316\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
   });
 
   window.addEventListener("resize", () => {
