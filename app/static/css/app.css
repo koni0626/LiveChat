@@ -619,6 +619,7 @@ body {
   justify-content: flex-start;
   gap: 0.85rem;
   margin: 0 auto;
+  position: relative;
 }
 
 .live-chat-stage-frame {
@@ -693,13 +694,13 @@ body {
   to { opacity: 1; }
 }
 
-.live-chat-image-panel.is-loading::after {
+.live-chat-stage-frame.is-loading::after {
   content: "画像を生成中...";
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  top: calc(3.9rem + 0.85rem);
+  top: 0;
   display: flex;
   align-items: center;
   justify-content: center;

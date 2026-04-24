@@ -183,6 +183,7 @@
   let currentContext = null;
   let messagesVisible = false;
   let textboxVisible = true;
+  let imageLoading = false;
   let novelPageState = {
     messageId: null,
     pages: [],
@@ -235,6 +236,7 @@
   }
 
   function setImageLoading(active, mode = "generate") {
+    imageLoading = active;
     generateImageButton.disabled = active;
     if (regenerateImageButton) regenerateImageButton.disabled = active;
     generateImageButton.innerHTML = active
@@ -245,7 +247,10 @@
         ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Regenerating...'
         : "Regenerate";
     }
-    selectedImagePanel.classList.toggle("is-loading", active);
+    const frame = selectedImagePanel.querySelector(".live-chat-stage-frame");
+    if (frame) {
+      frame.classList.toggle("is-loading", active);
+    }
   }
 
   function getLatestDisplayMessage(messages) {
@@ -471,7 +476,7 @@
       : `<img class="live-chat-stage-image" src="${mediaUrl}" alt="selected image">`;
     selectedImagePanel.innerHTML = `
       ${evaluationMarkup}
-      <div class="live-chat-stage-frame">
+      <div class="live-chat-stage-frame ${imageLoading ? "is-loading" : ""}">
         ${stageBody}
         ${novelMarkup}
         ${messageMarkup}
