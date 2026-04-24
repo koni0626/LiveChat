@@ -15,9 +15,7 @@ __all__ = [
     "session_state_service",
     "asset_service",
     "glossary_service",
-    "story_memory_service",
     "ending_condition_service",
-    "generated_candidate_service",
     "usage_log_service",
     "user_setting_service",
 ]

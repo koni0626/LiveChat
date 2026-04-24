@@ -15,7 +15,6 @@ from .blueprints.projects import projects_bp
 from .blueprints.worlds import worlds_bp
 from .blueprints.characters import characters_bp
 from .blueprints.assets import assets_bp
-from .blueprints.jobs import jobs_bp
 from .blueprints.glossary import glossary_bp
 from .blueprints.ending_conditions import ending_conditions_bp
 from .blueprints.settings import settings_bp
@@ -71,7 +70,6 @@ def create_app(config_object=Config):
     app.register_blueprint(worlds_bp, url_prefix="/api/v1")
     app.register_blueprint(characters_bp, url_prefix="/api/v1")
     app.register_blueprint(assets_bp, url_prefix="/api/v1")
-    app.register_blueprint(jobs_bp, url_prefix="/api/v1")
     app.register_blueprint(glossary_bp, url_prefix="/api/v1")
     app.register_blueprint(ending_conditions_bp, url_prefix="/api/v1")
     app.register_blueprint(settings_bp, url_prefix="/api/v1")

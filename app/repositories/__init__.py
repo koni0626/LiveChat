@@ -6,10 +6,8 @@ __all__ = [
     "character_repository",
     "asset_repository",
     "glossary_term_repository",
-    "generation_job_repository",
     "session_image_repository",
     "session_state_repository",
     "ending_condition_repository",
     "usage_log_repository",
-    "generated_candidate_repository",
 ]
