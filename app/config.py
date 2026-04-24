@@ -51,6 +51,6 @@ class Config:
     PERMANENT_SESSION_LIFETIME = timedelta(days=7)
     STORAGE_ROOT = os.getenv("STORAGE_ROOT", os.path.join(PROJECT_ROOT, "storage"))
     TEXT_AI_MODEL = os.getenv("TEXT_AI_MODEL", "gpt-5.4-mini")
-    IMAGE_AI_MODEL = os.getenv("IMAGE_AI_MODEL", "gpt-image-1.5")
+    IMAGE_AI_MODEL = os.getenv("IMAGE_AI_MODEL", "gpt-image-2")
     TEXT_AI_TIMEOUT_SECONDS = int(os.getenv("TEXT_AI_TIMEOUT_SECONDS", "120"))
     IMAGE_AI_TIMEOUT_SECONDS = int(os.getenv("IMAGE_AI_TIMEOUT_SECONDS", "60"))

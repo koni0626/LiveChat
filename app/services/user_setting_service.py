@@ -8,7 +8,7 @@ from ..models import User, UserSetting
 class UserSettingService:
     DEFAULTS = {
         "text_ai_model": "gpt-5.4-mini",
-        "image_ai_model": "gpt-image-1.5",
+    "image_ai_model": "gpt-image-2",
         "default_quality": "medium",
         "default_size": "1024x1024",
         "autosave_interval": "off",

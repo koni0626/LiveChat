@@ -630,7 +630,7 @@ class GenerationService:
         try:
             payload["generation_job_id"] = job.id
             context = self._resolve_scene_context(scene, payload)
-            prompt = build_image_prompt(context)
+            prompt = str(payload.get("prompt_text") or "").strip() or build_image_prompt(context)
             reference_assets = self._resolve_reference_assets(scene, payload)
             result = self._image_ai_client.generate_image(
                 prompt,

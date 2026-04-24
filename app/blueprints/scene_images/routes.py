@@ -1,16 +1,55 @@
-from flask import Blueprint, request
+import os
+
+from flask import Blueprint, current_app, request
 
 from ...api import json_response
+from ...services.asset_service import AssetService
 from ...services.generation_service import GenerationService
 from ...services.scene_image_service import SceneImageService
+from ...services.scene_service import SceneService
 
 
 scene_images_bp = Blueprint("scene_images", __name__)
 scene_image_service = SceneImageService()
 generation_service = GenerationService()
+asset_service = AssetService()
+scene_service = SceneService()
+
+
+def _build_media_url(file_path: str | None):
+    if not file_path:
+        return None
+    storage_root = current_app.config.get("STORAGE_ROOT")
+    if not storage_root:
+        return None
+    normalized_path = os.path.normpath(file_path)
+    normalized_root = os.path.normpath(storage_root)
+    if not normalized_path.startswith(normalized_root):
+        return None
+    relative = os.path.relpath(normalized_path, normalized_root).replace("\\", "/")
+    return f"/media/{relative}"
+
+
+def _serialize_asset(asset):
+    if asset is None:
+        return None
+    return {
+        "id": asset.id,
+        "asset_type": asset.asset_type,
+        "file_name": asset.file_name,
+        "file_path": asset.file_path,
+        "mime_type": asset.mime_type,
+        "file_size": asset.file_size,
+        "width": asset.width,
+        "height": asset.height,
+        "media_url": _build_media_url(asset.file_path),
+    }
+
+
 def _serialize_scene_image(scene_image):
     if scene_image is None:
         return None
+    asset = asset_service.get_asset(scene_image.asset_id)
     return {
         "id": scene_image.id,
         "scene_id": scene_image.scene_id,
@@ -24,6 +63,7 @@ def _serialize_scene_image(scene_image):
         "size": scene_image.size,
         "is_selected": bool(scene_image.is_selected),
         "created_at": scene_image.created_at.isoformat() if scene_image.created_at else None,
+        "asset": _serialize_asset(asset),
     }
 
 
@@ -76,6 +116,49 @@ def generate_scene_images(scene_id: int):
     if not job:
         return json_response({"message": "not_found"}, status=404)
     return json_response(_serialize_generation_job(job))
+
+
+@scene_images_bp.route("/scenes/<int:scene_id>/images/upload", methods=["POST"])
+def upload_scene_image(scene_id: int):
+    scene = scene_service.get_scene(scene_id)
+    if not scene:
+        return json_response({"message": "not_found"}, status=404)
+
+    upload_file = request.files.get("file")
+    if upload_file is None:
+        return json_response({"message": "file is required"}, status=400)
+
+    quality = (request.form.get("quality") or "external").strip() or "external"
+    size = (request.form.get("size") or "uploaded").strip() or "uploaded"
+    image_type = (request.form.get("image_type") or "scene_full").strip() or "scene_full"
+    is_selected = str(request.form.get("is_selected", "1")).lower() in {"1", "true", "yes", "on"}
+
+    try:
+        asset = asset_service.create_asset(
+            scene.project_id,
+            {
+                "asset_type": "uploaded_scene_image",
+                "upload_file": upload_file,
+                "metadata_json": '{"source":"manual_upload"}',
+            },
+        )
+        scene_image = scene_image_service.generate_scene_images(
+            scene_id,
+            {
+                "asset_id": asset.id,
+                "image_type": image_type,
+                "prompt_text": request.form.get("prompt_text") or None,
+                "state_json": scene.scene_state_json,
+                "quality": quality,
+                "size": size,
+                "is_selected": 1 if is_selected else 0,
+            },
+        )
+        if is_selected:
+            scene_image = scene_image_service.select_scene_image(scene_image.id)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    return json_response(_serialize_scene_image(scene_image), status=201)
 
 
 @scene_images_bp.route("/scene-images/<int:scene_image_id>/select", methods=["POST"])

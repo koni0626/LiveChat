@@ -5,9 +5,11 @@ import os
 from flask import current_app
 
 from ..api import NotFoundError, serialize_datetime
+from ..prompts.image_prompt_builder import build_image_prompt
 from ..utils import json_util
 from .asset_service import AssetService
 from .chapter_service import ChapterService
+from .character_image_rule_service import CharacterImageRuleService
 from .character_service import CharacterService
 from .glossary_service import GlossaryService
 from .project_service import ProjectService
@@ -33,6 +35,7 @@ class SceneWorkspaceService:
         world_service: WorldService | None = None,
         asset_service: AssetService | None = None,
         scene_character_service: SceneCharacterService | None = None,
+        character_image_rule_service: CharacterImageRuleService | None = None,
     ):
         self._scene_service = scene_service or SceneService()
         self._scene_choice_service = scene_choice_service or SceneChoiceService()
@@ -45,6 +48,7 @@ class SceneWorkspaceService:
         self._world_service = world_service or WorldService()
         self._asset_service = asset_service or AssetService()
         self._scene_character_service = scene_character_service or SceneCharacterService()
+        self._character_image_rule_service = character_image_rule_service or CharacterImageRuleService()
 
     def _load_json(self, value):
         if value is None:
@@ -237,6 +241,25 @@ class SceneWorkspaceService:
     def get_image_context(self, scene_id: int):
         editor_context = self.get_editor_context(scene_id)
         state = editor_context["scene"]["scene_state_json"]
+        characters = editor_context.get("characters") or []
+        primary_character = next((character for character in characters if character.get("is_guide")), None)
+        primary_character = primary_character or (characters[0] if characters else None)
+        image_rule = None
+        if primary_character:
+            image_rule = self._character_image_rule_service.get_image_rule(primary_character["id"])
+        try:
+            prompt_preview = build_image_prompt(
+                {
+                    "scene": editor_context["scene"],
+                    "world": editor_context["world_memo"],
+                    "project": editor_context["project"],
+                    "characters": characters,
+                    "image_rule": image_rule,
+                    "scene_state": state,
+                }
+            )
+        except Exception:
+            prompt_preview = editor_context["scene"]["image_prompt_text"]
         return {
             **editor_context,
             "image_generation": {
@@ -244,7 +267,8 @@ class SceneWorkspaceService:
                 "emotion": self._extract_state_value(state, "emotion", "mood"),
                 "place": self._extract_state_value(state, "place", "location"),
                 "time_of_day": self._extract_state_value(state, "time_of_day", "time"),
-                "prompt_preview": editor_context["scene"]["image_prompt_text"],
+                "prompt_preview": prompt_preview,
+                "saved_prompt": editor_context["scene"]["image_prompt_text"],
             },
         }
 

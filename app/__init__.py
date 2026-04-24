@@ -10,6 +10,7 @@ from .extensions import db, migrate, session
 from .models import User
 from .blueprints.ui import ui_bp
 from .blueprints.auth import auth_bp
+from .blueprints.chat import chat_bp
 from .blueprints.projects import projects_bp
 from .blueprints.worlds import worlds_bp
 from .blueprints.characters import characters_bp
@@ -71,6 +72,7 @@ def create_app(config_object=Config):
 
     app.register_blueprint(ui_bp)
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
+    app.register_blueprint(chat_bp, url_prefix="/api/v1")
     app.register_blueprint(projects_bp, url_prefix="/api/v1/projects")
     app.register_blueprint(worlds_bp, url_prefix="/api/v1")
     app.register_blueprint(characters_bp, url_prefix="/api/v1")

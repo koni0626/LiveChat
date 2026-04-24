@@ -1,0 +1,603 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="live-chat-shell" data-session-id="{{ session_id }}">
+  <section class="panel-card live-chat-meta-panel">
+    <div class="panel-head">
+      <h3>セッション設定</h3>
+      <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatRefreshContextButton">更新</button>
+    </div>
+    <form class="row g-3 align-items-start" id="liveChatSessionMetaForm">
+      <div class="col-lg-3 col-md-6">
+        <label class="form-label" for="liveChatSessionTitleInput">セッション名</label>
+        <input class="form-control" id="liveChatSessionTitleInput" name="title">
+      </div>
+      <div class="col-lg-3 col-md-6">
+        <label class="form-label" for="liveChatSessionPlayerInput">プレイヤー名</label>
+        <input class="form-control" id="liveChatSessionPlayerInput" name="player_name">
+      </div>
+      <div class="col-lg-6 col-12">
+        <label class="form-label" for="liveChatSessionObjectiveInput">会話の目的</label>
+        <textarea class="form-control" id="liveChatSessionObjectiveInput" name="conversation_objective" rows="2" placeholder="例: プレイヤーがあなたに恋愛感情を持つようにする / プレイヤーが唐辛子に興味を持つようにする"></textarea>
+      </div>
+      <div class="col-lg-9 col-md-8">
+        <label class="form-label" for="liveChatSessionCharacterSelect">登場キャラクター</label>
+        <select class="form-select live-chat-character-select" id="liveChatSessionCharacterSelect" name="character_ids" multiple size="4"></select>
+      </div>
+      <div class="col-lg-3 col-md-4 d-grid align-self-end">
+        <button class="btn btn-sunrise" type="submit">設定を保存</button>
+      </div>
+      <div class="col-12">
+        <div class="accordion" id="liveChatMetaAccordion">
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="liveChatStateHeading">
+              <button
+                class="accordion-button collapsed"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#liveChatStateCollapse"
+                aria-expanded="false"
+                aria-controls="liveChatStateCollapse"
+              >
+                表示状態
+              </button>
+            </h2>
+            <div
+              id="liveChatStateCollapse"
+              class="accordion-collapse collapse"
+              aria-labelledby="liveChatStateHeading"
+              data-bs-parent="#liveChatMetaAccordion"
+            >
+              <div class="accordion-body">
+                <pre class="json-board mb-0" id="liveChatStateBoard"></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel-card live-chat-main">
+    <div class="panel-head">
+      <h3 id="liveChatTitle">ライブ会話</h3>
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleTextboxButton">テキストボックス非表示</button>
+        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleMessagesButton">ログ表示</button>
+        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatExtractStateButton">状態更新</button>
+        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatGenerateImageButton">画像生成</button>
+      </div>
+    </div>
+
+    <div class="live-chat-stage">
+      <div class="live-chat-image-panel" id="liveChatSelectedImagePanel">
+        <div class="empty-panel">まだ画像がありません。</div>
+        <div class="live-chat-novel-box" id="liveChatNovelBox">
+          <div class="live-chat-novel-speaker" id="liveChatNovelSpeaker"></div>
+          <div class="live-chat-novel-text" id="liveChatNovelText"></div>
+        </div>
+        <aside class="live-chat-message-wrap is-hidden" id="liveChatMessageWrap">
+          <div class="live-chat-message-loading" id="liveChatReplyLoading" hidden>
+            <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+            <span>返信を生成中...</span>
+          </div>
+          <div class="live-chat-message-panel" id="liveChatMessageList"></div>
+        </aside>
+      </div>
+    </div>
+
+    <form class="live-chat-compose" id="liveChatComposeForm">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-9">
+          <label class="form-label" for="liveChatComposeInput">メッセージ</label>
+          <textarea class="form-control" id="liveChatComposeInput" name="message_text" rows="3" placeholder="ここにプレイヤーの発話を入力"></textarea>
+        </div>
+        <div class="col-md-3 d-grid gap-2">
+          <button class="btn btn-dark" type="submit" id="liveChatSendButton">送信</button>
+          <label class="form-check">
+            <input class="form-check-input" type="checkbox" id="liveChatAutoReplyCheck" checked>
+            <span class="form-check-label">自動で返信する</span>
+          </label>
+        </div>
+      </div>
+      <div class="live-chat-compose-progress" id="liveChatComposeProgress" hidden>
+        <div class="live-chat-compose-progress-head">
+          <span class="live-chat-compose-progress-title">生成AIが返答を考えています...</span>
+          <span class="live-chat-compose-progress-note">しばらくお待ちください</span>
+        </div>
+        <div class="live-chat-compose-progress-bar" aria-hidden="true">
+          <div class="live-chat-compose-progress-fill"></div>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <aside class="panel-card live-chat-side">
+    <div class="panel-head">
+      <h3>画像設定</h3>
+      <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatReloadImagesButton">再読込</button>
+    </div>
+
+    <form class="vstack gap-2 mb-3" id="liveChatImageForm">
+      <div>
+        <label class="form-label" for="liveChatPromptInput">画像プロンプト</label>
+        <textarea class="form-control font-mono-sm" id="liveChatPromptInput" name="prompt_text" rows="6"></textarea>
+      </div>
+      <div class="row g-2">
+        <div class="col-6">
+          <label class="form-label" for="liveChatImageSizeSelect">サイズ</label>
+          <select class="form-select" id="liveChatImageSizeSelect" name="size">
+            <option value="1024x1536">1024x1536</option>
+            <option value="1024x1024">1024x1024</option>
+            <option value="1536x1024">1536x1024</option>
+          </select>
+        </div>
+        <div class="col-6">
+          <label class="form-label" for="liveChatImageQualitySelect">品質</label>
+          <select class="form-select" id="liveChatImageQualitySelect" name="quality">
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+        </div>
+      </div>
+      <div class="d-grid">
+        <button class="btn btn-outline-dark" type="button" id="liveChatRegenerateImageButton">Regenerate</button>
+      </div>
+    </form>
+
+    <form class="vstack gap-2 mb-3" id="liveChatImageUploadForm">
+      <div>
+        <label class="form-label" for="liveChatImageUploadInput">外部画像を使う</label>
+        <input class="form-control" id="liveChatImageUploadInput" type="file" name="file" accept="image/*">
+      </div>
+      <button class="btn btn-outline-dark" type="submit">画像をアップロード</button>
+    </form>
+
+    <div class="live-chat-image-grid" id="liveChatImageGrid"></div>
+  </aside>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const sessionId = Number({{ session_id }});
+  const messageList = document.getElementById("liveChatMessageList");
+  const stateBoard = document.getElementById("liveChatStateBoard");
+  const imageGrid = document.getElementById("liveChatImageGrid");
+  const selectedImagePanel = document.getElementById("liveChatSelectedImagePanel");
+  const sessionMetaForm = document.getElementById("liveChatSessionMetaForm");
+  const composeForm = document.getElementById("liveChatComposeForm");
+  const composeInput = document.getElementById("liveChatComposeInput");
+  const imageForm = document.getElementById("liveChatImageForm");
+  const uploadForm = document.getElementById("liveChatImageUploadForm");
+  const characterSelect = document.getElementById("liveChatSessionCharacterSelect");
+  const toggleMessagesButton = document.getElementById("liveChatToggleMessagesButton");
+  const toggleTextboxButton = document.getElementById("liveChatToggleTextboxButton");
+  const sendButton = document.getElementById("liveChatSendButton");
+  const generateImageButton = document.getElementById("liveChatGenerateImageButton");
+  const regenerateImageButton = document.getElementById("liveChatRegenerateImageButton");
+  const novelSpeaker = document.getElementById("liveChatNovelSpeaker");
+  const novelText = document.getElementById("liveChatNovelText");
+  let currentContext = null;
+  let messagesVisible = false;
+  let textboxVisible = true;
+
+  function formatJson(value) {
+    if (!value) return "{}";
+    if (typeof value === "string") {
+      try {
+        return JSON.stringify(JSON.parse(value), null, 2);
+      } catch (_) {
+        return value;
+      }
+    }
+    return JSON.stringify(value, null, 2);
+  }
+
+  function setReplyLoading(active) {
+    const loading = document.getElementById("liveChatReplyLoading");
+    const progress = document.getElementById("liveChatComposeProgress");
+    if (loading) loading.hidden = !active;
+    if (progress) progress.hidden = !active || !textboxVisible;
+    sendButton.disabled = active;
+    if (composeInput) composeInput.disabled = active;
+    sendButton.textContent = active ? "送信中..." : "送信";
+  }
+
+  function setImageLoading(active, mode = "generate") {
+    generateImageButton.disabled = active;
+    if (regenerateImageButton) regenerateImageButton.disabled = active;
+    generateImageButton.innerHTML = active
+      ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>生成中...'
+      : "画像生成";
+    if (regenerateImageButton) {
+      regenerateImageButton.innerHTML = active && mode === "regenerate"
+        ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Regenerating...'
+        : "Regenerate";
+    }
+    selectedImagePanel.classList.toggle("is-loading", active);
+  }
+
+  function getLatestDisplayMessage(messages) {
+    const items = Array.isArray(messages) ? [...messages] : [];
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index];
+      const text = (item?.message_text || "").trim();
+      if (text) return item;
+    }
+    return null;
+  }
+
+  function renderNovelBox(messages) {
+    const item = getLatestDisplayMessage(messages);
+    if (!item) {
+      novelSpeaker.textContent = "";
+      novelText.textContent = "まだセリフがありません。";
+      return;
+    }
+    novelSpeaker.textContent = item.speaker_name || "";
+    novelText.textContent = item.message_text || "";
+  }
+
+  function renderMessages(messages) {
+    if (!messages.length) {
+      messageList.innerHTML = '<div class="empty-panel">まだ会話ログがありません。</div>';
+      renderNovelBox([]);
+      return;
+    }
+    messageList.innerHTML = messages.map((item) => `
+      <article class="live-chat-bubble ${item.sender_type === "user" ? "player" : "character"}" data-message-id="${item.id}">
+        <div class="live-chat-bubble-head">
+          <div class="live-chat-bubble-speaker">${NovelUI.escape(item.speaker_name || item.sender_type)}</div>
+          <button class="live-chat-bubble-delete" type="button" data-delete-message-id="${item.id}" aria-label="ログを削除" title="ログを削除">🗑</button>
+        </div>
+        <div class="live-chat-bubble-text">${NovelUI.escape(item.message_text || "")}</div>
+      </article>
+    `).join("");
+    messageList.scrollTop = messageList.scrollHeight;
+    renderNovelBox(messages);
+  }
+
+  function resolveStageDimensions(selectedImage) {
+    const asset = selectedImage?.asset || {};
+    const width = Number(asset.width);
+    const height = Number(asset.height);
+    if (width > 0 && height > 0) {
+      return { width, height };
+    }
+    const sizeText = String(selectedImage?.size || "").trim();
+    const match = sizeText.match(/^(\d+)x(\d+)$/);
+    if (match) {
+      return { width: Number(match[1]), height: Number(match[2]) };
+    }
+    return { width: 1024, height: 1536 };
+  }
+
+  function applyStageDimensions(selectedImage) {
+    const dims = resolveStageDimensions(selectedImage);
+    selectedImagePanel.style.setProperty("--stage-width", String(dims.width));
+    selectedImagePanel.style.setProperty("--stage-height", String(dims.height));
+    const viewportHeight = Math.max(window.innerHeight || 0, 720);
+    const desktopOffset = 250;
+    const mobileOffset = 320;
+    const maxHeight = Math.max(
+      window.innerWidth <= 1200 ? 360 : 420,
+      viewportHeight - (window.innerWidth <= 1200 ? mobileOffset : desktopOffset)
+    );
+    const stageParent = selectedImagePanel.parentElement;
+    const availableWidth = stageParent ? stageParent.clientWidth : selectedImagePanel.clientWidth;
+
+    let width = Math.min(availableWidth, maxHeight * (dims.width / dims.height));
+    let height = width * (dims.height / dims.width);
+
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height * (dims.width / dims.height);
+    }
+
+    selectedImagePanel.style.width = `${Math.round(width)}px`;
+    selectedImagePanel.style.height = `${Math.round(height)}px`;
+  }
+
+  function renderSelectedImage(selectedImage) {
+    applyStageDimensions(selectedImage);
+    const mediaUrl = selectedImage?.asset?.media_url;
+    const evaluation = currentContext?.state?.state_json?.conversation_evaluation || null;
+    const isRomance = (evaluation?.theme || "general") === "romance";
+    const score = Math.max(0, Math.min(100, Number(evaluation?.score || 0)));
+    const evaluationMarkup = evaluation ? `
+      <div class="live-chat-eval-badge ${isRomance ? "is-romance" : ""}" id="liveChatEvalBadge" ${textboxVisible ? "" : "hidden"}>
+        <div class="live-chat-eval-label">${NovelUI.escape(evaluation.label || (isRomance ? "Love Progress" : "Progress"))}</div>
+        <div class="live-chat-eval-score">${isRomance ? "Love " : ""}${score}</div>
+        <div class="live-chat-eval-bar">
+          <div class="live-chat-eval-fill ${isRomance ? "is-romance" : ""}" style="width:${score}%"></div>
+        </div>
+        ${evaluation.reason ? `<div class="live-chat-eval-reason">${NovelUI.escape(evaluation.reason)}</div>` : ""}
+      </div>
+    ` : "";
+    const novelMarkup = `
+      <div class="live-chat-novel-box ${textboxVisible ? "" : "is-hidden"}" id="liveChatNovelBox">
+        <div class="live-chat-novel-speaker" id="liveChatNovelSpeaker">${NovelUI.escape(novelSpeaker.textContent || "")}</div>
+        <div class="live-chat-novel-text" id="liveChatNovelText">${NovelUI.escape(novelText.textContent || "")}</div>
+      </div>
+    `;
+    const loadingHidden = currentContext?.ui?.reply_loading ? "" : "hidden";
+    const messageMarkup = `
+      <aside class="live-chat-message-wrap ${messagesVisible ? "" : "is-hidden"}" id="liveChatMessageWrap">
+        <div class="live-chat-message-loading" id="liveChatReplyLoading" ${loadingHidden}>
+          <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+          <span>返信を生成中...</span>
+        </div>
+        <div class="live-chat-message-panel" id="liveChatMessageList">${messageList.innerHTML}</div>
+      </aside>
+    `;
+    if (!mediaUrl) {
+      selectedImagePanel.innerHTML = `<div class="empty-panel">まだ画像がありません。</div>${evaluationMarkup}${novelMarkup}${messageMarkup}`;
+    } else {
+      selectedImagePanel.innerHTML = `<img class="live-chat-stage-image" src="${mediaUrl}" alt="selected image">${evaluationMarkup}${novelMarkup}${messageMarkup}`;
+    }
+  }
+
+  function renderImageGrid(images) {
+    if (!images.length) {
+      imageGrid.innerHTML = '<div class="empty-panel">画像候補がありません。</div>';
+      return;
+    }
+    imageGrid.innerHTML = images.map((item) => {
+      const mediaUrl = item.asset?.media_url;
+      return `
+        <button class="live-chat-thumb ${item.is_selected ? "selected" : ""}" type="button" data-image-id="${item.id}">
+          ${mediaUrl ? `<img src="${mediaUrl}" alt="thumb">` : `<span>No Image</span>`}
+        </button>
+      `;
+    }).join("");
+  }
+
+  function renderCharacterSelect(available, selected) {
+    const selectedIds = new Set((selected || []).map((item) => Number(item.id)));
+    characterSelect.innerHTML = (available || []).map((character) => `
+      <option value="${character.id}" ${selectedIds.has(Number(character.id)) ? "selected" : ""}>
+        ${NovelUI.escape(character.name)}${character.role ? ` / ${NovelUI.escape(character.role)}` : ""}
+      </option>
+    `).join("");
+  }
+
+  function setMessagesVisible(visible) {
+    messagesVisible = visible;
+    const panel = document.getElementById("liveChatMessageWrap");
+    if (panel) {
+      panel.classList.toggle("is-hidden", !visible);
+    }
+    toggleMessagesButton.textContent = visible ? "ログ非表示" : "ログ表示";
+  }
+
+  function setTextboxVisible(visible) {
+    textboxVisible = visible;
+    const box = document.getElementById("liveChatNovelBox");
+    const evalBadge = document.getElementById("liveChatEvalBadge");
+    const composeProgress = document.getElementById("liveChatComposeProgress");
+    if (box) {
+      box.classList.toggle("is-hidden", !visible);
+    }
+    if (evalBadge) {
+      evalBadge.hidden = !visible;
+    }
+    if (composeProgress && !visible) {
+      composeProgress.hidden = true;
+    }
+    toggleTextboxButton.textContent = visible ? "テキストボックス非表示" : "テキストボックス表示";
+  }
+
+  function applyContext(context) {
+    currentContext = context;
+    document.getElementById("liveChatTitle").textContent = context.session.title || "ライブ会話";
+    sessionMetaForm.title.value = context.session.title || "";
+    sessionMetaForm.player_name.value = context.session.player_name || "";
+    sessionMetaForm.conversation_objective.value = context.session.settings_json?.conversation_objective || "";
+    stateBoard.textContent = formatJson(context.state.state_json || {});
+    imageForm.prompt_text.value = context.state.visual_prompt_text || "";
+    renderMessages(context.messages || []);
+    renderSelectedImage(context.selected_image);
+    renderImageGrid(context.images || []);
+    renderCharacterSelect(context.available_characters || [], context.characters || []);
+    setMessagesVisible(messagesVisible);
+    setTextboxVisible(textboxVisible);
+  }
+
+  async function loadContext() {
+    const context = await NovelUI.api(`/api/v1/chat/sessions/${sessionId}`);
+    applyContext(context);
+  }
+
+  sessionMetaForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const characterIds = Array.from(characterSelect.selectedOptions).map((option) => Number(option.value));
+    try {
+      const updated = await NovelUI.api(`/api/v1/chat/sessions/${sessionId}`, {
+        method: "PATCH",
+        body: {
+          title: sessionMetaForm.title.value,
+          player_name: sessionMetaForm.player_name.value,
+          settings_json: {
+            ...(currentContext?.session?.settings_json || {}),
+            conversation_objective: sessionMetaForm.conversation_objective.value,
+          },
+          character_ids: characterIds,
+        },
+      });
+      applyContext(updated);
+      NovelUI.toast("セッション設定を保存しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "セッション設定の保存に失敗しました。", "danger");
+    }
+  });
+
+  composeForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = composeForm.message_text.value.trim() || "話を進めて";
+    try {
+      setReplyLoading(true);
+      await NovelUI.api(`/api/v1/chat/sessions/${sessionId}/messages`, {
+        method: "POST",
+        body: {
+          message_text: message,
+          auto_reply: document.getElementById("liveChatAutoReplyCheck").checked,
+        },
+      });
+      composeForm.message_text.value = "";
+      await loadContext();
+      NovelUI.toast("メッセージを送信しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "メッセージ送信に失敗しました。", "danger");
+    } finally {
+      setReplyLoading(false);
+    }
+  });
+
+  document.getElementById("liveChatExtractStateButton").addEventListener("click", async () => {
+    try {
+      const state = await NovelUI.api(`/api/v1/chat/sessions/${sessionId}/state/extract`, { method: "POST", body: {} });
+      stateBoard.textContent = formatJson(state.state_json || {});
+      await loadContext();
+      NovelUI.toast("表示状態を更新しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "表示状態の更新に失敗しました。", "danger");
+    }
+  });
+
+  document.getElementById("liveChatGenerateImageButton").addEventListener("click", async () => {
+    try {
+      setImageLoading(true, "generate");
+      await NovelUI.api(`/api/v1/chat/sessions/${sessionId}/images/generate`, {
+        method: "POST",
+        body: {
+          size: imageForm.size.value,
+          quality: imageForm.quality.value,
+        },
+      });
+      await loadContext();
+      NovelUI.toast("画像を生成しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "画像生成に失敗しました。", "danger");
+    } finally {
+      setImageLoading(false);
+    }
+  });
+
+  regenerateImageButton.addEventListener("click", async () => {
+    try {
+      setImageLoading(true, "regenerate");
+      await NovelUI.api(`/api/v1/chat/sessions/${sessionId}/images/generate`, {
+        method: "POST",
+        body: {
+          prompt_text: imageForm.prompt_text.value,
+          use_existing_prompt: true,
+          size: imageForm.size.value,
+          quality: imageForm.quality.value,
+        },
+      });
+      await loadContext();
+      NovelUI.toast("プロンプトを元に画像を再生成しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "画像の再生成に失敗しました。", "danger");
+    } finally {
+      setImageLoading(false);
+    }
+  });
+
+  uploadForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const fileInput = document.getElementById("liveChatImageUploadInput");
+    if (!fileInput.files.length) {
+      NovelUI.toast("画像ファイルを選択してください。", "warning");
+      return;
+    }
+    const body = new FormData();
+    body.set("file", fileInput.files[0]);
+    body.set("prompt_text", imageForm.prompt_text.value);
+    body.set("size", imageForm.size.value);
+    body.set("quality", "external");
+    try {
+      const response = await fetch(`/api/v1/chat/sessions/${sessionId}/images/upload`, {
+        method: "POST",
+        credentials: "same-origin",
+        body,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.data?.message || payload?.message || `HTTP ${response.status}`);
+      }
+      fileInput.value = "";
+      await loadContext();
+      NovelUI.toast("画像をアップロードしました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "画像アップロードに失敗しました。", "danger");
+    }
+  });
+
+  imageGrid.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-image-id]");
+    if (!button) return;
+    try {
+      await NovelUI.api(`/api/v1/chat/sessions/${sessionId}/images/${button.dataset.imageId}/select`, { method: "POST", body: {} });
+      await loadContext();
+      NovelUI.toast("表示画像を切り替えました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "画像選択に失敗しました。", "danger");
+    }
+  });
+
+  messageList.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-delete-message-id]");
+    if (!button) return;
+    const messageId = Number(button.dataset.deleteMessageId);
+    if (!messageId) return;
+    if (!window.confirm("このログを削除しますか？")) return;
+    try {
+      await NovelUI.api(`/api/v1/chat/sessions/${sessionId}/messages/${messageId}`, {
+        method: "DELETE",
+      });
+      await loadContext();
+      NovelUI.toast("ログを削除しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "ログの削除に失敗しました。", "danger");
+    }
+  });
+
+  document.getElementById("liveChatRefreshContextButton").addEventListener("click", () => {
+    loadContext().catch((error) => {
+      NovelUI.toast(error.message || "再読み込みに失敗しました。", "danger");
+    });
+  });
+
+  document.getElementById("liveChatReloadImagesButton").addEventListener("click", () => {
+    loadContext().catch((error) => {
+      NovelUI.toast(error.message || "画像一覧の再読み込みに失敗しました。", "danger");
+    });
+  });
+
+  toggleMessagesButton.addEventListener("click", () => {
+    setMessagesVisible(!messagesVisible);
+  });
+
+  toggleTextboxButton.addEventListener("click", () => {
+    setTextboxVisible(!textboxVisible);
+  });
+
+  setMessagesVisible(false);
+  setTextboxVisible(true);
+
+  loadContext().catch((error) => {
+    NovelUI.toast(error.message || "ライブ会話画面の初期化に失敗しました。", "danger");
+  });
+
+  window.addEventListener("resize", () => {
+    if (currentContext) {
+      renderSelectedImage(currentContext.selected_image);
+      setMessagesVisible(messagesVisible);
+      setTextboxVisible(textboxVisible);
+    }
+  });
+})();
+</script>
+{% endblock %}

@@ -26,7 +26,7 @@ Main keys:
 ```text
 OPENAI_API_KEY=sk-...
 TEXT_AI_MODEL=gpt-5.4-mini
-IMAGE_AI_MODEL=gpt-image-1.5
+IMAGE_AI_MODEL=gpt-image-2
 DATABASE_URL=sqlite:///C:/Users/konishi/PycharmProjects/NovelCreatetor/instance/app.db
 STORAGE_ROOT=C:/Users/konishi/PycharmProjects/NovelCreatetor/storage
 ```

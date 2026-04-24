@@ -37,7 +37,7 @@ class ImageAIClient:
         return api_key
 
     def _resolve_model(self, model: Optional[str] = None) -> str:
-        return model or self._model or os.getenv("IMAGE_AI_MODEL") or "gpt-image-1.5"
+        return model or self._model or os.getenv("IMAGE_AI_MODEL") or "gpt-image-2"
 
     def _resolve_timeout(self) -> int:
         return int(os.getenv("IMAGE_AI_TIMEOUT_SECONDS", "60"))
@@ -199,13 +199,17 @@ class ImageAIClient:
         file_handles = []
         try:
             files = []
+            single_image = len(image_paths) == 1
             for image_path in image_paths:
                 mime_type = mimetypes.guess_type(image_path)[0] or "application/octet-stream"
                 file_handle = open(image_path, "rb")
                 file_handles.append(file_handle)
-                files.append(("image[]", (os.path.basename(image_path), file_handle, mime_type)))
+                field_name = "image" if single_image else "image[]"
+                files.append((field_name, (os.path.basename(image_path), file_handle, mime_type)))
 
             def send_request(request_data: dict[str, Any]):
+                for _, file_info in files:
+                    file_info[1].seek(0)
                 response = requests.post(
                     "https://api.openai.com/v1/images/edits",
                     headers={"Authorization": f"Bearer {self._get_api_key()}"},
@@ -221,7 +225,13 @@ class ImageAIClient:
             except requests.HTTPError as exc:
                 response = exc.response
                 message = self._extract_error_message(response, "image edit request failed")
-                if "Unknown parameter: 'input_fidelity'" in message and "input_fidelity" in data:
+                if (
+                    "input_fidelity" in data
+                    and (
+                        "Unknown parameter: 'input_fidelity'" in message
+                        or "does not support the 'input_fidelity' parameter" in message
+                    )
+                ):
                     fallback_data = dict(data)
                     fallback_data.pop("input_fidelity", None)
                     try:

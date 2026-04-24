@@ -1,4 +1,6 @@
 __all__ = [
+    "chat_message_repository",
+    "chat_session_repository",
     "project_repository",
     "world_repository",
     "character_repository",
@@ -11,6 +13,9 @@ __all__ = [
     "scene_choice_repository",
     "scene_version_repository",
     "scene_image_repository",
+    "session_character_repository",
+    "session_image_repository",
+    "session_state_repository",
     "ending_condition_repository",
     "export_job_repository",
     "usage_log_repository",

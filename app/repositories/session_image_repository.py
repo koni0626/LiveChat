@@ -1,0 +1,42 @@
+from ..utils import json_util
+from ..extensions import db
+from ..models.session_image import SessionImage
+
+
+class SessionImageRepository:
+    def list_by_session(self, session_id: int):
+        return (
+            SessionImage.query.filter(SessionImage.session_id == session_id)
+            .order_by(SessionImage.id.desc())
+            .all()
+        )
+
+    def get(self, session_image_id: int):
+        return SessionImage.query.get(session_image_id)
+
+    def create_for_session(self, session_id: int, payload: dict):
+        state_json = payload.get("state_json")
+        if isinstance(state_json, (dict, list)):
+            state_json = json_util.dumps(state_json)
+        row = SessionImage(
+            session_id=session_id,
+            asset_id=payload["asset_id"],
+            image_type=payload.get("image_type", "live_scene"),
+            prompt_text=payload.get("prompt_text"),
+            state_json=state_json,
+            quality=payload.get("quality"),
+            size=payload.get("size"),
+            is_selected=payload.get("is_selected", 0),
+        )
+        db.session.add(row)
+        db.session.commit()
+        return row
+
+    def select(self, session_image_id: int):
+        row = self.get(session_image_id)
+        if not row:
+            return None
+        SessionImage.query.filter(SessionImage.session_id == row.session_id).update({"is_selected": 0})
+        row.is_selected = 1
+        db.session.commit()
+        return row

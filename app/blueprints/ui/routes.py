@@ -15,6 +15,7 @@ def _project_nav(project_id: int | None):
         {"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)},
         {"label": "ストーリー骨子", "icon": "bi-diagram-3", "href": url_for("ui.story_outline_page", project_id=project_id)},
         {"label": "章一覧", "icon": "bi-list-ol", "href": url_for("ui.chapter_manage_page", project_id=project_id)},
+        {"label": "ライブ会話", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)},
         {"label": "シーン", "icon": "bi-film", "href": url_for("ui.scene_editor_page", project_id=project_id)},
         {"label": "エクスポート", "icon": "bi-box-arrow-up-right", "href": url_for("ui.export_page", project_id=project_id)},
     ]
@@ -108,6 +109,22 @@ def story_outline_page(project_id: int):
 @ui_bp.route("/projects/<int:project_id>/chapters/manage", methods=["GET"])
 def chapter_manage_page(project_id: int):
     return _render("ui/chapter_manage.html", title="章一覧・編集", screen_id="chapter-manage", project_id=project_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/live-chat", methods=["GET"])
+def live_chat_sessions_page(project_id: int):
+    return _render("ui/live_chat_sessions.html", title="ライブ会話", screen_id="live-chat-sessions", project_id=project_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/live-chat/<int:session_id>", methods=["GET"])
+def live_chat_page(project_id: int, session_id: int):
+    return _render(
+        "ui/live_chat.html",
+        title="ライブ会話",
+        screen_id="live-chat",
+        project_id=project_id,
+        session_id=session_id,
+    )
 
 
 @ui_bp.route("/projects/<int:project_id>/scenes", methods=["GET"])

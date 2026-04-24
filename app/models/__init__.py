@@ -1,6 +1,8 @@
 from ..extensions import db
 
 from .asset import Asset
+from .chat_message import ChatMessage
+from .chat_session import ChatSession
 from .chapter import Chapter
 from .character import Character
 from .character_image_rule import CharacterImageRule
@@ -15,6 +17,9 @@ from .scene_character import SceneCharacter
 from .scene_choice import SceneChoice
 from .scene_image import SceneImage
 from .scene_version import SceneVersion
+from .session_character import SessionCharacter
+from .session_image import SessionImage
+from .session_state import SessionState
 from .story_outline import StoryOutline
 from .story_memory import StoryMemory
 from .usage_log import UsageLog
@@ -25,6 +30,8 @@ from .world import World
 __all__ = [
     "db",
     "Asset",
+    "ChatMessage",
+    "ChatSession",
     "Chapter",
     "Character",
     "CharacterImageRule",
@@ -39,6 +46,9 @@ __all__ = [
     "SceneChoice",
     "SceneImage",
     "SceneVersion",
+    "SessionCharacter",
+    "SessionImage",
+    "SessionState",
     "StoryOutline",
     "StoryMemory",
     "UsageLog",

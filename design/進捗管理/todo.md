@@ -318,6 +318,102 @@
   - [x] `GET /scenes/<scene_id>/preview` を使ったノベルゲーム風 UI
   - [x] 次へ / 選択肢 / ログ表示
 - [x] エクスポート画面を作成する
+
+---
+
+## 10. ライブ会話モード移行TODO
+### 10-1. 仕様確定
+- [x] `design/ライブ会話モード仕様書.md` のたたき台を作成する
+- [x] `design/画面設計書/17_ライブ会話セッション一覧画面.md` を作成する
+- [x] `design/画面設計書/18_ライブ会話画面.md` を作成する
+- [x] `design/DB設計書差分_ライブ会話モード.md` を作成する
+- [x] `design/DB移行方針_ライブ会話モード.md` を作成する
+- [ ] 未決事項を整理して MVP 範囲を確定する
+  - [ ] 1対1会話限定で始めるか決める
+  - [ ] プレイヤー名を session 単位か project 単位か決める
+  - [ ] 画像更新を自動中心か手動中心か決める
+  - [ ] `session_image` を新設するか既存 `scene_image` を暫定流用するか決める
+
+### 10-2. DB / migration
+- [x] 2026-04-22: `chat_session` / `chat_message` / `session_state` / `session_character` / `session_image` 用の手動 SQL を `migrations/20260422_add_live_chat_mode_tables.sql` として追加
+- [ ] `chat_session` テーブルを追加する
+- [ ] `chat_message` テーブルを追加する
+- [ ] `session_state` テーブルを追加する
+- [ ] `session_character` テーブルを追加する
+- [ ] 必要なら `session_image` テーブルを追加する
+- [ ] migration ファイルを作成する
+- [ ] SQLite 実DBへ適用する
+
+### 10-3. Service / Repository 実装
+- [x] 2026-04-22: `chat_session_repository.py` / `chat_message_repository.py` / `session_state_repository.py` / `session_character_repository.py` / `session_image_repository.py` を追加
+- [x] 2026-04-22: `chat_session_service.py` / `chat_message_service.py` / `session_character_service.py` / `session_state_service.py` / `session_image_service.py` / `live_chat_service.py` を追加
+- [ ] `chat_session_repository.py` を追加する
+- [ ] `chat_message_repository.py` を追加する
+- [ ] `session_state_repository.py` を追加する
+- [ ] `session_character_repository.py` を追加する
+- [ ] `chat_session_service.py` を追加する
+- [ ] `chat_message_service.py` を追加する
+- [ ] `session_state_service.py` を追加する
+- [ ] `live_chat_service.py` を追加する
+
+### 10-4. API 実装
+- [x] 2026-04-22: `/api/v1/chat/sessions` 一式、`/messages`、`/state`、`/images`、`/images/upload`、`/images/<image_id>/select` を実装
+- [ ] `GET /api/v1/chat/sessions` を追加する
+- [ ] `POST /api/v1/chat/sessions` を追加する
+- [ ] `GET /api/v1/chat/sessions/<session_id>` を追加する
+- [ ] `PATCH /api/v1/chat/sessions/<session_id>` を追加する
+- [ ] `GET /api/v1/chat/sessions/<session_id>/messages` を追加する
+- [ ] `POST /api/v1/chat/sessions/<session_id>/messages` を追加する
+- [ ] `GET /api/v1/chat/sessions/<session_id>/state` を追加する
+- [ ] `POST /api/v1/chat/sessions/<session_id>/state/extract` を追加する
+- [ ] `POST /api/v1/chat/sessions/<session_id>/images/generate` を追加する
+- [ ] `POST /api/v1/chat/sessions/<session_id>/images/upload` を追加する
+- [ ] `POST /api/v1/chat/sessions/<session_id>/images/<image_id>/select` を追加する
+
+### 10-5. 会話生成フロー
+- [ ] ユーザー発話保存処理を実装する
+- [ ] 返答生成処理を実装する
+- [ ] 発話ごとに `story_memory` か `session_memory` を更新する
+- [ ] 会話履歴をもとにキャラ応答を生成する
+- [ ] 主人公名や会話相手名の制約を prompt に反映する
+
+### 10-6. 状態抽出 / 画像更新
+- [ ] 会話内容から `session_state` を抽出する
+- [ ] 背景 / 表情 / ポーズ / 時間帯 / カメラ を構造化する
+- [ ] 画像更新が必要かを判定するルールを実装する
+- [ ] 手動画像更新ボタンを実装する
+- [ ] 画像生成プロンプトを `会話の見せ場` ベースに最適化する
+- [ ] 基準画像を使った見た目固定を会話モードでも利用する
+
+### 10-7. UI 実装
+- [x] 2026-04-22: ライブ会話セッション一覧画面を追加
+- [x] 2026-04-22: ライブ会話画面を追加
+- [x] 2026-04-22: 会話履歴表示 UI と現在画像表示 UI を追加
+- [x] 2026-04-22: 画像候補一覧/採用 UI と手動画像アップロード UI を追加
+- [x] 2026-04-22: テキスト表示 ON/OFF UI をライブ会話画面に追加
+- [ ] ライブ会話セッション一覧画面を作成する
+- [ ] ライブ会話画面を作成する
+- [ ] セッション新規作成フォームを作成する
+- [ ] 会話履歴表示 UI を作成する
+- [ ] 現在画像表示 UI を作成する
+- [ ] 画像候補一覧と採用 UI を作成する
+- [ ] テキスト表示 ON/OFF UI を会話画面にも入れる
+- [ ] 手動画像アップロード UI を会話画面にも入れる
+
+### 10-8. 既存機能との共存
+- [x] 2026-04-22: `/projects/<project_id>/live-chat` と `/projects/<project_id>/live-chat/<session_id>` を追加
+- [x] 2026-04-22: サイドバーと上部アクションからライブ会話モードへ遷移できるようにした
+- [ ] `/projects/<project_id>/live-chat` など新ルートを追加する
+- [ ] 作品編集トップからライブ会話モードへ遷移できるようにする
+- [ ] 既存の `chapter / scene / story-outline` 依存を新モードから切り離す
+- [ ] 旧制作フローは凍結扱いにして、すぐ削除しない
+
+### 10-9. 確認項目
+- [ ] 新規 session 作成から会話開始まで通し確認する
+- [ ] キャラ基準画像が会話モードでも使えることを確認する
+- [ ] 会話に応じて背景やポーズが変わることを確認する
+- [ ] 手動アップロード画像を候補として選べることを確認する
+- [ ] 既存 project / character / asset を壊していないことを確認する
   - [x] 出力形式選択
   - [x] 実行 / 結果表示
 - [x] 設定画面を作成する
@@ -425,3 +521,23 @@
 - [ ] 主要 API の Happy Path テストが通る
 - [ ] 設計書と実装の差分が説明・反映されている
 - [ ] ローカルで一連の基本操作が確認できる
+---
+
+## 15. ライブ会話アルゴリズム再設計メモ
+
+### 15-1. v1 実装済み
+- [x] セッション開始時にキャラクター側から最初の一言を出す
+- [x] `scene_progression` を導入し、`scene_phase` / `location` / `background` / `focus_summary` / `next_topic` / `transition_occurred` を状態保存する
+- [x] 返信生成時に `scene_progression` を参照し、同じ案内や同じ提案を繰り返しにくくする
+- [x] 画像生成前に `visual_direction` を作り、会話から画像用の見せ場を切り出す
+- [x] `first_person` / `second_person` / `speech_style` / `speech_sample` を会話生成へ渡し、人称崩れを抑える
+
+### 15-2. v2 で追加するもの
+- [ ] `Conversation Director` を追加し、各ターンの `turn_intent` を先に決める
+- [ ] `Relationship / Emotion Update` を追加し、好感・興味・信頼・警戒などの変化を管理する
+- [ ] `Line Writer` を独立させ、Director と状態更新の結果だけを見てセリフを書く
+- [ ] `turn_intent` に `invite / tease / reveal / test / comfort / escalate` などの型を持たせる
+- [ ] キャラクターごとの欲望・会話方針・会話で取りたい主導権を別データとして持つ
+- [ ] 毎ターン `新情報 / 感情変化 / 関係変化 / 場面進行` のどれかが必ず起こるようにする
+- [ ] 直前数ターンとの重複検知を強め、同じ案内文や同じ相づちを抑制する
+- [ ] 画像生成にも Director の判断を渡し、会話・場面・画像の進行を同じ意図でそろえる
