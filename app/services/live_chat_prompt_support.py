@@ -36,10 +36,6 @@ def is_generic_transition_reply(text: str) -> bool:
     return text_prompt_support.is_generic_transition_reply(text)
 
 
-def build_progression_fallback_reply(context: dict, user_message_text: str) -> dict:
-    return text_prompt_support.build_progression_fallback_reply(context, user_message_text)
-
-
 def build_reply_prompt(context: dict, user_message_text: str) -> str:
     return text_prompt_support.build_reply_prompt(context, user_message_text)
 

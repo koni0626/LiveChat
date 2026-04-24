@@ -101,15 +101,6 @@
           </label>
         </div>
       </div>
-      <div class="live-chat-compose-progress" id="liveChatComposeProgress" hidden>
-        <div class="live-chat-compose-progress-head">
-          <span class="live-chat-compose-progress-title">生成AIが返答を考えています...</span>
-          <span class="live-chat-compose-progress-note">しばらくお待ちください</span>
-        </div>
-        <div class="live-chat-compose-progress-bar" aria-hidden="true">
-          <div class="live-chat-compose-progress-fill"></div>
-        </div>
-      </div>
     </form>
   </section>
 
@@ -184,6 +175,7 @@
   let messagesVisible = false;
   let textboxVisible = true;
   let imageLoading = false;
+  let replyLoading = false;
   let novelPageState = {
     messageId: null,
     pages: [],
@@ -226,13 +218,13 @@
   }
 
   function setReplyLoading(active) {
+    replyLoading = active;
     const loading = document.getElementById("liveChatReplyLoading");
-    const progress = document.getElementById("liveChatComposeProgress");
     if (loading) loading.hidden = !active;
-    if (progress) progress.hidden = !active || !textboxVisible;
     sendButton.disabled = active;
     if (composeInput) composeInput.disabled = active;
     sendButton.textContent = active ? "送信中..." : "送信";
+    renderNovelBox(currentContext?.messages || []);
   }
 
   function setImageLoading(active, mode = "generate") {
@@ -359,6 +351,20 @@
     const textElement = document.getElementById("liveChatNovelText");
     const cueElement = document.getElementById("liveChatNovelContinue");
     if (!speakerElement || !textElement) return;
+    if (replyLoading) {
+      const activeCharacter = (currentContext?.characters || [])[0] || {};
+      speakerElement.textContent = activeCharacter.name || item?.speaker_name || "";
+      textElement.innerHTML = `
+        <span class="live-chat-typing" aria-label="キャラクターが考え中">
+          <span class="live-chat-typing-dot"></span>
+          <span class="live-chat-typing-dot"></span>
+          <span class="live-chat-typing-dot"></span>
+        </span>
+      `;
+      novelPageState = { messageId: null, pages: [], pageIndex: 0 };
+      if (cueElement) cueElement.hidden = true;
+      return;
+    }
     if (!item) {
       speakerElement.textContent = "";
       textElement.textContent = "まだセリフがありません。";
@@ -445,7 +451,7 @@
     const isRomance = (evaluation?.theme || "general") === "romance";
     const score = Math.max(0, Math.min(100, Number(evaluation?.score || 0)));
     const evaluationMarkup = evaluation ? `
-      <div class="live-chat-eval-badge ${isRomance ? "is-romance" : ""}" id="liveChatEvalBadge" ${textboxVisible ? "" : "hidden"}>
+      <div class="live-chat-eval-badge ${isRomance ? "is-romance" : ""}" id="liveChatEvalBadge">
         <div class="live-chat-eval-label">${NovelUI.escape(evaluation.label || (isRomance ? "Love Progress" : "Progress"))}</div>
         <div class="live-chat-eval-score">${isRomance ? "Love " : ""}${score}</div>
         <div class="live-chat-eval-bar">
@@ -511,16 +517,8 @@
   function setTextboxVisible(visible) {
     textboxVisible = visible;
     const box = document.getElementById("liveChatNovelBox");
-    const evalBadge = document.getElementById("liveChatEvalBadge");
-    const composeProgress = document.getElementById("liveChatComposeProgress");
     if (box) {
       box.classList.toggle("is-hidden", !visible);
-    }
-    if (evalBadge) {
-      evalBadge.hidden = !visible;
-    }
-    if (composeProgress && !visible) {
-      composeProgress.hidden = true;
     }
     toggleTextboxButton.textContent = visible ? "テキストボックス非表示" : "テキストボックス表示";
   }

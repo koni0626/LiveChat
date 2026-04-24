@@ -65,9 +65,6 @@ def generate_reply(text_ai_client, context: dict, user_message_text: str) -> dic
         if not message_text:
             raise RuntimeError("reply message is empty")
         message_text = enforce_character_voice(context, speaker_name, message_text)
-        if prompt_support.is_affirmative_progress_message(user_message_text) and prompt_support.recent_transition_offer_exists(context):
-            if prompt_support.is_generic_transition_reply(message_text):
-                return prompt_support.build_progression_fallback_reply(context, user_message_text)
         return {"speaker_name": speaker_name, "message_text": message_text}
     except Exception:
         return prompt_support.fallback_reply(context, user_message_text)

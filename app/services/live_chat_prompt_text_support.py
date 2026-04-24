@@ -104,7 +104,7 @@ def is_affirmative_progress_message(text: str) -> bool:
 
 
 def recent_transition_offer_exists(context: dict) -> bool:
-    transition_keywords = ("行こう", "案内", "見てみよう", "連れて行", "見せよう", "向かおう", "行ってみよう")
+    transition_keywords = ("行こう", "見てみよう", "連れて行", "見せよう", "向かおう", "行ってみよう")
     for message in reversed(context["messages"][-4:]):
         if message.get("sender_type") != "character":
             continue
@@ -116,20 +116,8 @@ def recent_transition_offer_exists(context: dict) -> bool:
 
 def is_generic_transition_reply(text: str) -> bool:
     normalized = normalize_compare_text(text)
-    generic_keywords = ("行こう", "ゆっくり行こう", "連れて行く", "案内する", "急がなくていい", "見ていこう")
+    generic_keywords = ("行こう", "ゆっくり行こう", "連れて行く", "急がなくていい", "見ていこう")
     return len(normalized) <= 32 and any(keyword in text for keyword in generic_keywords)
-
-
-def build_progression_fallback_reply(context: dict, user_message_text: str) -> dict:
-    speaker = context["characters"][0]["name"] if context["characters"] else "案内役"
-    world_name = context["world"].get("name") or "この街"
-    if "クルーザー" in user_message_text:
-        message_text = "いいよ。あれがクルーザーだ。近くで見ると細かな造形が分かるはずだから、まずは岸壁から案内するね。"
-    elif "街" in user_message_text or "city" in user_message_text.lower():
-        message_text = f"いいよ。ここが{world_name}の入口だ。まずは景色を見ながら、雰囲気と見どころをひとつずつ話そう。"
-    else:
-        message_text = "じゃあ次に進もう。まずは目の前の景色から見ていこうか。気になるところがあれば、その場で止まって話そう。"
-    return {"speaker_name": speaker, "message_text": message_text}
 
 
 def build_reply_prompt(context: dict, user_message_text: str) -> str:
@@ -196,7 +184,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
 
 
 def fallback_reply(context: dict, user_message_text: str) -> dict:
-    speaker = context["characters"][0]["name"] if context["characters"] else "案内役"
+    speaker = context["characters"][0]["name"] if context["characters"] else "キャラクター"
     shortened = user_message_text[:40]
     return {
         "speaker_name": speaker,
