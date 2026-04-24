@@ -547,6 +547,27 @@
     applyContext(context);
   }
 
+  async function generateSessionImage(useExistingPrompt = false, mode = "generate") {
+    setImageLoading(true, mode);
+    try {
+      const body = {
+        size: imageForm.size.value,
+        quality: imageForm.quality.value,
+      };
+      if (useExistingPrompt) {
+        body.prompt_text = imageForm.prompt_text.value;
+        body.use_existing_prompt = true;
+      }
+      await NovelUI.api(`/api/v1/chat/sessions/${sessionId}/images/generate`, {
+        method: "POST",
+        body,
+      });
+      await loadContext();
+    } finally {
+      setImageLoading(false);
+    }
+  }
+
   sessionMetaForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -563,7 +584,8 @@
         },
       });
       applyContext(updated);
-      NovelUI.toast("セッション設定を保存しました。");
+      await generateSessionImage(false, "generate");
+      NovelUI.toast("セッション設定を保存し、画像を生成しました。");
     } catch (error) {
       NovelUI.toast(error.message || "セッション設定の保存に失敗しました。", "danger");
     }
