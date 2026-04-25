@@ -9,6 +9,9 @@
       composeInput,
       generateImageButton,
       regenerateImageButton,
+      imageLightbox,
+      imageLightboxImage,
+      imageLightboxClose,
       getMessageListElement,
       getNovelElements,
       onGiftInteractionChange,
@@ -141,6 +144,25 @@
       view.renderImageGrid(images, document.getElementById("liveChatImageGrid"));
     }
 
+    function openImageLightbox() {
+      if (!imageLightbox || !imageLightboxImage) return;
+      const stageImage = selectedImagePanel?.querySelector(".live-chat-stage-image");
+      const src = stageImage?.getAttribute("src");
+      if (!src) return;
+      imageLightboxImage.src = src;
+      imageLightbox.classList.remove("is-hidden");
+      imageLightbox.setAttribute("aria-hidden", "false");
+      document.body.classList.add("live-chat-lightbox-open");
+    }
+
+    function closeImageLightbox() {
+      if (!imageLightbox || !imageLightboxImage) return;
+      imageLightbox.classList.add("is-hidden");
+      imageLightbox.setAttribute("aria-hidden", "true");
+      imageLightboxImage.removeAttribute("src");
+      document.body.classList.remove("live-chat-lightbox-open");
+    }
+
     function advanceNovelPage() {
       const pages = state.novelPageState.pages || [];
       if (!state.textboxVisible || state.novelPageState.pageIndex >= pages.length - 1) {
@@ -158,6 +180,10 @@
 
     function bindNovelAdvanceEvents() {
       document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && imageLightbox && !imageLightbox.classList.contains("is-hidden")) {
+          closeImageLightbox();
+          return;
+        }
         if (event.key !== "Enter") return;
         const activeElement = document.activeElement;
         if (activeElement && ["TEXTAREA", "INPUT", "SELECT"].includes(activeElement.tagName)) {
@@ -173,6 +199,20 @@
         if (!novelBox) return;
         if (event.target.closest("button, a, input, textarea, select, label")) return;
         advanceNovelPage();
+      });
+    }
+
+    function bindImageLightboxEvents() {
+      selectedImagePanel?.addEventListener("click", (event) => {
+        const stageImage = event.target.closest(".live-chat-stage-image");
+        if (!stageImage) return;
+        openImageLightbox();
+      });
+      imageLightboxClose?.addEventListener("click", closeImageLightbox);
+      imageLightbox?.addEventListener("click", (event) => {
+        if (event.target === imageLightbox) {
+          closeImageLightbox();
+        }
       });
     }
 
@@ -195,6 +235,7 @@
       setTextboxVisible(true);
       bindToggleButtons();
       bindNovelAdvanceEvents();
+      bindImageLightboxEvents();
     }
 
     return {

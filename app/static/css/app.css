@@ -911,6 +911,56 @@ body::before {
   height: 100%;
   object-fit: cover;
   border-radius: inherit;
+  cursor: zoom-in;
+}
+
+.live-chat-image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: rgba(4, 10, 20, 0.82);
+  backdrop-filter: blur(10px);
+}
+
+.live-chat-image-lightbox.is-hidden {
+  display: none;
+}
+
+.live-chat-image-lightbox-image {
+  max-width: min(92vw, 1600px);
+  max-height: 88vh;
+  width: auto;
+  height: auto;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(84, 177, 255, 0.24);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.45),
+    0 0 28px rgba(0, 180, 255, 0.14);
+  object-fit: contain;
+  background: rgba(5, 12, 24, 0.96);
+}
+
+.live-chat-image-lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2.6rem;
+  height: 2.6rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(8, 17, 31, 0.92);
+  color: #e9f7ff;
+  font-size: 1.5rem;
+  line-height: 1;
+  box-shadow: 0 0 0 1px rgba(84, 177, 255, 0.2);
+}
+
+body.live-chat-lightbox-open {
+  overflow: hidden;
 }
 
 .live-chat-eval-badge {
