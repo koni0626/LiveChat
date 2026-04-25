@@ -4,7 +4,6 @@ from .asset import Asset
 from .chat_message import ChatMessage
 from .chat_session import ChatSession
 from .character import Character
-from .character_image_rule import CharacterImageRule
 from .ending_condition import EndingCondition
 from .glossary_term import GlossaryTerm
 from .project import Project
@@ -22,7 +21,6 @@ __all__ = [
     "ChatMessage",
     "ChatSession",
     "Character",
-    "CharacterImageRule",
     "EndingCondition",
     "GlossaryTerm",
     "Project",

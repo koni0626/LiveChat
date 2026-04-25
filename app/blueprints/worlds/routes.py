@@ -2,11 +2,9 @@ from flask import Blueprint, request
 
 from ...api import json_response, serialize_datetime
 from ..access import require_project_manage, require_project_view
-from ...services.glossary_service import GlossaryService
 
 
 worlds_bp = Blueprint("worlds", __name__)
-glossary_service = GlossaryService()
 
 
 def _load_json(value):
@@ -81,24 +79,6 @@ def get_world_context(project_id: int):
     from ...services.world_service import WorldService
 
     world = WorldService().get_world(project_id)
-    glossary_terms = glossary_service.list_terms(project_id)
-    categories = sorted({term.category for term in glossary_terms if term.category})
     return json_response(
-        {
-            **_serialize_world(world, project_id),
-            "glossary_terms": [
-                {
-                    "id": term.id,
-                    "term": term.term,
-                    "reading": term.reading,
-                    "description": term.description,
-                    "category": term.category,
-                }
-                for term in glossary_terms
-            ],
-            "glossary_meta": {
-                "count": len(glossary_terms),
-                "categories": categories,
-            },
-        }
+        _serialize_world(world, project_id)
     )

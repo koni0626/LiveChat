@@ -5,7 +5,7 @@
     <form class="row g-3 align-items-end" id="characterSearchForm">
       <div class="col-md-8">
         <label class="form-label" for="characterSearchInput">キャラクター検索</label>
-        <input class="form-control" id="characterSearchInput" name="search" placeholder="名前、役割、口調、見た目で検索">
+        <input class="form-control" id="characterSearchInput" name="search" placeholder="名前、あだ名、口調、見た目で検索">
       </div>
       <div class="col-md-4 d-flex gap-2">
         <button class="btn btn-dark w-100" type="submit">検索</button>
@@ -28,7 +28,7 @@
   const host = document.getElementById("characterGrid");
 
   function renderThumbnail(character) {
-    const mediaUrl = character.base_asset?.media_url;
+    const mediaUrl = character.thumbnail_asset?.media_url || character.base_asset?.media_url;
     if (mediaUrl) {
       return `<img class="character-thumb-image" src="${mediaUrl}" alt="${NovelUI.escape(character.name || "character")}">`;
     }
@@ -46,27 +46,24 @@
     const list = Array.isArray(data) ? data : [];
 
     if (!list.length) {
-      host.innerHTML = `<div class="empty-panel">キャラクターがまだいません。</div>`;
+      host.innerHTML = `<div class="empty-panel">キャラクターはまだありません。</div>`;
       return;
     }
 
     host.innerHTML = list.map((character) => `
-      <article class="project-card character-card">
+      <a class="project-card character-card" href="/projects/${projectId}/characters/${character.id}/edit">
         <div class="character-card-head">
           <div class="character-thumb">
             ${renderThumbnail(character)}
           </div>
           <div class="character-card-copy">
-            <div class="project-card-top">
-              <span class="badge text-bg-light">${NovelUI.escape(character.role || "role")}</span>
+            <div class="character-role-chip" title="${NovelUI.escape(character.nickname || "あだ名未設定")}">
+              ${NovelUI.escape(character.nickname || "あだ名未設定")}
             </div>
             <h4>${NovelUI.escape(character.name || "No Name")}</h4>
           </div>
         </div>
-        <div class="d-flex justify-content-end mt-3">
-          <a class="btn btn-sm btn-dark" href="/projects/${projectId}/characters/${character.id}/edit">編集</a>
-        </div>
-      </article>
+      </a>
     `).join("");
   }
 

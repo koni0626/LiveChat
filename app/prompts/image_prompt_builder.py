@@ -153,25 +153,24 @@ def _build_story_moment(scene: Any, scene_state: dict[str, Any], dialogue_items:
 
 def _build_character_segment(character: Any) -> str:
     name = _normalize_text(_read(character, "name"))
-    role = _normalize_text(_read(character, "role"))
+    nickname = _normalize_text(_read(character, "nickname"))
     appearance = _normalize_text(_read(character, "appearance_summary"))
     fragments = []
     if name:
         fragments.append(name)
-    if role:
-        fragments.append(role)
+    if nickname:
+        fragments.append(f"nickname: {nickname}")
     if appearance:
         fragments.append(appearance)
     return ", ".join(fragments)
 
 
-def _extract_style_profile(project: Any, world: Any, image_rule: Any) -> str:
+def _extract_style_profile(project: Any, world: Any) -> str:
     project_settings = _loads_jsonish(_read(project, "settings_json")) or {}
     candidates = [
         _read(project_settings, "art_style_profile"),
         _read(project_settings, "visual_style"),
         _read(project_settings, "image_style"),
-        _read(image_rule, "style_rule"),
         _read(world, "tone"),
     ]
     for value in candidates:
@@ -189,7 +188,6 @@ def build_image_prompt(context: dict) -> str:
     world = _read(context, "world", {})
     project = _read(context, "project", {})
     characters = list(_read(context, "characters", []) or [])
-    image_rule = _read(context, "image_rule", {}) or {}
     scene_state = _loads_jsonish(_read(context, "scene_state"))
     if scene_state is None:
         scene_state = _loads_jsonish(_read(scene, "scene_state_json")) or {}
@@ -205,8 +203,7 @@ def build_image_prompt(context: dict) -> str:
 
     parts.extend(STYLE_LOCK_SEGMENTS)
     parts.extend(SHOT_FOCUS_SEGMENTS)
-    _append(parts, _read(image_rule, "prompt_prefix"))
-    _append(parts, _extract_style_profile(project, world, image_rule))
+    _append(parts, _extract_style_profile(project, world))
     _append(parts, _build_story_moment(scene, scene_state, dialogue_items))
     if visual_character_names:
         _append(parts, f"focus characters: {', '.join(visual_character_names)}")
@@ -220,12 +217,6 @@ def build_image_prompt(context: dict) -> str:
             segment = _build_character_segment(character)
             if segment:
                 parts.append(segment)
-
-    _append(parts, _read(image_rule, "hair_rule"))
-    _append(parts, _read(image_rule, "face_rule"))
-    _append(parts, _read(image_rule, "ear_rule"))
-    _append(parts, _read(image_rule, "accessory_rule"))
-    _append(parts, _read(image_rule, "outfit_rule"))
 
     _append(parts, _read(scene_state, "character_expression"))
     _append(parts, _read(scene_state, "noa_expression"))
@@ -250,14 +241,6 @@ def build_image_prompt(context: dict) -> str:
     if not prompt:
         raise ValueError("insufficient context to build image prompt")
 
-    suffix = _normalize_text(_read(image_rule, "prompt_suffix"))
-    if suffix:
-        prompt = f"{prompt}, {suffix}"
-
-    negative_rule = _normalize_text(_read(image_rule, "negative_rule"))
-    if negative_rule:
-        prompt = f"{prompt}\n\nNegative prompt: {negative_rule}, group shot, crowd of characters, ensemble cast, unrelated extra characters"
-    else:
-        prompt = f"{prompt}\n\nNegative prompt: group shot, crowd of characters, ensemble cast, unrelated extra characters"
+    prompt = f"{prompt}\n\nNegative prompt: group shot, crowd of characters, ensemble cast, unrelated extra characters"
 
     return prompt

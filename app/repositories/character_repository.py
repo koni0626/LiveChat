@@ -99,7 +99,7 @@ def _memory_profile_from_payload(payload: dict, current_profile=None):
             profile[target[0]] = values
         else:
             profile[target[0]][target[1]] = values
-    if "favorite_items" in payload or "favorite_items_json" in payload or "favorite_items_text" in payload:
+    if "favorite_items" in payload or "favorite_items_json" in payload:
         touched = True
         likes = _normalize_favorite_items(payload, return_list=True)
         if likes is not None:
@@ -147,7 +147,7 @@ class CharacterRepository:
         character = Character(
             project_id=project_id,
             name=payload["name"],
-            role=payload.get("role"),
+            nickname=payload.get("nickname"),
             age_impression=payload.get("age_impression"),
             first_person=payload.get("first_person"),
             second_person=payload.get("second_person"),
@@ -160,7 +160,7 @@ class CharacterRepository:
             favorite_items_json=_normalize_favorite_items(payload),
             memory_profile_json=_memory_profile_from_payload(payload, DEFAULT_MEMORY_PROFILE),
             base_asset_id=payload.get("base_asset_id"),
-            is_guide=payload.get("is_guide", 0),
+            thumbnail_asset_id=payload.get("thumbnail_asset_id"),
         )
         db.session.add(character)
         db.session.commit()
@@ -172,7 +172,7 @@ class CharacterRepository:
             return None
         for field in (
             "name",
-            "role",
+            "nickname",
             "age_impression",
             "first_person",
             "second_person",
@@ -183,7 +183,7 @@ class CharacterRepository:
             "appearance_summary",
             "memory_notes",
             "base_asset_id",
-            "is_guide",
+            "thumbnail_asset_id",
         ):
             if field in payload:
                 setattr(character, field, payload[field])

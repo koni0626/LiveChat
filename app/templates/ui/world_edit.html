@@ -1,60 +1,260 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="editor-grid">
+<section class="page-grid world-editor">
   <section class="panel-card">
-    <div class="panel-head"><h3>世界観設定</h3></div>
+    <div class="panel-head">
+      <div>
+        <h3>世界観設定</h3>
+        <p class="section-copy mb-0">各項目の「編集」からMarkdownエディタを開いて入力します。</p>
+      </div>
+    </div>
     <form id="worldForm" class="vstack gap-3">
       <div class="row g-3">
-        <div class="col-md-6"><label class="form-label">世界名</label><input class="form-control" name="world_name"></div>
-        <div class="col-md-6"><label class="form-label">世界のトーン</label><input class="form-control" name="world_tone"></div>
+        <div class="col-md-6">
+          <label class="form-label">世界名</label>
+          <input class="form-control" name="world_name">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">世界のトーン</label>
+          <input class="form-control" name="world_tone" placeholder="例: サイバーネオン、退廃的、幻想的">
+        </div>
       </div>
-      <label class="form-label">時代背景</label><textarea class="form-control" name="time_period" rows="3"></textarea>
-      <label class="form-label">場所説明</label><textarea class="form-control" name="place_description" rows="4"></textarea>
-      <div class="row g-3">
-        <div class="col-md-6"><label class="form-label">技術水準</label><textarea class="form-control" name="technology_level" rows="3"></textarea></div>
-        <div class="col-md-6"><label class="form-label">社会構造</label><textarea class="form-control" name="social_structure" rows="3"></textarea></div>
-      </div>
-      <label class="form-label">重要施設 / ルール</label><textarea class="form-control font-mono-sm" name="important_facilities" rows="4"></textarea>
-      <label class="form-label">禁止設定</label><textarea class="form-control font-mono-sm" name="forbidden_settings" rows="4"></textarea>
+
+      <div class="world-markdown-grid" id="worldMarkdownGrid"></div>
+
+      <textarea class="d-none" name="time_period"></textarea>
+      <textarea class="d-none" name="place_description"></textarea>
+      <textarea class="d-none" name="technology_level"></textarea>
+      <textarea class="d-none" name="social_structure"></textarea>
+      <textarea class="d-none" name="important_facilities"></textarea>
+      <textarea class="d-none" name="forbidden_settings"></textarea>
+
       <div class="d-flex gap-2 justify-content-end">
         <button class="btn btn-outline-dark" type="button" id="worldAiSummary">AI要約生成</button>
         <button class="btn btn-sunrise" type="submit">保存</button>
       </div>
     </form>
   </section>
-  <section class="panel-card">
-    <div class="panel-head"><h3>固有名詞辞書</h3></div>
-    <form id="glossaryQuickForm" class="row g-2 mb-3">
-      <div class="col-md-4"><input class="form-control" name="term" placeholder="用語"></div>
-      <div class="col-md-4"><input class="form-control" name="category" placeholder="カテゴリ"></div>
-      <div class="col-md-4 d-grid"><button class="btn btn-dark" type="submit">追加</button></div>
-    </form>
-    <div class="list-stack" id="worldGlossaryList"></div>
-  </section>
 </section>
+
+<div class="modal fade" id="markdownEditorModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content markdown-modal">
+      <div class="modal-header">
+        <div>
+          <div class="eyebrow">Markdown Editor</div>
+          <h5 class="modal-title" id="markdownEditorTitle">Markdown編集</h5>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="markdown-modal-grid">
+          <div>
+            <label class="form-label" for="markdownEditorTextarea">入力</label>
+            <textarea class="form-control markdown-modal-input" id="markdownEditorTextarea" rows="20"></textarea>
+            <p class="text-muted small mt-2 mb-0">使える記法: # 見出し / ## 小見出し / - 箇条書き / **太字** / &gt; 引用</p>
+          </div>
+          <div>
+            <label class="form-label">プレビュー</label>
+            <div class="markdown-preview markdown-modal-preview" id="markdownEditorPreview"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-sunrise" id="markdownEditorApply">反映する</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
 (() => {
   const projectId = Number({{ project_id }});
   const worldForm = document.getElementById("worldForm");
-  const glossaryQuickForm = document.getElementById("glossaryQuickForm");
-  const glossaryList = document.getElementById("worldGlossaryList");
+  const markdownGrid = document.getElementById("worldMarkdownGrid");
+  const modalElement = document.getElementById("markdownEditorModal");
+  document.body.appendChild(modalElement);
+  const modal = new bootstrap.Modal(modalElement);
+  const modalTitle = document.getElementById("markdownEditorTitle");
+  const modalTextarea = document.getElementById("markdownEditorTextarea");
+  const modalPreview = document.getElementById("markdownEditorPreview");
+  const modalApplyButton = document.getElementById("markdownEditorApply");
+  let editingFieldName = "";
+
+  const markdownFields = [
+    {
+      name: "time_period",
+      label: "時代背景",
+      hint: "いつの時代か、何が起きているか",
+      placeholder: "## 時代\n- いつの時代か\n- 何が起きているか",
+    },
+    {
+      name: "place_description",
+      label: "場所説明",
+      hint: "主要エリア、街並み、生活空間、危険な場所",
+      placeholder: "## 主要エリア\n- 街並み\n- 生活空間\n- 危険な場所",
+    },
+    {
+      name: "technology_level",
+      label: "技術水準",
+      hint: "AI、交通、医療、通信など",
+      placeholder: "- AI\n- 交通\n- 医療\n- 通信",
+    },
+    {
+      name: "social_structure",
+      label: "社会構造",
+      hint: "階層、権力者、市民生活、経済など",
+      placeholder: "- 階層\n- 権力者\n- 市民生活\n- 経済",
+    },
+    {
+      name: "important_facilities",
+      label: "重要施設 / ルール",
+      hint: "重要施設と、この世界で守られるルール",
+      placeholder: "## 重要施設\n- 施設名: 役割\n\n## ルール\n- この世界で必ず守られること",
+    },
+    {
+      name: "forbidden_settings",
+      label: "禁止設定",
+      hint: "出してはいけない設定、矛盾させたくない設定",
+      placeholder: "- 出してはいけない設定\n- 矛盾させたくない設定\n- キャラクターに言わせたくないこと",
+    },
+  ];
+
+  function escapeHtml(value) {
+    return NovelUI.escape(value ?? "");
+  }
+
+  function renderInlineMarkdown(text) {
+    return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  }
+
+  function markdownToHtml(markdown) {
+    const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+    const html = [];
+    let inList = false;
+
+    function closeList() {
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+    }
+
+    for (const rawLine of lines) {
+      const line = rawLine.trimEnd();
+      const trimmed = line.trim();
+      if (!trimmed) {
+        closeList();
+        continue;
+      }
+      if (trimmed.startsWith("## ")) {
+        closeList();
+        html.push(`<h5>${renderInlineMarkdown(trimmed.slice(3))}</h5>`);
+        continue;
+      }
+      if (trimmed.startsWith("# ")) {
+        closeList();
+        html.push(`<h4>${renderInlineMarkdown(trimmed.slice(2))}</h4>`);
+        continue;
+      }
+      if (trimmed.startsWith("> ")) {
+        closeList();
+        html.push(`<blockquote>${renderInlineMarkdown(trimmed.slice(2))}</blockquote>`);
+        continue;
+      }
+      if (trimmed.startsWith("- ")) {
+        if (!inList) {
+          html.push("<ul>");
+          inList = true;
+        }
+        html.push(`<li>${renderInlineMarkdown(trimmed.slice(2))}</li>`);
+        continue;
+      }
+      closeList();
+      html.push(`<p>${renderInlineMarkdown(trimmed)}</p>`);
+    }
+    closeList();
+    return html.join("") || `<p class="text-muted mb-0">まだ入力されていません。</p>`;
+  }
+
+  function fieldInput(name) {
+    return worldForm.querySelector(`[name="${name}"]`);
+  }
+
+  function plainPreview(value) {
+    const text = String(value || "").replace(/[#>*`_-]/g, "").replace(/\s+/g, " ").trim();
+    return text ? text.slice(0, 140) + (text.length > 140 ? "..." : "") : "まだ入力されていません。";
+  }
+
+  function renderMarkdownCards() {
+    markdownGrid.innerHTML = markdownFields.map((field) => {
+      const value = fieldInput(field.name)?.value || "";
+      return `
+        <article class="markdown-summary-card" data-markdown-card="${field.name}">
+          <div class="markdown-summary-head">
+            <div>
+              <h4>${NovelUI.escape(field.label)}</h4>
+              <p>${NovelUI.escape(field.hint)}</p>
+            </div>
+            <button class="btn btn-sm btn-outline-light" type="button" data-edit-markdown="${field.name}">
+              <i class="bi bi-pencil-square"></i>
+              <span>編集</span>
+            </button>
+          </div>
+          <div class="markdown-summary-body">${NovelUI.escape(plainPreview(value))}</div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  function openMarkdownEditor(fieldName) {
+    const field = markdownFields.find((item) => item.name === fieldName);
+    const input = fieldInput(fieldName);
+    if (!field || !input) {
+      return;
+    }
+    editingFieldName = fieldName;
+    modalTitle.textContent = field.label;
+    modalTextarea.placeholder = field.placeholder;
+    modalTextarea.value = input.value || "";
+    modalPreview.innerHTML = markdownToHtml(modalTextarea.value);
+    modal.show();
+    setTimeout(() => modalTextarea.focus(), 180);
+  }
+
+  function applyMarkdownEditor() {
+    const input = fieldInput(editingFieldName);
+    if (!input) {
+      return;
+    }
+    input.value = modalTextarea.value;
+    renderMarkdownCards();
+    modal.hide();
+  }
 
   async function loadWorldContext() {
     const payload = await NovelUI.api(`/api/v1/projects/${projectId}/world-context`);
-    if (payload.world?.ui_fields) NovelUI.fillForm(worldForm, payload.world.ui_fields);
-    const terms = payload.glossary_terms || [];
-    glossaryList.innerHTML = terms.length ? terms.map((term) => `
-      <div class="list-row">
-        <div>
-          <div class="list-title">${NovelUI.escape(term.term)}</div>
-          <div class="list-subtitle">${NovelUI.escape(term.description || term.category || "")}</div>
-        </div>
-        <span class="soft-code">${NovelUI.escape(term.category || "term")}</span>
-      </div>
-    `).join("") : `<div class="empty-panel">用語辞書はまだ空です。</div>`;
+    if (payload.world?.ui_fields) {
+      NovelUI.fillForm(worldForm, payload.world.ui_fields);
+    }
+    renderMarkdownCards();
   }
+
+  markdownGrid.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-edit-markdown]");
+    if (!button) {
+      return;
+    }
+    openMarkdownEditor(button.dataset.editMarkdown);
+  });
+
+  modalTextarea.addEventListener("input", () => {
+    modalPreview.innerHTML = markdownToHtml(modalTextarea.value);
+  });
+
+  modalApplyButton.addEventListener("click", applyMarkdownEditor);
 
   worldForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -68,25 +268,12 @@
     }
   });
 
-  glossaryQuickForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const body = Object.fromEntries(new FormData(glossaryQuickForm).entries());
-    if (!body.term) return;
-    try {
-      await NovelUI.api(`/api/v1/projects/${projectId}/glossary`, { method: "POST", body });
-      glossaryQuickForm.reset();
-      loadWorldContext();
-      NovelUI.toast("用語を追加しました。");
-    } catch (error) {
-      NovelUI.toast(error.message || "用語追加に失敗しました。", "danger");
-    }
-  });
-
   document.getElementById("worldAiSummary").addEventListener("click", () => {
-    NovelUI.toast("AI要約生成は GPT 実接続タスクで有効化します。", "warning");
+    NovelUI.toast("AI要約生成は次の実装タスクで接続します。", "warning");
   });
 
-  loadWorldContext().catch((error) => NovelUI.toast(error.message || "読込に失敗しました。", "danger"));
+  renderMarkdownCards();
+  loadWorldContext().catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
 })();
 </script>
 {% endblock %}

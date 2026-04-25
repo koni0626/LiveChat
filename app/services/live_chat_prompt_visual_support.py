@@ -92,8 +92,9 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
         "登場キャラクター:",
     ]
     for character in active[:20]:
-        role = character.get("role") or "キャラクター"
-        lines.append(f"- {character['name']} ({role})")
+        nickname = character.get("nickname")
+        label = f"{character['name']} / あだ名: {nickname}" if nickname else character["name"]
+        lines.append(f"- {label}")
     lines.extend(
         [
             "",

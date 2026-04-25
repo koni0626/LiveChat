@@ -5,7 +5,6 @@ __all__ = [
     "project_service",
     "world_service",
     "character_service",
-    "character_image_rule_service",
     "live_chat_service",
     "live_chat_text_support",
     "live_chat_image_support",

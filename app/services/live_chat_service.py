@@ -102,7 +102,7 @@ class LiveChatService:
         return {
             "id": character.id,
             "name": character.name,
-            "role": character.role,
+            "nickname": character.nickname,
             "first_person": character.first_person,
             "second_person": character.second_person,
             "personality": character.personality,
@@ -113,7 +113,6 @@ class LiveChatService:
             "memory_notes": getattr(character, "memory_notes", None),
             "favorite_items": self._load_json(getattr(character, "favorite_items_json", None)) or [],
             "memory_profile": memory_profile,
-            "is_guide": bool(character.is_guide),
             "base_asset": self._serialize_asset(base_asset),
         }
 
@@ -418,7 +417,7 @@ class LiveChatService:
             "If the gift is clothing, accessory, plush toy, bouquet, or something the character would immediately use, prefer true.",
             "If the gift is a book, snack, small item, or something not visually dramatic right now, prefer false unless the reaction is very strong.",
             f"Character: {character.get('name') or 'character'}",
-            f"Role: {character.get('role') or ''}",
+            f"Nickname: {character.get('nickname') or ''}",
             f"Personality: {character.get('personality') or ''}",
             f"Gift label: {recognized_label}",
             f"Gift tags: {', '.join(recognized_tags or [])}",

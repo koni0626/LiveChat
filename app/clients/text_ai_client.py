@@ -144,7 +144,7 @@ class TextAIClient:
     ) -> dict[str, Any]:
         if not file_path or not os.path.exists(file_path):
             raise ValueError("file_path is required")
-        resolved_model = self._resolve_model(model)
+        resolved_model = self._resolve_vision_model(model)
         user_prompt = self._normalize_prompt(
             prompt
             or (

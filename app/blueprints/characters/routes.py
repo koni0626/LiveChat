@@ -3,7 +3,6 @@ from flask import Blueprint, request
 from ...api import ForbiddenError, NotFoundError, json_response
 from ..access import require_project_manage, require_project_view
 from ...services.asset_service import AssetService
-from ...services.character_image_rule_service import CharacterImageRuleService
 from ...services.character_service import CharacterService
 from ...utils import json_util
 import os
@@ -11,7 +10,6 @@ from flask import current_app
 
 characters_bp = Blueprint("characters", __name__)
 character_service = CharacterService()
-character_image_rule_service = CharacterImageRuleService()
 asset_service = AssetService()
 def _get_bool_query(name: str, default: bool = False) -> bool:
     value = request.args.get(name)
@@ -50,7 +48,7 @@ def _build_media_url(file_path: str | None):
     return f"/media/{relative}"
 
 
-def _serialize_character(character, *, include_image_rule_summary: bool = False):
+def _serialize_character(character):
     if character is None:
         return None
     try:
@@ -68,14 +66,11 @@ def _serialize_character(character, *, include_image_rule_summary: bool = False)
     romance = memory_profile.get("romance_preferences") or {}
     if not isinstance(romance, dict):
         romance = {}
-    image_rule = None
-    if include_image_rule_summary:
-        image_rule = character_image_rule_service.get_image_rule(character.id)
     return {
         "id": character.id,
         "project_id": character.project_id,
         "name": character.name,
-        "role": character.role,
+        "nickname": character.nickname,
         "age_impression": character.age_impression,
         "first_person": character.first_person,
         "second_person": character.second_person,
@@ -99,46 +94,11 @@ def _serialize_character(character, *, include_image_rule_summary: bool = False)
         "romance_boundaries_text": "\n".join(romance.get("boundaries") or []),
         "base_asset_id": character.base_asset_id,
         "base_asset": _serialize_asset_summary(character.base_asset_id),
-        "is_guide": bool(character.is_guide),
-        "has_image_rule": image_rule is not None,
-        "image_rule_summary": (
-            {
-                "default_quality": image_rule.default_quality,
-                "default_size": image_rule.default_size,
-                "prompt_prefix": image_rule.prompt_prefix,
-                "prompt_suffix": image_rule.prompt_suffix,
-            }
-            if image_rule is not None
-            else None
-        ),
+        "thumbnail_asset_id": character.thumbnail_asset_id,
+        "thumbnail_asset": _serialize_asset_summary(character.thumbnail_asset_id),
         "created_at": character.created_at.isoformat() if getattr(character, "created_at", None) else None,
         "updated_at": character.updated_at.isoformat() if getattr(character, "updated_at", None) else None,
         "deleted_at": character.deleted_at.isoformat() if getattr(character, "deleted_at", None) else None,
-    }
-
-
-def _serialize_image_rule(image_rule, character_id: int):
-    if image_rule is None:
-        return {"character_id": character_id, "image_rule": None}
-    return {
-        "character_id": character_id,
-        "image_rule": {
-            "id": image_rule.id,
-            "character_id": image_rule.character_id,
-            "hair_rule": image_rule.hair_rule,
-            "face_rule": image_rule.face_rule,
-            "ear_rule": image_rule.ear_rule,
-            "accessory_rule": image_rule.accessory_rule,
-            "outfit_rule": image_rule.outfit_rule,
-            "style_rule": image_rule.style_rule,
-            "negative_rule": image_rule.negative_rule,
-            "default_quality": image_rule.default_quality,
-            "default_size": image_rule.default_size,
-            "prompt_prefix": image_rule.prompt_prefix,
-            "prompt_suffix": image_rule.prompt_suffix,
-            "created_at": image_rule.created_at.isoformat() if getattr(image_rule, "created_at", None) else None,
-            "updated_at": image_rule.updated_at.isoformat() if getattr(image_rule, "updated_at", None) else None,
-        },
     }
 
 
@@ -154,11 +114,11 @@ def list_characters(project_id: int):
             character
             for character in characters
             if keyword in (character.name or "").lower()
-            or keyword in (character.role or "").lower()
+            or keyword in (character.nickname or "").lower()
             or keyword in (character.speech_style or "").lower()
             or keyword in (character.appearance_summary or "").lower()
         ]
-    data = [_serialize_character(character, include_image_rule_summary=True) for character in characters]
+    data = [_serialize_character(character) for character in characters]
     meta = {"project_id": project_id, "count": len(data)}
     if search:
         meta["search"] = search
@@ -173,7 +133,7 @@ def create_character(project_id: int):
         character = character_service.create_character(project_id, payload)
     except (KeyError, ValueError) as exc:
         return json_response({"message": str(exc)}, status=400)
-    return json_response(_serialize_character(character, include_image_rule_summary=True), status=201)
+    return json_response(_serialize_character(character), status=201)
 
 
 @characters_bp.route("/characters/<int:character_id>", methods=["GET"])
@@ -183,7 +143,7 @@ def get_character(character_id: int):
     if not character:
         raise NotFoundError()
     require_project_view(character.project_id)
-    return json_response(_serialize_character(character, include_image_rule_summary=True))
+    return json_response(_serialize_character(character))
 
 
 @characters_bp.route("/characters/<int:character_id>", methods=["PATCH"])
@@ -199,7 +159,25 @@ def update_character(character_id: int):
         return json_response({"message": str(exc)}, status=400)
     if not character:
         return json_response({"message": "not_found"}, status=404)
-    return json_response(_serialize_character(character, include_image_rule_summary=True))
+    return json_response(_serialize_character(character))
+
+
+@characters_bp.route("/characters/<int:character_id>/base-image/generate", methods=["POST"])
+def generate_character_base_image(character_id: int):
+    payload = request.get_json(silent=True) or {}
+    existing = character_service.get_character(character_id)
+    if not existing:
+        raise NotFoundError()
+    require_project_manage(existing.project_id)
+    try:
+        character = character_service.generate_base_image(character_id, payload)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    if not character:
+        return json_response({"message": "not_found"}, status=404)
+    return json_response(_serialize_character(character))
 
 
 @characters_bp.route("/characters/<int:character_id>", methods=["DELETE"])
@@ -212,29 +190,3 @@ def delete_character(character_id: int):
     if not deleted:
         return json_response({"message": "not_found"}, status=404)
     return json_response({"character_id": character_id, "deleted": True})
-
-
-@characters_bp.route("/characters/<int:character_id>/image-rule", methods=["GET"])
-def get_image_rule(character_id: int):
-    character = character_service.get_character(character_id)
-    if not character:
-        raise NotFoundError()
-    require_project_view(character.project_id)
-    image_rule = character_image_rule_service.get_image_rule(character_id)
-    return json_response(_serialize_image_rule(image_rule, character_id))
-
-
-@characters_bp.route("/characters/<int:character_id>/image-rule", methods=["PUT"])
-def put_image_rule(character_id: int):
-    payload = request.get_json(silent=True) or {}
-    character = character_service.get_character(character_id)
-    if not character:
-        raise NotFoundError()
-    require_project_manage(character.project_id)
-    try:
-        image_rule = character_image_rule_service.upsert_image_rule(character_id, payload)
-    except ValueError as exc:
-        return json_response({"message": str(exc)}, status=400)
-    if not image_rule:
-        return json_response({"message": "not_found"}, status=404)
-    return json_response(_serialize_image_rule(image_rule, character_id))

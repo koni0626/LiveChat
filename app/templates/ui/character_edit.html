@@ -2,48 +2,104 @@
 {% block content %}
 <section class="editor-grid" data-character-id="{{ character_id or '' }}">
   <section class="panel-card">
-    <div class="panel-head"><h3>基本情報</h3></div>
+    <div class="panel-head">
+      <div>
+        <h3>基本情報</h3>
+        <p class="section-copy mb-0">長文項目はカードの「編集」からMarkdownで入力します。</p>
+      </div>
+    </div>
     <form id="characterForm" class="vstack gap-3">
       <input type="hidden" name="base_asset_id">
       <div class="row g-3">
-        <div class="col-md-8"><label class="form-label">名前</label><input class="form-control" name="name" required></div>
-        <div class="col-md-4"><label class="form-label">役割</label><input class="form-control" name="role"></div>
-        <div class="col-md-4"><label class="form-label">年齢感</label><input class="form-control" name="age_impression"></div>
-        <div class="col-md-4"><label class="form-label">一人称</label><input class="form-control" name="first_person"></div>
-        <div class="col-md-4"><label class="form-label">二人称</label><input class="form-control" name="second_person"></div>
+        <div class="col-md-8">
+          <label class="form-label">名前</label>
+          <input class="form-control" name="name" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">あだ名</label>
+          <input class="form-control" name="nickname" placeholder="例: ラプ、ノア、姫様">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">年齢感</label>
+          <input class="form-control" name="age_impression" placeholder="例: 20代前半、大人っぽい少女">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">自分の呼び方</label>
+          <input class="form-control" name="first_person" placeholder="例: 私、わたくし、ウチ、僕">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">相手の呼び方</label>
+          <input class="form-control" name="second_person" placeholder="例: あなた、君、ご主人様、先輩">
+        </div>
       </div>
-      <label class="form-label">外見要約</label><textarea class="form-control" name="appearance_summary" rows="4"></textarea>
-      <label class="form-label">性格</label><textarea class="form-control" name="personality" rows="4"></textarea>
-      <label class="form-label">好きなものメモ</label><textarea class="form-control" name="favorite_items_text" rows="3" placeholder="例: 辛いもの&#10;ガラス細工&#10;夜景"></textarea>
-      <label class="form-label">好きなもの</label><textarea class="form-control" name="likes_text" rows="3" placeholder="会話で分かった好みを保存"></textarea>
-      <label class="form-label">嫌いなもの</label><textarea class="form-control" name="dislikes_text" rows="3" placeholder="避けたい話題や苦手なもの"></textarea>
-      <label class="form-label">趣味</label><textarea class="form-control" name="hobbies_text" rows="3" placeholder="例: 読書&#10;散歩&#10;機械いじり"></textarea>
-      <label class="form-label">地雷・苦手な話題</label><textarea class="form-control" name="taboos_text" rows="3" placeholder="触れられたくないこと、嫌がる話題"></textarea>
-      <label class="form-label">恋愛: 好きな距離の詰め方</label><textarea class="form-control" name="romance_favorite_approach_text" rows="3" placeholder="例: 自然に近づく&#10;優しく気遣う"></textarea>
-      <label class="form-label">恋愛: 苦手な距離の詰め方</label><textarea class="form-control" name="romance_avoid_approach_text" rows="3" placeholder="例: 命令口調&#10;馴れ馴れしすぎる接し方"></textarea>
-      <label class="form-label">恋愛: 刺さるポイント</label><textarea class="form-control" name="romance_attraction_points_text" rows="3" placeholder="例: 知的な会話&#10;余裕のある態度"></textarea>
-      <label class="form-label">恋愛: 境界線</label><textarea class="form-control" name="romance_boundaries_text" rows="3" placeholder="例: 初対面で重すぎる告白は苦手"></textarea>
-      <label class="form-label">印象イベント</label><textarea class="form-control" name="memorable_events_text" rows="3" placeholder="印象に残った出来事や覚えていること"></textarea>
-      <label class="form-label">会話メモ</label><textarea class="form-control" name="memory_notes" rows="4" placeholder="会話から分かった好みや、覚えておきたい発言を保存します"></textarea>
-      <label class="form-label">話し方</label><textarea class="form-control" name="speech_style" rows="4"></textarea>
-      <label class="form-label">セリフサンプル</label><textarea class="form-control" name="speech_sample" rows="3"></textarea>
-      <label class="form-label">NGルール</label><textarea class="form-control" name="ng_rules" rows="3"></textarea>
-      <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" name="is_guide" value="1" id="isGuideSwitch">
-        <label class="form-check-label" for="isGuideSwitch">案内役キャラクターとして扱う</label>
-      </div>
+
+      <div class="world-markdown-grid character-markdown-grid" id="characterMarkdownGrid"></div>
+
+      <textarea class="d-none" name="appearance_summary"></textarea>
+      <textarea class="d-none" name="personality"></textarea>
+      <textarea class="d-none" name="favorite_items_text"></textarea>
+      <textarea class="d-none" name="likes_text"></textarea>
+      <textarea class="d-none" name="dislikes_text"></textarea>
+      <textarea class="d-none" name="hobbies_text"></textarea>
+      <textarea class="d-none" name="taboos_text"></textarea>
+      <textarea class="d-none" name="romance_favorite_approach_text"></textarea>
+      <textarea class="d-none" name="romance_avoid_approach_text"></textarea>
+      <textarea class="d-none" name="romance_attraction_points_text"></textarea>
+      <textarea class="d-none" name="romance_boundaries_text"></textarea>
+      <textarea class="d-none" name="memorable_events_text"></textarea>
+      <textarea class="d-none" name="memory_notes"></textarea>
+      <textarea class="d-none" name="speech_style"></textarea>
+      <textarea class="d-none" name="speech_sample"></textarea>
+      <textarea class="d-none" name="ng_rules"></textarea>
+
       <div class="d-flex gap-2 justify-content-end">
-        <button class="btn btn-outline-dark" type="button" id="characterAiAssist">AI補完</button>
+        <button class="btn btn-outline-light" type="button" id="characterAiAssist">AI補完</button>
         <button class="btn btn-sunrise" type="submit">保存</button>
       </div>
     </form>
   </section>
 
   <section class="panel-card">
-    <div class="panel-head"><h3>基準画像</h3></div>
+    <div class="panel-head">
+      <div>
+        <h3>基準画像</h3>
+        <p class="section-copy mb-0">アップロード、または基本情報から全身像を生成できます。</p>
+      </div>
+    </div>
     <div class="vstack gap-3">
-        <div class="small text-secondary">作成した画像をアップロードして、ライブチャットの画像生成時に reference image として使います。</div>
-      <div id="baseAssetPreview" class="empty-panel">基準画像はまだ登録されていません。</div>
+      <div id="baseAssetPreview"></div>
+
+      <form id="baseAssetGenerateForm" class="vstack gap-3">
+        <div>
+          <label class="form-label">画風</label>
+          <textarea class="form-control" name="art_style" rows="4" placeholder="例: 透明感のある近未来アニメ調。繊細な線画、柔らかい光、ラプラスシティのネオン感。"></textarea>
+          <div class="form-text text-secondary">未入力の場合は、ビジュアルノベル向けの高品質アニメ調で生成します。</div>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">画像サイズ</label>
+            <select class="form-select" name="size">
+              <option value="1024x1536" selected>1024x1536 / 縦長</option>
+              <option value="1024x1024">1024x1024 / 正方形</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">品質</label>
+            <select class="form-select" name="quality">
+              <option value="medium" selected>medium</option>
+              <option value="low">low</option>
+              <option value="high">high</option>
+            </select>
+          </div>
+        </div>
+        <div class="d-flex gap-2 justify-content-end">
+          <button class="btn btn-sunrise" type="submit" id="generateBaseImageButton">
+            <i class="bi bi-stars"></i>
+            <span>全身像を生成</span>
+          </button>
+        </div>
+      </form>
+
       <form id="baseAssetUploadForm" class="vstack gap-3">
         <div id="baseAssetDropzone" class="dropzone" tabindex="0" role="button" aria-label="基準画像をドラッグアンドドロップ、またはクリックして選択">
           <div class="dropzone-copy">
@@ -56,58 +112,218 @@
           </div>
         </div>
         <div class="d-flex gap-2 justify-content-end">
-          <button class="btn btn-outline-dark" type="submit">基準画像をアップロード</button>
+          <button class="btn btn-outline-light" type="submit">基準画像をアップロード</button>
         </div>
       </form>
     </div>
   </section>
-
-  <section class="panel-card">
-    <div class="panel-head"><h3>画像生成ルール</h3></div>
-    <form id="imageRuleForm" class="vstack gap-3">
-      <div class="row g-3">
-        <div class="col-md-6"><label class="form-label">髪ルール</label><input class="form-control" name="hair_rule"></div>
-        <div class="col-md-6"><label class="form-label">顔ルール</label><input class="form-control" name="face_rule"></div>
-        <div class="col-md-6"><label class="form-label">耳ルール</label><input class="form-control" name="ear_rule"></div>
-        <div class="col-md-6"><label class="form-label">装飾ルール</label><input class="form-control" name="accessory_rule"></div>
-        <div class="col-md-6"><label class="form-label">衣装ルール</label><input class="form-control" name="outfit_rule"></div>
-        <div class="col-md-6"><label class="form-label">スタイルルール</label><input class="form-control" name="style_rule"></div>
-        <div class="col-md-6"><label class="form-label">品質</label><select class="form-select" name="default_quality"><option>low</option><option>medium</option><option>high</option></select></div>
-        <div class="col-md-6"><label class="form-label">サイズ</label><select class="form-select" name="default_size"><option>1024x1024</option><option>1024x1536</option><option>1536x1024</option></select></div>
-      </div>
-      <label class="form-label">ネガティブルール</label><textarea class="form-control" name="negative_rule" rows="3"></textarea>
-      <label class="form-label">Prompt Prefix</label><textarea class="form-control" name="prompt_prefix" rows="2" placeholder="based on the reference image"></textarea>
-      <label class="form-label">Prompt Suffix</label><textarea class="form-control" name="prompt_suffix" rows="2"></textarea>
-        <div class="small text-secondary">ここで指定したルールは、基準画像を使うライブチャット側の画像生成プロンプトに反映されます。</div>
-      <div class="d-flex gap-2 justify-content-end">
-        <button class="btn btn-dark" type="submit">画像ルールを保存</button>
-      </div>
-    </form>
-  </section>
 </section>
+
+<div class="modal fade" id="markdownEditorModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content markdown-modal">
+      <div class="modal-header">
+        <div>
+          <div class="eyebrow">Markdown Editor</div>
+          <h5 class="modal-title" id="markdownEditorTitle">Markdown編集</h5>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="markdown-modal-grid">
+          <div>
+            <label class="form-label" for="markdownEditorTextarea">入力</label>
+            <textarea class="form-control markdown-modal-input" id="markdownEditorTextarea" rows="20"></textarea>
+            <p class="text-muted small mt-2 mb-0">使える記法: # 見出し / ## 小見出し / - 箇条書き / **太字** / &gt; 引用</p>
+          </div>
+          <div>
+            <label class="form-label">プレビュー</label>
+            <div class="markdown-preview markdown-modal-preview" id="markdownEditorPreview"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-sunrise" id="markdownEditorApply">反映する</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
 (() => {
   const projectId = Number({{ project_id }});
-  const characterId = {{ character_id if character_id is not none else "null" }};
+  const initialCharacterId = {{ character_id if character_id is not none else "null" }};
+  let currentCharacterId = initialCharacterId;
   const form = document.getElementById("characterForm");
-  const imageRuleForm = document.getElementById("imageRuleForm");
+  const generateForm = document.getElementById("baseAssetGenerateForm");
+  const generateButton = document.getElementById("generateBaseImageButton");
   const baseAssetUploadForm = document.getElementById("baseAssetUploadForm");
   const baseAssetPreview = document.getElementById("baseAssetPreview");
   const baseAssetDropzone = document.getElementById("baseAssetDropzone");
   const baseAssetFileInput = baseAssetUploadForm.querySelector('[name="file"]');
+  const markdownGrid = document.getElementById("characterMarkdownGrid");
+  const modalElement = document.getElementById("markdownEditorModal");
+  document.body.appendChild(modalElement);
+  const modal = new bootstrap.Modal(modalElement);
+  const modalTitle = document.getElementById("markdownEditorTitle");
+  const modalTextarea = document.getElementById("markdownEditorTextarea");
+  const modalPreview = document.getElementById("markdownEditorPreview");
+  const modalApplyButton = document.getElementById("markdownEditorApply");
+  let editingFieldName = "";
 
-  function setCheckbox(name, value) {
-    const element = form.querySelector(`[name="${name}"]`);
-    if (element) {
-      element.checked = Boolean(value);
+  const markdownFields = [
+    { name: "appearance_summary", label: "外見要約", hint: "見た目、服装、雰囲気、画像生成で守りたい特徴", placeholder: "## 全体印象\n- \n\n## 髪・顔\n- \n\n## 衣装\n- " },
+    { name: "personality", label: "性格", hint: "価値観、癖、反応、怒り方・喜び方", placeholder: "- 基本性格\n- 嬉しい時\n- 嫌な時" },
+    { name: "favorite_items_text", label: "好きなものメモ", hint: "贈り物判定などに使う好きな物品やモチーフ", placeholder: "- ぬいぐるみ\n- 甘いもの\n- 夜景" },
+    { name: "likes_text", label: "好きなもの", hint: "会話から覚えておく好み、話題、行動", placeholder: "- 丁寧に褒められる\n- 共通の趣味を見つける" },
+    { name: "dislikes_text", label: "嫌いなもの", hint: "評価を下げやすい話題や態度", placeholder: "- 命令口調\n- 雑に扱われること" },
+    { name: "hobbies_text", label: "趣味", hint: "会話のフックになる趣味や習慣", placeholder: "- 読書\n- 散歩" },
+    { name: "taboos_text", label: "地雷・苦手なもの", hint: "避けたい話題、苦手な接し方", placeholder: "- 初対面で踏み込みすぎる\n- 過去を詮索される" },
+    { name: "romance_favorite_approach_text", label: "恋愛: 好きな距離の詰め方", hint: "好感度が上がりやすい近づき方", placeholder: "- 自然に隣へ来る\n- 小さな変化に気づく" },
+    { name: "romance_avoid_approach_text", label: "恋愛: 苦手な距離の詰め方", hint: "引いてしまう接し方", placeholder: "- 急に馴れ馴れしい\n- 支配的な言い方" },
+    { name: "romance_attraction_points_text", label: "恋愛: 刺さるポイント", hint: "惹かれる言葉、態度、シチュエーション", placeholder: "- 知的な会話\n- 余裕のある優しさ" },
+    { name: "romance_boundaries_text", label: "恋愛: 境界線", hint: "越えてはいけないライン", placeholder: "- 本心を無理に聞き出さない\n- 大切なものを笑わない" },
+    { name: "memorable_events_text", label: "印象イベント", hint: "記憶しておきたい出来事", placeholder: "- 初めて贈り物をもらった\n- 価値観が近いと感じた" },
+    { name: "memory_notes", label: "会話メモ", hint: "会話から覚えておきたい補足情報", placeholder: "## 覚えておくこと\n- " },
+    { name: "speech_style", label: "話し方", hint: "一人称、語尾、テンポ、口癖、会話の癖", placeholder: "- 一人称:\n- 語尾:\n- 口癖:" },
+    { name: "speech_sample", label: "セリフサンプル", hint: "実際に言いそうなセリフ", placeholder: "- 「こんにちは。今日は何のお話をする？」\n- 「それ、少し気になるね。」" },
+    { name: "ng_rules", label: "NGルール", hint: "絶対に言わせないこと、崩してはいけない設定", placeholder: "- 案内役と言わない\n- 口調を変えない" },
+  ];
+
+  function escapeHtml(value) {
+    return NovelUI.escape(value ?? "");
+  }
+
+  function renderInlineMarkdown(text) {
+    return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  }
+
+  function markdownToHtml(markdown) {
+    const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+    const html = [];
+    let inList = false;
+    function closeList() {
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
     }
+    for (const rawLine of lines) {
+      const trimmed = rawLine.trim();
+      if (!trimmed) {
+        closeList();
+        continue;
+      }
+      if (trimmed.startsWith("## ")) {
+        closeList();
+        html.push(`<h5>${renderInlineMarkdown(trimmed.slice(3))}</h5>`);
+      } else if (trimmed.startsWith("# ")) {
+        closeList();
+        html.push(`<h4>${renderInlineMarkdown(trimmed.slice(2))}</h4>`);
+      } else if (trimmed.startsWith("> ")) {
+        closeList();
+        html.push(`<blockquote>${renderInlineMarkdown(trimmed.slice(2))}</blockquote>`);
+      } else if (trimmed.startsWith("- ")) {
+        if (!inList) {
+          html.push("<ul>");
+          inList = true;
+        }
+        html.push(`<li>${renderInlineMarkdown(trimmed.slice(2))}</li>`);
+      } else {
+        closeList();
+        html.push(`<p>${renderInlineMarkdown(trimmed)}</p>`);
+      }
+    }
+    closeList();
+    return html.join("") || `<p class="text-muted mb-0">まだ入力されていません。</p>`;
+  }
+
+  function fieldInput(name) {
+    return form.querySelector(`[name="${name}"]`);
+  }
+
+  function plainPreview(value) {
+    const text = String(value || "").replace(/[#>*`_-]/g, "").replace(/\s+/g, " ").trim();
+    return text ? text.slice(0, 120) + (text.length > 120 ? "..." : "") : "まだ入力されていません。";
+  }
+
+  function renderMarkdownCards() {
+    markdownGrid.innerHTML = markdownFields.map((field) => {
+      const value = fieldInput(field.name)?.value || "";
+      return `
+        <article class="markdown-summary-card" data-markdown-card="${field.name}">
+          <div class="markdown-summary-head">
+            <div>
+              <h4>${NovelUI.escape(field.label)}</h4>
+              <p>${NovelUI.escape(field.hint)}</p>
+            </div>
+            <button class="btn btn-sm btn-outline-light" type="button" data-edit-markdown="${field.name}">
+              <i class="bi bi-pencil-square"></i>
+              <span>編集</span>
+            </button>
+          </div>
+          <div class="markdown-summary-body">${NovelUI.escape(plainPreview(value))}</div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  function openMarkdownEditor(fieldName) {
+    const field = markdownFields.find((item) => item.name === fieldName);
+    const input = fieldInput(fieldName);
+    if (!field || !input) return;
+    editingFieldName = fieldName;
+    modalTitle.textContent = field.label;
+    modalTextarea.placeholder = field.placeholder;
+    modalTextarea.value = input.value || "";
+    modalPreview.innerHTML = markdownToHtml(modalTextarea.value);
+    modal.show();
+    setTimeout(() => modalTextarea.focus(), 180);
+  }
+
+  function applyMarkdownEditor() {
+    const input = fieldInput(editingFieldName);
+    if (!input) return;
+    input.value = modalTextarea.value;
+    renderMarkdownCards();
+    modal.hide();
+  }
+
+  function characterPayload() {
+    const body = Object.fromEntries(new FormData(form).entries());
+    body.base_asset_id = body.base_asset_id ? Number(body.base_asset_id) : null;
+    return body;
+  }
+
+  async function saveCharacter({ silent = false } = {}) {
+    const body = characterPayload();
+    let character;
+    if (currentCharacterId) {
+      character = await NovelUI.api(`/api/v1/characters/${currentCharacterId}`, { method: "PATCH", body });
+    } else {
+      character = await NovelUI.api(`/api/v1/projects/${projectId}/characters`, { method: "POST", body });
+      currentCharacterId = character.id;
+    }
+    NovelUI.fillForm(form, character);
+    renderBaseAsset(character.base_asset);
+    renderMarkdownCards();
+    if (!silent) NovelUI.toast("キャラクターを保存しました。");
+    return character;
   }
 
   function renderBaseAsset(asset) {
     if (!asset?.media_url) {
-      baseAssetPreview.innerHTML = `<div class="empty-panel">基準画像はまだ登録されていません。</div>`;
+      baseAssetPreview.innerHTML = `
+        <div class="base-asset-empty">
+          <div class="base-asset-empty-icon"><i class="bi bi-image"></i></div>
+          <div>
+            <div class="base-asset-empty-title">基準画像はまだ登録されていません</div>
+            <div class="base-asset-empty-text">画像をアップロードするか、基本情報から全身像を生成してください。</div>
+          </div>
+        </div>
+      `;
       return;
     }
     baseAssetPreview.innerHTML = `
@@ -135,37 +351,22 @@
   }
 
   async function uploadBaseAsset(file) {
-    if (!ensureImageFile(file)) {
-      return;
-    }
-
+    if (!ensureImageFile(file)) return;
     const uploadPayload = new FormData();
     uploadPayload.append("file", file);
     uploadPayload.append("project_id", String(projectId));
     uploadPayload.append("asset_type", "reference_image");
-
     try {
-      const response = await fetch("/api/v1/assets/upload", {
-        method: "POST",
-        body: uploadPayload,
-        credentials: "same-origin",
-      });
+      const response = await fetch("/api/v1/assets/upload", { method: "POST", body: uploadPayload, credentials: "same-origin" });
       const payload = await response.json().catch(() => ({}));
       const asset = payload?.data;
-      if (!response.ok || !asset) {
-        throw new Error(payload?.message || `HTTP ${response.status}`);
-      }
-
+      if (!response.ok || !asset) throw new Error(payload?.message || `HTTP ${response.status}`);
       form.querySelector('[name="base_asset_id"]').value = asset.id;
       renderBaseAsset(asset);
-
-      if (characterId) {
-        await NovelUI.api(`/api/v1/characters/${characterId}`, {
-          method: "PATCH",
-          body: { base_asset_id: asset.id },
-        });
+      if (currentCharacterId) {
+        const character = await NovelUI.api(`/api/v1/characters/${currentCharacterId}`, { method: "PATCH", body: { base_asset_id: asset.id } });
+        renderBaseAsset(character.base_asset);
       }
-
       baseAssetFileInput.value = "";
       NovelUI.toast("基準画像をアップロードしました。");
     } catch (error) {
@@ -175,63 +376,82 @@
     }
   }
 
-  async function loadCharacter() {
-    if (!characterId) {
-      return;
-    }
-    const character = await NovelUI.api(`/api/v1/characters/${characterId}`);
-    NovelUI.fillForm(form, character);
-    setCheckbox("is_guide", character.is_guide);
-    renderBaseAsset(character.base_asset);
+  function setGenerating(active) {
+    generateButton.disabled = active;
+    generateButton.innerHTML = active
+      ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>全身像を生成中...'
+      : '<i class="bi bi-stars"></i><span>全身像を生成</span>';
+  }
 
-    const rulePayload = await NovelUI.api(`/api/v1/characters/${characterId}/image-rule`);
-    if (rulePayload?.image_rule) {
-      NovelUI.fillForm(imageRuleForm, rulePayload.image_rule);
+  async function generateBaseImage() {
+    setGenerating(true);
+    try {
+      const character = await saveCharacter({ silent: true });
+      const body = Object.fromEntries(new FormData(generateForm).entries());
+      const generated = await NovelUI.api(`/api/v1/characters/${character.id}/base-image/generate`, { method: "POST", body });
+      NovelUI.fillForm(form, generated);
+      renderBaseAsset(generated.base_asset);
+      renderMarkdownCards();
+      NovelUI.toast("基本情報から全身像を生成し、基準画像に設定しました。");
+      if (!initialCharacterId) {
+        history.replaceState(null, "", `/projects/${projectId}/characters/${generated.id}/edit`);
+      }
+    } catch (error) {
+      NovelUI.toast(error.message || "全身像の生成に失敗しました。", "danger");
+    } finally {
+      setGenerating(false);
     }
   }
 
+  async function loadCharacter() {
+    renderMarkdownCards();
+    if (!currentCharacterId) {
+      renderBaseAsset(null);
+      return;
+    }
+    const character = await NovelUI.api(`/api/v1/characters/${currentCharacterId}`);
+    NovelUI.fillForm(form, character);
+    renderBaseAsset(character.base_asset);
+    renderMarkdownCards();
+  }
+
+  markdownGrid.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-edit-markdown]");
+    if (button) openMarkdownEditor(button.dataset.editMarkdown);
+  });
+  modalTextarea.addEventListener("input", () => { modalPreview.innerHTML = markdownToHtml(modalTextarea.value); });
+  modalApplyButton.addEventListener("click", applyMarkdownEditor);
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const body = Object.fromEntries(new FormData(form).entries());
-    body.is_guide = form.querySelector('[name="is_guide"]').checked ? 1 : 0;
-    body.base_asset_id = body.base_asset_id ? Number(body.base_asset_id) : null;
-
     try {
-      let character;
-      if (characterId) {
-        character = await NovelUI.api(`/api/v1/characters/${characterId}`, { method: "PATCH", body });
-      } else {
-        character = await NovelUI.api(`/api/v1/projects/${projectId}/characters`, { method: "POST", body });
-      }
-      NovelUI.toast("キャラクターを保存しました。");
-      if (!characterId) {
+      const character = await saveCharacter();
+      if (!initialCharacterId) {
         location.href = `/projects/${projectId}/characters/${character.id}/edit`;
-        return;
       }
-      renderBaseAsset(character.base_asset);
     } catch (error) {
       NovelUI.toast(error.message || "保存に失敗しました。", "danger");
     }
+  });
+
+  generateForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await generateBaseImage();
   });
 
   baseAssetUploadForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     await uploadBaseAsset(baseAssetFileInput.files[0]);
   });
-
   baseAssetDropzone.addEventListener("click", (event) => {
-    if (event.target !== baseAssetFileInput) {
-      baseAssetFileInput.click();
-    }
+    if (event.target !== baseAssetFileInput) baseAssetFileInput.click();
   });
-
   baseAssetDropzone.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       baseAssetFileInput.click();
     }
   });
-
   ["dragenter", "dragover"].forEach((eventName) => {
     baseAssetDropzone.addEventListener(eventName, (event) => {
       event.preventDefault();
@@ -239,17 +459,13 @@
       setDropzoneActive(true);
     });
   });
-
   ["dragleave", "dragend"].forEach((eventName) => {
     baseAssetDropzone.addEventListener(eventName, (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (!baseAssetDropzone.contains(event.relatedTarget)) {
-        setDropzoneActive(false);
-      }
+      if (!baseAssetDropzone.contains(event.relatedTarget)) setDropzoneActive(false);
     });
   });
-
   baseAssetDropzone.addEventListener("drop", async (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -257,23 +473,8 @@
     await uploadBaseAsset(file);
   });
 
-  imageRuleForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!characterId) {
-      NovelUI.toast("先にキャラクター本体を保存してください。", "warning");
-      return;
-    }
-    const body = Object.fromEntries(new FormData(imageRuleForm).entries());
-    try {
-      await NovelUI.api(`/api/v1/characters/${characterId}/image-rule`, { method: "PUT", body });
-      NovelUI.toast("画像ルールを保存しました。");
-    } catch (error) {
-      NovelUI.toast(error.message || "画像ルールの保存に失敗しました。", "danger");
-    }
-  });
-
   document.getElementById("characterAiAssist").addEventListener("click", () => {
-    NovelUI.toast("AI補完はまだ簡易案内のみです。必要なら次に実装を進めます。", "warning");
+    NovelUI.toast("AI補完は次の実装タスクで接続します。", "warning");
   });
 
   loadCharacter().catch((error) => {

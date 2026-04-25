@@ -78,7 +78,7 @@ def _lines_from_list(title: str, values: list[str]) -> list[str]:
 def _format_character(character: Any) -> str:
     name = _read(character, "name", "unknown")
     fields = [
-        ("role", _read(character, "role")),
+        ("nickname", _read(character, "nickname")),
         ("personality", _read(character, "personality")),
         ("first_person", _read(character, "first_person")),
         ("second_person", _read(character, "second_person")),

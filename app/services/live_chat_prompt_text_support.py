@@ -281,8 +281,12 @@ def build_opening_prompt(context: dict) -> str:
     lines.append("Characters:")
     for character in context["characters"]:
         lines.append(
-            f"- {character['name']}: role={character.get('role') or 'character'}, first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}, ng_rules={character.get('ng_rules') or ''}"
+            f"- {character['name']}: nickname={character.get('nickname') or ''}, first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}, ng_rules={character.get('ng_rules') or ''}"
         )
+        if character.get("nickname"):
+            lines.append(
+                f"  The character may naturally tell the player how to call them, using nickname={character.get('nickname')} as conversational material."
+            )
         summary = _build_character_memory_summary(_character_profile(character))
         if summary:
             lines.append(f"  memory={summary}")
@@ -420,8 +424,12 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     lines.append("Characters:")
     for character in context["characters"]:
         lines.append(
-            f"- {character['name']}: role={character.get('role') or 'character'}, first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}, ng_rules={character.get('ng_rules') or ''}"
+            f"- {character['name']}: nickname={character.get('nickname') or ''}, first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}, ng_rules={character.get('ng_rules') or ''}"
         )
+        if character.get("nickname"):
+            lines.append(
+                f"  If the player asks how to call them, answer naturally based on nickname={character.get('nickname')}."
+            )
         summary = _build_character_memory_summary(_flatten_character_memory(character, character_memories))
         if summary:
             lines.append(f"  memory={summary}")
@@ -703,7 +711,7 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
     session_memory_map = ((context.get("state") or {}).get("state_json") or {}).get("session_memory", {}).get("character_memories") or {}
     for character in context["characters"]:
         lines.append(
-            f"- {character['name']}: role={character.get('role') or 'character'}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}, is_guide={bool(character.get('is_guide'))}"
+            f"- {character['name']}: nickname={character.get('nickname') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}"
         )
         summary = _build_character_memory_summary(_flatten_character_memory(character, session_memory_map))
         if summary:

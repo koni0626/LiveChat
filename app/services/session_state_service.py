@@ -61,7 +61,8 @@ class SessionStateService:
             "登場キャラクター:",
         ]
         for character in characters:
-            lines.append(f"- {character.get('name')}: {character.get('role') or 'character'}")
+            nickname = character.get("nickname")
+            lines.append(f"- {character.get('name')}: あだ名={nickname or '未設定'}")
         lines.append("")
         lines.append("会話ログ:")
         for item in messages[-12:]:
