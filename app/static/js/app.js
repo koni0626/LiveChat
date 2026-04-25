@@ -20,6 +20,7 @@ window.NovelUI = (() => {
       method: options.method || "GET",
       headers: { "Content-Type": "application/json", ...(options.headers || {}) },
       credentials: "same-origin",
+      cache: options.cache || "no-store",
     };
     if (options.body !== undefined) {
       config.body = JSON.stringify(options.body);

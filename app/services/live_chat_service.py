@@ -172,9 +172,28 @@ class LiveChatService:
             "quality": row.quality,
             "size": row.size,
             "is_selected": bool(row.is_selected),
+            "is_reference": bool(getattr(row, "is_reference", 0)),
             "created_at": row.created_at.isoformat() if getattr(row, "created_at", None) else None,
             "asset": self._serialize_asset(asset),
         }
+
+    def _collect_session_reference_assets(self, session_id: int, active_characters: list[dict], *, limit: int = 2):
+        session_images = self._session_image_service.list_session_images(session_id)
+        reference_paths = []
+        reference_asset_ids = []
+        for row in session_images:
+            if not bool(getattr(row, "is_reference", 0)):
+                continue
+            asset = self._asset_service.get_asset(row.asset_id)
+            if not asset or not getattr(asset, "file_path", None):
+                continue
+            reference_paths.append(asset.file_path)
+            reference_asset_ids.append(asset.id)
+            if len(reference_paths) >= limit:
+                break
+        if reference_paths:
+            return reference_paths, reference_asset_ids
+        return image_support.collect_reference_assets(active_characters, limit=limit)
 
     def _serialize_gift_event(self, row):
         asset = self._asset_service.get_asset(row.asset_id) if getattr(row, "asset_id", None) else None
@@ -457,7 +476,7 @@ class LiveChatService:
         if not visual_decision.get("show_gift_visual"):
             return None
         prompt = self._build_gift_visual_prompt(context, character, recognized_label, visual_decision)
-        reference_paths, reference_asset_ids = image_support.collect_reference_assets([character], limit=1)
+        reference_paths, reference_asset_ids = self._collect_session_reference_assets(session.id, [character], limit=2)
         result = self._image_ai_client.generate_image(
             prompt,
             size="1536x1024",
@@ -881,7 +900,7 @@ class LiveChatService:
         state_json["visual_state"] = visual_state
 
         active_characters = image_support.resolve_active_characters(context, state_json, conversation_prompt)
-        reference_paths, reference_asset_ids = image_support.collect_reference_assets(active_characters, limit=2)
+        reference_paths, reference_asset_ids = self._collect_session_reference_assets(session_id, active_characters, limit=2)
         result = self._image_ai_client.generate_image(
             prompt,
             size=payload.get("size") or "1536x1024",
@@ -953,6 +972,7 @@ class LiveChatService:
                 "quality": payload.get("quality") or "external",
                 "size": payload.get("size") or "uploaded",
                 "is_selected": 1 if payload.get("is_selected", True) else 0,
+                "is_reference": 1 if payload.get("is_reference", False) else 0,
             },
         )
         if payload.get("is_selected", True):
@@ -964,6 +984,12 @@ class LiveChatService:
         if not row:
             return None
         self._chat_session_service.update_session(row.session_id, {"active_image_id": row.asset_id})
+        return self._serialize_session_image(row)
+
+    def set_reference_image(self, session_id: int, session_image_id: int, is_reference: bool):
+        row = self._session_image_service.set_reference(session_id, session_image_id, is_reference)
+        if not row:
+            return None
         return self._serialize_session_image(row)
 
     def upload_gift(self, session_id: int, asset_id: int, payload: dict | None = None):

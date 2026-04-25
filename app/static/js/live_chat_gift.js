@@ -2,7 +2,7 @@
   function createGiftController(options) {
     const {
       giftUploadInput,
-      giftDropzone,
+      giftDropTarget,
       giftPreview,
       giftPreviewImage,
       giftSelectedNameDisplay,
@@ -42,8 +42,8 @@
       if (giftPreview) {
         giftPreview.classList.add("is-hidden");
       }
-      if (giftDropzone) {
-        giftDropzone.classList.remove("is-dragover");
+      if (giftDropTarget) {
+        giftDropTarget.classList.remove("is-dragover");
       }
       syncGiftLabel("添付画像はありません。");
     }
@@ -97,38 +97,26 @@
       setSelectedGiftFile(fileList[0]);
     }
 
-    function bindDropzone() {
-      if (!giftDropzone) {
+    function bindDropTarget() {
+      if (!giftDropTarget) {
         return;
       }
-      giftDropzone.addEventListener("click", () => {
-        if (!canInteract()) {
-          return;
-        }
-        giftUploadInput?.click();
-      });
-      giftDropzone.addEventListener("keydown", (event) => {
-        if ((event.key === "Enter" || event.key === " ") && canInteract()) {
-          event.preventDefault();
-          giftUploadInput?.click();
-        }
-      });
       ["dragenter", "dragover"].forEach((eventName) => {
-        giftDropzone.addEventListener(eventName, (event) => {
+        giftDropTarget.addEventListener(eventName, (event) => {
           event.preventDefault();
           if (!canInteract()) {
             return;
           }
-          giftDropzone.classList.add("is-dragover");
+          giftDropTarget.classList.add("is-dragover");
         });
       });
       ["dragleave", "drop"].forEach((eventName) => {
-        giftDropzone.addEventListener(eventName, (event) => {
+        giftDropTarget.addEventListener(eventName, (event) => {
           event.preventDefault();
-          giftDropzone.classList.remove("is-dragover");
+          giftDropTarget.classList.remove("is-dragover");
         });
       });
-      giftDropzone.addEventListener("drop", (event) => {
+      giftDropTarget.addEventListener("drop", (event) => {
         if (!canInteract()) {
           return;
         }
@@ -150,12 +138,12 @@
         }
         giftUploadInput?.click();
       });
-      bindDropzone();
+      bindDropTarget();
     }
 
     function setInteractionDisabled(disabled) {
-      if (giftDropzone) {
-        giftDropzone.classList.toggle("is-disabled", disabled);
+      if (giftDropTarget) {
+        giftDropTarget.classList.toggle("is-disabled", disabled);
       }
       if (giftSelectButton) {
         giftSelectButton.disabled = disabled;

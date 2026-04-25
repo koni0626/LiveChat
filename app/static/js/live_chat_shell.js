@@ -13,6 +13,7 @@
       getNovelElements,
       onGiftInteractionChange,
     } = options;
+    const defaultSendButtonHtml = sendButton ? sendButton.innerHTML : "";
 
     const state = {
       messagesVisible: false,
@@ -41,7 +42,7 @@
       if (loading) loading.hidden = !active;
       if (sendButton) {
         sendButton.disabled = active;
-        sendButton.textContent = active ? "\u9001\u4fe1\u4e2d..." : "\u9001\u4fe1";
+        sendButton.innerHTML = defaultSendButtonHtml;
       }
       if (composeInput) composeInput.disabled = active;
       if (typeof onGiftInteractionChange === "function") {

@@ -129,7 +129,7 @@
       } else {
         await LiveChatApi.postMessage(sessionId, {
           message_text: rawMessage || "\u8a71\u3092\u9032\u3081\u3066",
-          auto_reply: document.getElementById("liveChatAutoReplyCheck").checked,
+          auto_reply: true,
         });
         await loadContext();
       }
@@ -144,7 +144,7 @@
 
   giftController = LiveChatGift.createGiftController({
     giftUploadInput: document.getElementById("liveChatGiftUploadInput"),
-    giftDropzone: document.getElementById("liveChatGiftDropzone"),
+    giftDropTarget: document.getElementById("liveChatGiftDropTarget"),
     giftPreview: document.getElementById("liveChatGiftPreview"),
     giftPreviewImage: document.getElementById("liveChatGiftPreviewImage"),
     giftSelectedNameDisplay: document.getElementById("liveChatGiftSelectedNameDisplay"),
@@ -177,17 +177,6 @@
     selectedImagePanel,
     loadContext,
     generateSessionImage,
-  });
-
-  document.getElementById("liveChatExtractStateButton").addEventListener("click", async () => {
-    try {
-      const state = await LiveChatApi.extractState(sessionId);
-      stateBoard.textContent = LiveChatView.formatJson(state.state_json || {});
-      await loadContext();
-      NovelUI.toast("\u8868\u793a\u72b6\u614b\u3092\u66f4\u65b0\u3057\u307e\u3057\u305f\u3002");
-    } catch (error) {
-      NovelUI.toast(error.message || "\u8868\u793a\u72b6\u614b\u306e\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
-    }
   });
 
   document.getElementById("liveChatRefreshContextButton").addEventListener("click", () => {

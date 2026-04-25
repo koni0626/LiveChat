@@ -69,6 +69,13 @@
     });
   }
 
+  async function setReferenceImage(sessionId, imageId, isReference) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/images/${imageId}/reference`, {
+      method: "POST",
+      body: { is_reference: !!isReference },
+    });
+  }
+
   async function deleteMessage(sessionId, messageId) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/messages/${messageId}`, {
       method: "DELETE",
@@ -85,6 +92,7 @@
     uploadImage,
     uploadGift,
     selectImage,
+    setReferenceImage,
     deleteMessage,
   };
 })();

@@ -30,9 +30,37 @@
     if (!/[A-Za-z]/.test(text)) {
       return text;
     }
-    return isRomance
-      ? "\u4f1a\u8a71\u306e\u6d41\u308c\u304b\u3089\u3001\u73fe\u5728\u306e\u604b\u611b\u5ea6\u3092\u8a55\u4fa1\u3057\u3066\u3044\u307e\u3059\u3002"
-      : "\u4f1a\u8a71\u306e\u6d41\u308c\u304b\u3089\u3001\u73fe\u5728\u306e\u9032\u884c\u5ea6\u3092\u8a55\u4fa1\u3057\u3066\u3044\u307e\u3059\u3002";
+    let localized = text;
+    localized = localized.replace(/however/gi, "ただし");
+    localized = localized.replace(/but/gi, "ただし");
+    localized = localized.replace(/ and /gi, "、");
+    localized = localized.replace(/The player /gi, "プレイヤーは");
+    localized = localized.replace(/This /gi, "これにより");
+    localized = localized.replace(/the exchange/gi, "会話");
+    localized = localized.replace(/is becoming/gi, "は");
+    localized = localized.replace(/is still/gi, "はまだ");
+    localized = localized.replace(/mostly about/gi, "主に");
+    localized = localized.replace(/more personal and attentive/gi, "より個人的で丁寧なものになっている");
+    localized = localized.replace(/not yet strongly romantic/gi, "まだ強い恋愛段階ではない");
+    localized = localized.replace(/progressing well/gi, "順調に進んでいる");
+    localized = localized.replace(/matched her preference/gi, "好みに合う反応ができている");
+    localized = localized.replace(/made her feel understood and delighted/gi, "理解されて嬉しいと感じさせている");
+    localized = localized.replace(/increases interest and trust/gi, "関心と信頼が高まっている");
+    localized = localized.replace(/responds well to/gi, "に好意的に反応している");
+    localized = localized.replace(/is attracted by/gi, "に惹かれている");
+    localized = localized.replace(/dislikes approach/gi, "の接し方は苦手");
+    localized = localized.replace(/has taboo topic/gi, "にとって地雷話題は");
+    localized = localized.replace(/feels boundary crossed by/gi, "は一線を越えたと感じやすい");
+    localized = localized.replace(/likes /gi, "が好き");
+    localized = localized.replace(/dislikes /gi, "が苦手");
+    localized = localized.replace(/is interested in hobby /gi, "の趣味に関心がある");
+    localized = localized.replace(/\s+/g, " ").trim();
+    if (/[A-Za-z]/.test(localized)) {
+      return isRomance
+        ? "\u76f4\u8fd1\u306e\u4f1a\u8a71\u3068\u53cd\u5fdc\u304b\u3089\u3001\u604b\u611b\u5ea6\u304c\u3069\u306e\u7a0b\u5ea6\u9032\u3093\u3060\u304b\u3092\u8a55\u4fa1\u3057\u3066\u3044\u307e\u3059\u3002"
+        : "\u76f4\u8fd1\u306e\u4f1a\u8a71\u3068\u53cd\u5fdc\u304b\u3089\u3001\u9032\u884c\u5ea6\u3092\u8a55\u4fa1\u3057\u3066\u3044\u307e\u3059\u3002";
+    }
+    return localized;
   }
 
   function normalizeSelectedCharacterIds(settingsJson) {
@@ -339,9 +367,15 @@
     imageGrid.innerHTML = images.map((item) => {
       const mediaUrl = item.asset?.media_url;
       return `
-        <button class="live-chat-thumb ${item.is_selected ? "selected" : ""}" type="button" data-image-id="${item.id}">
-          ${mediaUrl ? `<img src="${mediaUrl}" alt="thumb">` : `<span>No Image</span>`}
-        </button>
+        <div class="live-chat-thumb-card ${item.is_selected ? "selected" : ""} ${item.is_reference ? "reference" : ""}">
+          <button class="live-chat-thumb ${item.is_selected ? "selected" : ""}" type="button" data-image-id="${item.id}">
+            ${mediaUrl ? `<img src="${mediaUrl}" alt="thumb">` : `<span>No Image</span>`}
+          </button>
+          <label class="live-chat-thumb-reference">
+            <input type="checkbox" data-reference-image-id="${item.id}" ${item.is_reference ? "checked" : ""}>
+            <span>基準画像</span>
+          </label>
+        </div>
       `;
     }).join("");
   }

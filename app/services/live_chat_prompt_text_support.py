@@ -520,6 +520,9 @@ def build_conversation_evaluation_prompt(context: dict) -> str:
         "Required keys: score, label, reason, mood, theme.",
         "score must be an integer from 0 to 100.",
         "theme must be either romance or general.",
+        "label, reason, and mood must be written in natural Japanese.",
+        "reason must be 1 to 2 short Japanese sentences.",
+        "Do not write English words or English sentences in reason.",
         f"Session objective: {session_objective or 'none'}",
         "Recent conversation:",
     ]

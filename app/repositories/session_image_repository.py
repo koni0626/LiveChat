@@ -27,6 +27,7 @@ class SessionImageRepository:
             quality=payload.get("quality"),
             size=payload.get("size"),
             is_selected=payload.get("is_selected", 0),
+            is_reference=payload.get("is_reference", 0),
         )
         db.session.add(row)
         db.session.commit()
@@ -38,5 +39,18 @@ class SessionImageRepository:
             return None
         SessionImage.query.filter(SessionImage.session_id == row.session_id).update({"is_selected": 0})
         row.is_selected = 1
+        db.session.commit()
+        return row
+
+    def set_reference(self, session_id: int, session_image_id: int, is_reference: bool):
+        row = (
+            SessionImage.query.filter(
+                SessionImage.id == session_image_id,
+                SessionImage.session_id == session_id,
+            ).first()
+        )
+        if not row:
+            return None
+        row.is_reference = 1 if is_reference else 0
         db.session.commit()
         return row

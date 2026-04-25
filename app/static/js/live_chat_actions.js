@@ -84,6 +84,9 @@
     });
 
     imageGrid.addEventListener("click", async (event) => {
+      if (event.target.closest("[data-reference-image-id]")) {
+        return;
+      }
       const button = event.target.closest("[data-image-id]");
       if (!button) return;
       try {
@@ -92,6 +95,19 @@
         NovelUI.toast("表示画像を切り替えました。");
       } catch (error) {
         NovelUI.toast(error.message || "画像選択に失敗しました。", "danger");
+      }
+    });
+
+    imageGrid.addEventListener("change", async (event) => {
+      const checkbox = event.target.closest("[data-reference-image-id]");
+      if (!checkbox) return;
+      try {
+        await api.setReferenceImage(getSessionId(), checkbox.dataset.referenceImageId, checkbox.checked);
+        await loadContext();
+        NovelUI.toast(checkbox.checked ? "基準画像に追加しました。" : "基準画像から外しました。");
+      } catch (error) {
+        checkbox.checked = !checkbox.checked;
+        NovelUI.toast(error.message || "基準画像の更新に失敗しました。", "danger");
       }
     });
 

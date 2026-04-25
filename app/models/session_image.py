@@ -14,3 +14,4 @@ class SessionImage(db.Model, CreatedAtMixin):
     quality = db.Column(db.String(50))
     size = db.Column(db.String(50))
     is_selected = db.Column(db.Integer, nullable=False, default=0)
+    is_reference = db.Column(db.Integer, nullable=False, default=0)

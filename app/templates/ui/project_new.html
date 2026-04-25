@@ -56,7 +56,7 @@
     if (!body.play_time_minutes) delete body.play_time_minutes;
     try {
       const project = await NovelUI.api("/api/v1/projects", { method: "POST", body });
-      location.href = `/projects/${project.id}/home`;
+      location.href = `/projects/${project.id}/home?edit=1`;
     } catch (error) {
       NovelUI.toast(error.message || "作品作成に失敗しました。", "danger");
     }

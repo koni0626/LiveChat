@@ -93,10 +93,7 @@
     <div class="panel-head">
       <h3 id="liveChatTitle">ライブチャット</h3>
       <div class="d-flex gap-2 flex-wrap">
-        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleTextboxButton">テキストボックス非表示</button>
         <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleMessagesButton">ログを開く</button>
-        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatExtractStateButton">状態更新</button>
-        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatGenerateImageButton">画像を生成</button>
       </div>
     </div>
 
@@ -111,11 +108,16 @@
         <aside class="live-chat-message-wrap is-hidden" id="liveChatMessageWrap">
           <div class="live-chat-message-loading" id="liveChatReplyLoading" hidden>
             <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-            <span>メッセージを整理しています...</span>
+            <span>会話ログを整理しています...</span>
           </div>
           <div class="live-chat-message-panel" id="liveChatMessageList"></div>
         </aside>
       </div>
+    </div>
+
+    <div class="live-chat-stage-actions">
+      <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatGenerateImageButton">画像を生成</button>
+      <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleTextboxButton">テキストボックス非表示</button>
     </div>
 
     <form class="live-chat-compose" id="liveChatComposeForm">
@@ -125,38 +127,34 @@
       </div>
       <div class="live-chat-compose-shell" id="liveChatComposeShell">
         <input class="form-control" id="liveChatGiftUploadInput" type="file" accept="image/*" hidden>
-        <textarea
-          class="form-control"
-          id="liveChatComposeInput"
-          name="message_text"
-          rows="2"
-          placeholder="メッセージを入力。画像を添付すると贈り物として送れます。"
-        ></textarea>
+        <div class="live-chat-compose-editor" id="liveChatGiftDropTarget">
+          <textarea
+            class="form-control"
+            id="liveChatComposeInput"
+            name="message_text"
+            rows="2"
+            placeholder="メッセージを入力。ここへ画像をドラッグ&ドロップすると贈り物として添付できます。"
+          ></textarea>
+          <div class="live-chat-compose-editor-bar">
+            <button class="live-chat-compose-attach" type="button" id="liveChatGiftSelectButton" aria-label="画像を添付" title="画像を添付">
+              <span class="live-chat-compose-attach-icon">+</span>
+              <span>添付</span>
+            </button>
+            <div class="live-chat-gift-selected" id="liveChatGiftSelectedName">添付画像はありません。</div>
+          </div>
+          <button class="live-chat-compose-send" type="submit" id="liveChatSendButton" aria-label="送信">
+            <span aria-hidden="true">↑</span>
+          </button>
+        </div>
         <div class="live-chat-compose-bottom">
           <div class="live-chat-compose-tools">
-            <div class="live-chat-gift-dropzone live-chat-gift-inline-dropzone" id="liveChatGiftDropzone" tabindex="0" role="button" aria-label="画像を添付">
-              <div class="live-chat-gift-drop-icon">+</div>
-              <div class="dropzone-copy">
-                <div class="dropzone-title">画像を添付</div>
-                <div class="dropzone-hint">ドラッグ&ドロップ / クリックして選択</div>
-              </div>
-            </div>
-            <button class="btn btn-outline-secondary btn-sm" type="button" id="liveChatGiftSelectButton">ファイルを選ぶ</button>
-            <div class="live-chat-gift-selected" id="liveChatGiftSelectedName">添付画像はありません。</div>
             <div class="live-chat-gift-preview is-hidden" id="liveChatGiftPreview">
               <img class="live-chat-gift-preview-image" id="liveChatGiftPreviewImage" alt="gift preview">
               <div class="live-chat-gift-preview-meta">
                 <div class="live-chat-gift-selected" id="liveChatGiftSelectedNameDisplay">添付画像はありません。</div>
-                <button class="btn btn-sm btn-outline-secondary" type="button" id="liveChatGiftClearButton">解除</button>
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="liveChatGiftClearButton" aria-label="添付を解除" title="添付を解除">×</button>
               </div>
             </div>
-          </div>
-          <div class="live-chat-compose-actions">
-            <label class="form-check">
-              <input class="form-check-input" type="checkbox" id="liveChatAutoReplyCheck" checked>
-              <span class="form-check-label">自動で返信する</span>
-            </label>
-            <button class="btn btn-dark" type="submit" id="liveChatSendButton">送信</button>
           </div>
         </div>
       </div>

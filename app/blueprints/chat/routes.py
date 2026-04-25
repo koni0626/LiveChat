@@ -131,15 +131,6 @@ def get_chat_state(session_id: int):
     return json_response(live_chat_service._serialize_state(state))
 
 
-@chat_bp.route("/chat/sessions/<int:session_id>/state/extract", methods=["POST"])
-def extract_chat_state(session_id: int):
-    _require_session(session_id)
-    state = live_chat_service.extract_state(session_id)
-    if not state:
-        raise NotFoundError()
-    return json_response(state)
-
-
 @chat_bp.route("/chat/sessions/<int:session_id>/images", methods=["GET"])
 def list_chat_images(session_id: int):
     _require_session(session_id)
@@ -223,6 +214,17 @@ def upload_chat_gift(session_id: int):
 def select_chat_image(session_id: int, image_id: int):
     _require_session(session_id)
     result = live_chat_service.select_image(image_id)
+    if not result:
+        raise NotFoundError()
+    return json_response(result)
+
+
+@chat_bp.route("/chat/sessions/<int:session_id>/images/<int:image_id>/reference", methods=["POST"])
+def set_chat_image_reference(session_id: int, image_id: int):
+    _require_session(session_id)
+    payload = request.get_json(silent=True) or {}
+    is_reference = str(payload.get("is_reference", "true")).lower() in {"1", "true", "yes", "on"}
+    result = live_chat_service.set_reference_image(session_id, image_id, is_reference)
     if not result:
         raise NotFoundError()
     return json_response(result)
