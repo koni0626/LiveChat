@@ -3,7 +3,7 @@
 <section class="page-grid narrow-grid">
   <section class="panel-card">
     <div class="panel-head">
-      <h3>新しい作品を作成</h3>
+      <h3>新しいプロジェクトを作成</h3>
       <span class="soft-code">Project Bootstrap</span>
     </div>
     <form id="projectCreateForm" class="row g-4">
@@ -12,31 +12,15 @@
         <input class="form-control form-control-lg" name="title" required>
       </div>
       <div class="col-md-4">
-        <label class="form-label">ジャンル</label>
-        <input class="form-control form-control-lg" name="genre" required>
+        <label class="form-label">ステータス</label>
+        <select class="form-select form-select-lg" name="status">
+          <option value="draft">下書き</option>
+          <option value="published">公開</option>
+        </select>
       </div>
       <div class="col-12">
-        <label class="form-label">あらすじ</label>
-        <textarea class="form-control" name="summary" rows="5"></textarea>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">想定プレイ時間（分）</label>
-        <input class="form-control" type="number" name="play_time_minutes" min="0">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">制作方式</label>
-        <select class="form-select" name="project_type">
-          <option value="linear">一本道</option>
-          <option value="branching">分岐型</option>
-          <option value="exploration">探索型</option>
-        </select>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">ステータス</label>
-        <select class="form-select" name="status">
-          <option value="draft">draft</option>
-          <option value="active">active</option>
-        </select>
+        <label class="form-label">説明</label>
+        <textarea class="form-control" name="summary" rows="4" placeholder="プロジェクトの説明や利用者向けのメモを入力"></textarea>
       </div>
       <div class="col-12 d-flex gap-2 justify-content-end">
         <a class="btn btn-outline-dark" href="{{ url_for('ui.project_list_page') }}">キャンセル</a>
@@ -53,12 +37,11 @@
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const body = Object.fromEntries(new FormData(form).entries());
-    if (!body.play_time_minutes) delete body.play_time_minutes;
     try {
       const project = await NovelUI.api("/api/v1/projects", { method: "POST", body });
       location.href = `/projects/${project.id}/home?edit=1`;
     } catch (error) {
-      NovelUI.toast(error.message || "作品作成に失敗しました。", "danger");
+      NovelUI.toast(error.message || "プロジェクト作成に失敗しました。", "danger");
     }
   });
 })();

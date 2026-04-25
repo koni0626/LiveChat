@@ -1,6 +1,7 @@
 from flask import Blueprint, request
 
 from ...api import json_response, serialize_datetime
+from ..access import require_project_manage, require_project_view
 from ...services.glossary_service import GlossaryService
 
 
@@ -59,6 +60,7 @@ def _serialize_world(world, project_id: int):
 
 @worlds_bp.route("/projects/<int:project_id>/world", methods=["GET"])
 def get_world(project_id: int):
+    require_project_view(project_id)
     from ...services.world_service import WorldService
     world = WorldService().get_world(project_id)
     return json_response(_serialize_world(world, project_id))
@@ -66,6 +68,7 @@ def get_world(project_id: int):
 
 @worlds_bp.route("/projects/<int:project_id>/world", methods=["PUT"])
 def put_world(project_id: int):
+    require_project_manage(project_id)
     from ...services.world_service import WorldService
     payload = request.get_json(silent=True) or {}
     world = WorldService().upsert_world(project_id, payload)
@@ -74,6 +77,7 @@ def put_world(project_id: int):
 
 @worlds_bp.route("/projects/<int:project_id>/world-context", methods=["GET"])
 def get_world_context(project_id: int):
+    require_project_view(project_id)
     from ...services.world_service import WorldService
 
     world = WorldService().get_world(project_id)

@@ -18,6 +18,8 @@ class ProjectRepository:
         "play_time_minutes",
         "project_type",
         "status",
+        "visibility",
+        "chat_enabled",
         "settings_json",
     )
 
@@ -35,6 +37,37 @@ class ProjectRepository:
         search: str | None = None,
     ):
         query = self._base_query(include_deleted).filter(Project.owner_user_id == owner_user_id)
+        if statuses:
+            query = query.filter(Project.status.in_(list(statuses)))
+        if search:
+            keyword = f"%{search.strip()}%"
+            query = query.filter(or_(Project.title.ilike(keyword), Project.slug.ilike(keyword)))
+        return query.order_by(Project.updated_at.desc(), Project.id.desc()).all()
+
+    def list_all(
+        self,
+        include_deleted: bool = False,
+        statuses: Sequence[str] | None = None,
+        search: str | None = None,
+    ):
+        query = self._base_query(include_deleted)
+        if statuses:
+            query = query.filter(Project.status.in_(list(statuses)))
+        if search:
+            keyword = f"%{search.strip()}%"
+            query = query.filter(or_(Project.title.ilike(keyword), Project.slug.ilike(keyword)))
+        return query.order_by(Project.updated_at.desc(), Project.id.desc()).all()
+
+    def list_chat_available(
+        self,
+        include_deleted: bool = False,
+        statuses: Sequence[str] | None = None,
+        search: str | None = None,
+    ):
+        query = self._base_query(include_deleted).filter(
+            Project.chat_enabled == 1,
+            Project.status == "published",
+        )
         if statuses:
             query = query.filter(Project.status.in_(list(statuses)))
         if search:
@@ -75,7 +108,7 @@ class ProjectRepository:
         project = Project(
             owner_user_id=owner_user_id,
             title=payload["title"],
-            genre=payload["genre"],
+            genre=payload.get("genre") or "未設定",
             thumbnail_asset_id=payload.get("thumbnail_asset_id"),
             world_id=payload.get("world_id"),
             slug=payload.get("slug"),
@@ -83,6 +116,8 @@ class ProjectRepository:
             play_time_minutes=payload.get("play_time_minutes"),
             project_type=payload.get("project_type", "linear"),
             status=payload.get("status", "draft"),
+            visibility=payload.get("visibility", "published" if payload.get("status") == "published" else "private"),
+            chat_enabled=1 if payload.get("chat_enabled", True) else 0,
             settings_json=payload.get("settings_json"),
         )
         db.session.add(project)
@@ -103,6 +138,8 @@ class ProjectRepository:
             "play_time_minutes",
             "project_type",
             "status",
+            "visibility",
+            "chat_enabled",
             "settings_json",
         ):
             if field in payload:

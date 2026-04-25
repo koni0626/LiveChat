@@ -121,9 +121,11 @@ class LiveChatService:
         return {
             "id": row.id,
             "project_id": row.project_id,
+            "owner_user_id": getattr(row, "owner_user_id", None),
             "title": row.title,
             "session_type": row.session_type,
             "status": row.status,
+            "privacy_status": getattr(row, "privacy_status", "private"),
             "active_image_id": row.active_image_id,
             "player_name": row.player_name,
             "settings_json": self._load_json(row.settings_json),
@@ -549,10 +551,19 @@ class LiveChatService:
         )
         return self._serialize_session_image(session_image)
 
-    def list_sessions(self, project_id: int):
-        items = self._chat_session_service.list_sessions(project_id)
+    def list_sessions(
+        self,
+        project_id: int,
+        owner_user_id: int | None = None,
+        include_private_details: bool = True,
+        detail_owner_user_id: int | None = None,
+    ):
+        items = self._chat_session_service.list_sessions(project_id, owner_user_id=owner_user_id)
         serialized = []
         for item in items:
+            can_include_details = include_private_details or (
+                detail_owner_user_id is not None and getattr(item, "owner_user_id", None) == detail_owner_user_id
+            )
             messages = self._chat_message_service.list_messages(item.id)
             images = self._session_image_service.list_session_images(item.id)
             selected_image_row = next((image for image in images if image.is_selected), None)
@@ -561,16 +572,20 @@ class LiveChatService:
                 {
                     **self._serialize_session(item),
                     "message_count": len(messages),
-                    "last_message_text": messages[-1].message_text if messages else None,
+                    "last_message_text": messages[-1].message_text if messages and can_include_details else None,
                     "characters": session_characters,
-                    "selected_image": self._serialize_session_image(selected_image_row) if selected_image_row else None,
+                    "selected_image": (
+                        self._serialize_session_image(selected_image_row)
+                        if selected_image_row and can_include_details
+                        else None
+                    ),
                 }
             )
         return serialized
 
-    def create_session(self, project_id: int, payload: dict | None = None):
+    def create_session(self, project_id: int, payload: dict | None = None, owner_user_id: int | None = None):
         payload = dict(payload or {})
-        session = self._chat_session_service.create_session(project_id, payload)
+        session = self._chat_session_service.create_session(project_id, payload, owner_user_id=owner_user_id)
         if not session:
             return None
         initial_state = {}

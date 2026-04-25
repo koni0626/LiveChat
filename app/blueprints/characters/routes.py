@@ -1,6 +1,7 @@
 from flask import Blueprint, request
 
-from ...api import json_response
+from ...api import ForbiddenError, NotFoundError, json_response
+from ..access import require_project_manage, require_project_view
 from ...services.asset_service import AssetService
 from ...services.character_image_rule_service import CharacterImageRuleService
 from ...services.character_service import CharacterService
@@ -143,6 +144,7 @@ def _serialize_image_rule(image_rule, character_id: int):
 
 @characters_bp.route("/projects/<int:project_id>/characters", methods=["GET"])
 def list_characters(project_id: int):
+    require_project_view(project_id)
     include_deleted = _get_bool_query("include_deleted", default=False)
     search = request.args.get("q") or request.args.get("search")
     characters = character_service.list_characters(project_id, include_deleted=include_deleted)
@@ -165,6 +167,7 @@ def list_characters(project_id: int):
 
 @characters_bp.route("/projects/<int:project_id>/characters", methods=["POST"])
 def create_character(project_id: int):
+    require_project_manage(project_id)
     payload = request.get_json(silent=True) or {}
     try:
         character = character_service.create_character(project_id, payload)
@@ -178,13 +181,18 @@ def get_character(character_id: int):
     include_deleted = _get_bool_query("include_deleted", default=False)
     character = character_service.get_character(character_id, include_deleted=include_deleted)
     if not character:
-        return json_response({"message": "not_found"}, status=404)
+        raise NotFoundError()
+    require_project_view(character.project_id)
     return json_response(_serialize_character(character, include_image_rule_summary=True))
 
 
 @characters_bp.route("/characters/<int:character_id>", methods=["PATCH"])
 def update_character(character_id: int):
     payload = request.get_json(silent=True) or {}
+    existing = character_service.get_character(character_id)
+    if not existing:
+        raise NotFoundError()
+    require_project_manage(existing.project_id)
     try:
         character = character_service.update_character(character_id, payload)
     except ValueError as exc:
@@ -196,6 +204,10 @@ def update_character(character_id: int):
 
 @characters_bp.route("/characters/<int:character_id>", methods=["DELETE"])
 def delete_character(character_id: int):
+    existing = character_service.get_character(character_id)
+    if not existing:
+        raise NotFoundError()
+    require_project_manage(existing.project_id)
     deleted = character_service.delete_character(character_id)
     if not deleted:
         return json_response({"message": "not_found"}, status=404)
@@ -206,7 +218,8 @@ def delete_character(character_id: int):
 def get_image_rule(character_id: int):
     character = character_service.get_character(character_id)
     if not character:
-        return json_response({"message": "not_found"}, status=404)
+        raise NotFoundError()
+    require_project_view(character.project_id)
     image_rule = character_image_rule_service.get_image_rule(character_id)
     return json_response(_serialize_image_rule(image_rule, character_id))
 
@@ -214,6 +227,10 @@ def get_image_rule(character_id: int):
 @characters_bp.route("/characters/<int:character_id>/image-rule", methods=["PUT"])
 def put_image_rule(character_id: int):
     payload = request.get_json(silent=True) or {}
+    character = character_service.get_character(character_id)
+    if not character:
+        raise NotFoundError()
+    require_project_manage(character.project_id)
     try:
         image_rule = character_image_rule_service.upsert_image_rule(character_id, payload)
     except ValueError as exc:

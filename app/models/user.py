@@ -12,6 +12,7 @@ class User(db.Model, TimestampMixin, SoftDeleteMixin):
     display_name = db.Column(db.String(255), nullable=False)
     password_hash = db.Column(db.String(255))
     auth_provider = db.Column(db.String(50), default="local", nullable=False)
+    role = db.Column(db.String(50), default="user", nullable=False)
     status = db.Column(db.String(50), default="active", nullable=False)
 
     def set_password(self, password: str):

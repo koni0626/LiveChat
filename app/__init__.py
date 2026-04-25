@@ -15,6 +15,7 @@ from .blueprints.projects import projects_bp
 from .blueprints.worlds import worlds_bp
 from .blueprints.characters import characters_bp
 from .blueprints.assets import assets_bp
+from .blueprints.admin import admin_bp
 from .blueprints.glossary import glossary_bp
 from .blueprints.ending_conditions import ending_conditions_bp
 from .blueprints.settings import settings_bp
@@ -34,22 +35,30 @@ def _register_cli_commands(app: Flask):
     @click.option("--display-name", prompt=True, help="Display name.")
     @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True, help="Login password.")
     @click.option("--status", default="active", show_default=True, help="User status.")
-    def create_user_command(email: str, display_name: str, password: str, status: str):
+    @click.option(
+        "--role",
+        default="user",
+        show_default=True,
+        type=click.Choice(["superuser", "project_user", "user"]),
+        help="User role.",
+    )
+    def create_user_command(email: str, display_name: str, password: str, status: str, role: str):
         normalized_email = str(email).strip().lower()
         if not normalized_email:
             raise click.ClickException("email is required")
 
         user = User.query.filter_by(email=normalized_email).first()
         if user is None:
-            user = User(email=normalized_email, display_name=display_name, status=status)
+            user = User(email=normalized_email, display_name=display_name, status=status, role=role)
             db.session.add(user)
         else:
             user.display_name = display_name
             user.status = status
+            user.role = role
 
         user.set_password(password)
         db.session.commit()
-        click.echo(f"user ready: {user.email} (id={user.id})")
+        click.echo(f"user ready: {user.email} (id={user.id}, role={user.role})")
 
 
 def create_app(config_object=Config):
@@ -70,6 +79,7 @@ def create_app(config_object=Config):
     app.register_blueprint(worlds_bp, url_prefix="/api/v1")
     app.register_blueprint(characters_bp, url_prefix="/api/v1")
     app.register_blueprint(assets_bp, url_prefix="/api/v1")
+    app.register_blueprint(admin_bp, url_prefix="/api/v1")
     app.register_blueprint(glossary_bp, url_prefix="/api/v1")
     app.register_blueprint(ending_conditions_bp, url_prefix="/api/v1")
     app.register_blueprint(settings_bp, url_prefix="/api/v1")

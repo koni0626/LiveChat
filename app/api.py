@@ -22,6 +22,11 @@ class UnauthorizedError(ApiError):
         super().__init__(message, status_code=401, code=code, meta=meta)
 
 
+class ForbiddenError(ApiError):
+    def __init__(self, message: str = "forbidden", *, code: str = "forbidden", meta: dict | None = None):
+        super().__init__(message, status_code=403, code=code, meta=meta)
+
+
 class NotFoundError(ApiError):
     def __init__(self, message: str = "not_found", *, code: str = "not_found", meta: dict | None = None):
         super().__init__(message, status_code=404, code=code, meta=meta)

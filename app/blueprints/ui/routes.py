@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from flask import Blueprint, render_template, session, url_for
 
+from ...models import User
+
 
 ui_bp = Blueprint("ui", __name__)
 
@@ -19,18 +21,28 @@ def _project_nav(project_id: int | None):
 
 def _render(template_name: str, *, title: str, screen_id: str, project_id: int | None = None, **context):
     user_id = session.get("user_id")
+    current_user = User.query.get(user_id) if user_id else None
+    global_nav_links = [
+        {"label": "ダッシュボード", "icon": "bi-house-door", "href": url_for("ui.dashboard_page")},
+        {"label": "プロジェクト", "icon": "bi-collection", "href": url_for("ui.project_list_page")},
+        {"label": "設定", "icon": "bi-sliders", "href": url_for("ui.settings_page")},
+    ]
+    if current_user and getattr(current_user, "role", "user") == "superuser":
+        global_nav_links.insert(
+            2,
+            {"label": "ユーザー管理", "icon": "bi-person-gear", "href": url_for("ui.admin_users_page")},
+        )
     return render_template(
         template_name,
         page_title=title,
         screen_id=screen_id,
         project_id=project_id,
         current_user_id=user_id,
+        current_user_display_name=(getattr(current_user, "display_name", None) if current_user else None),
+        current_user_email=(getattr(current_user, "email", None) if current_user else None),
+        current_user_role=(getattr(current_user, "role", "user") if current_user else None),
         project_nav_links=_project_nav(project_id),
-        global_nav_links=[
-            {"label": "ダッシュボード", "icon": "bi-house-door", "href": url_for("ui.dashboard_page")},
-            {"label": "プロジェクト", "icon": "bi-collection", "href": url_for("ui.project_list_page")},
-            {"label": "設定", "icon": "bi-sliders", "href": url_for("ui.settings_page")},
-        ],
+        global_nav_links=global_nav_links,
         **context,
     )
 
@@ -116,3 +128,8 @@ def live_chat_page(project_id: int, session_id: int):
 @ui_bp.route("/settings", methods=["GET"])
 def settings_page():
     return _render("ui/settings.html", title="設定", screen_id="settings")
+
+
+@ui_bp.route("/admin/users", methods=["GET"])
+def admin_users_page():
+    return _render("ui/admin_users.html", title="ユーザー管理", screen_id="admin-users")

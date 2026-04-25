@@ -1,11 +1,20 @@
 from flask import Blueprint, request, session
 
-from ...api import json_response
+from ...api import ForbiddenError, NotFoundError, UnauthorizedError, json_response
+from ...models import User
+from ...services.authorization_service import AuthorizationService
 from ...services.project_service import ProjectService
 
 
 projects_bp = Blueprint("projects", __name__)
 project_service = ProjectService()
+authorization_service = AuthorizationService()
+
+
+def _project_status(status):
+    return "published" if status in {"published", "active"} else "draft"
+
+
 def _serialize_project(project):
     if project is None:
         return None
@@ -20,7 +29,9 @@ def _serialize_project(project):
         "summary": project.summary,
         "play_time_minutes": project.play_time_minutes,
         "project_type": project.project_type,
-        "status": project.status,
+        "status": _project_status(project.status),
+        "visibility": getattr(project, "visibility", "private"),
+        "chat_enabled": bool(getattr(project, "chat_enabled", 1)),
         "settings_json": project.settings_json,
         "created_at": project.created_at.isoformat() if project.created_at else None,
         "updated_at": project.updated_at.isoformat() if project.updated_at else None,
@@ -32,21 +43,41 @@ def _get_owner_user_id():
     return session.get("user_id")
 
 
+def _current_user():
+    user_id = session.get("user_id")
+    if not user_id:
+        raise UnauthorizedError()
+    user = User.query.get(user_id)
+    if not user or not user.is_active_user:
+        raise UnauthorizedError()
+    return user
+
+
 @projects_bp.route("", methods=["GET"])
 def list_projects():
-    owner_user_id = _get_owner_user_id()
-    if not owner_user_id:
-        return json_response({"message": "unauthorized"}, status=401)
-
+    user = _current_user()
     include_deleted = request.args.get("include_deleted") in ("1", "true", "True")
     statuses = request.args.getlist("status") or None
     search = request.args.get("search")
-    projects = project_service.list_projects(
-        owner_user_id,
-        include_deleted=include_deleted,
-        statuses=statuses,
-        search=search,
-    )
+    if authorization_service.is_superuser(user):
+        projects = project_service.list_all_projects(
+            include_deleted=include_deleted,
+            statuses=statuses,
+            search=search,
+        )
+    elif authorization_service.is_project_user(user):
+        projects = project_service.list_projects(
+            user.id,
+            include_deleted=include_deleted,
+            statuses=statuses,
+            search=search,
+        )
+    else:
+        projects = project_service.list_chat_available_projects(
+            include_deleted=False,
+            statuses=statuses,
+            search=search,
+        )
     data = [_serialize_project(project) for project in projects]
     meta = {"page": 1, "per_page": len(data), "total": len(data)}
     return json_response(data, meta=meta)
@@ -54,13 +85,13 @@ def list_projects():
 
 @projects_bp.route("", methods=["POST"])
 def create_project():
-    owner_user_id = _get_owner_user_id()
-    if not owner_user_id:
-        return json_response({"message": "unauthorized"}, status=401)
+    user = _current_user()
+    if not authorization_service.can_create_project(user):
+        raise ForbiddenError()
 
     payload = request.get_json(silent=True) or {}
     try:
-        project = project_service.create_project(owner_user_id, payload)
+        project = project_service.create_project(user.id, payload)
     except ValueError as exc:
         return json_response({"message": str(exc)}, status=400)
     return json_response(_serialize_project(project), status=201)
@@ -68,14 +99,23 @@ def create_project():
 
 @projects_bp.route("/<int:project_id>", methods=["GET"])
 def get_project(project_id: int):
+    user = _current_user()
     project = project_service.get_project(project_id)
     if not project:
-        return json_response({"message": "not_found"}, status=404)
+        raise NotFoundError()
+    if not authorization_service.can_view_project(user, project):
+        raise NotFoundError()
     return json_response(_serialize_project(project))
 
 
 @projects_bp.route("/<int:project_id>", methods=["PATCH"])
 def update_project(project_id: int):
+    user = _current_user()
+    project = project_service.get_project(project_id)
+    if not project:
+        raise NotFoundError()
+    if not authorization_service.can_manage_project(user, project):
+        raise ForbiddenError()
     payload = request.get_json(silent=True) or {}
     try:
         project = project_service.update_project(project_id, payload)
@@ -88,6 +128,12 @@ def update_project(project_id: int):
 
 @projects_bp.route("/<int:project_id>", methods=["DELETE"])
 def delete_project(project_id: int):
+    user = _current_user()
+    project = project_service.get_project(project_id)
+    if not project:
+        raise NotFoundError()
+    if not authorization_service.can_manage_project(user, project):
+        raise ForbiddenError()
     deleted = project_service.delete_project(project_id)
     if not deleted:
         return json_response({"message": "not_found"}, status=404)

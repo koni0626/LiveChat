@@ -22,14 +22,6 @@
       <div class="metric-label">Projects</div>
       <div class="metric-value" id="dashboardProjectCount">0</div>
     </article>
-    <article class="metric-card">
-      <div class="metric-label">Core Flow</div>
-      <div class="metric-value">Chat</div>
-    </article>
-    <article class="metric-card">
-      <div class="metric-label">Image Mode</div>
-      <div class="metric-value">Reference</div>
-    </article>
   </div>
 
   <div class="content-grid">
@@ -55,6 +47,10 @@
 {% block scripts %}
 <script>
 (() => {
+  function statusLabel(status) {
+    return status === "published" || status === "active" ? "公開" : "下書き";
+  }
+
   async function loadDashboard() {
     const projects = await NovelUI.api("/api/v1/projects");
     const list = Array.isArray(projects) ? projects : [];
@@ -69,11 +65,10 @@
     host.innerHTML = list.slice(0, 6).map((project) => `
       <a class="project-card" href="/projects/${project.id}/home">
         <div class="project-card-top">
-          <span class="badge text-bg-light">${NovelUI.escape(project.genre || "genre")}</span>
-          <span class="soft-code">${NovelUI.escape(project.status || "draft")}</span>
+          <span class="soft-code">${NovelUI.escape(statusLabel(project.status))}</span>
         </div>
         <h4>${NovelUI.escape(project.title || "Untitled")}</h4>
-        <p>${NovelUI.escape(project.summary || "概要はまだありません。")}</p>
+        <p>${NovelUI.escape(project.summary || "説明はまだありません。")}</p>
       </a>
     `).join("");
   }

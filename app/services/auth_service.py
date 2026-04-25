@@ -36,6 +36,7 @@ class AuthService:
             "id": user.id,
             "email": user.email,
             "display_name": user.display_name,
+            "role": getattr(user, "role", "user") or "user",
             "status": user.status,
             "auth_provider": user.auth_provider,
         }
@@ -98,6 +99,7 @@ class AuthService:
             email=normalized_email,
             display_name=validated_display_name,
             auth_provider="local",
+            role="user",
             status="active",
         )
         user.set_password(validated_password)
@@ -111,6 +113,26 @@ class AuthService:
             "auth_mode": "session",
             "user": self._serialize_user(user),
         }
+
+    def create_superuser(self, email: Optional[str], display_name: Optional[str], password: Optional[str]) -> dict[str, Any]:
+        normalized_email = self._normalize_email(email)
+        validated_display_name = self._validate_display_name(display_name)
+        validated_password = self._validate_password(password)
+        existing_user = self._get_user_by_email(normalized_email)
+        if existing_user is not None:
+            raise ValueError("email already exists")
+        user = User(
+            email=normalized_email,
+            display_name=validated_display_name,
+            auth_provider="local",
+            role="superuser",
+            status="active",
+        )
+        user.set_password(validated_password)
+        db.session.add(user)
+        db.session.commit()
+        self._log_auth_event(user.id, "auth_create_superuser")
+        return {"user": self._serialize_user(user)}
 
     def logout(self, user_id: Optional[int] = None) -> dict[str, str]:
         self._log_auth_event(user_id, "auth_logout")

@@ -16,4 +16,6 @@ class Project(db.Model, TimestampMixin, SoftDeleteMixin):
     play_time_minutes = db.Column(db.Integer)
     project_type = db.Column(db.String(50), nullable=False, default="linear")
     status = db.Column(db.String(50), nullable=False, default="draft")
+    visibility = db.Column(db.String(50), nullable=False, default="private")
+    chat_enabled = db.Column(db.Integer, nullable=False, default=1)
     settings_json = db.Column(db.Text)

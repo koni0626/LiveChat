@@ -7,7 +7,7 @@
       <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
         <div>
           <h2 class="section-title" id="projectHomeTitle">プロジェクト情報を読み込み中...</h2>
-          <p class="section-copy" id="projectHomeSummary">作品情報、世界観、キャラクター、ライブチャットの起点になる画面です。</p>
+          <p class="section-copy" id="projectHomeSummary">キャラクター、世界観、ライブチャットの起点になる画面です。</p>
           <div class="d-flex flex-wrap gap-2 mt-3" id="projectMetaChips"></div>
         </div>
         <div class="d-flex flex-wrap gap-2">
@@ -20,38 +20,20 @@
       </div>
 
       <form id="projectEditForm" class="row g-3 mt-3" hidden>
-        <div class="col-lg-5 col-md-6">
+        <div class="col-lg-7 col-md-8">
           <label class="form-label" for="projectTitleInput">作品名</label>
           <input class="form-control" id="projectTitleInput" name="title" placeholder="作品名" required>
         </div>
-        <div class="col-lg-3 col-md-6">
-          <label class="form-label" for="projectGenreInput">ジャンル</label>
-          <input class="form-control" id="projectGenreInput" name="genre" placeholder="ジャンル" required>
-        </div>
-        <div class="col-lg-2 col-md-6">
-          <label class="form-label" for="projectTypeSelect">制作方式</label>
-          <select class="form-select" id="projectTypeSelect" name="project_type">
-            <option value="linear">一本道</option>
-            <option value="branching">分岐型</option>
-            <option value="exploration">探索型</option>
-          </select>
-        </div>
-        <div class="col-lg-2 col-md-6">
+        <div class="col-lg-3 col-md-4">
           <label class="form-label" for="projectStatusSelect">ステータス</label>
           <select class="form-select" id="projectStatusSelect" name="status">
-            <option value="draft">draft</option>
-            <option value="active">active</option>
-            <option value="published">published</option>
-            <option value="archived">archived</option>
+            <option value="draft">下書き</option>
+            <option value="published">公開</option>
           </select>
         </div>
         <div class="col-12">
-          <label class="form-label" for="projectSummaryInput">あらすじ</label>
-          <textarea class="form-control" id="projectSummaryInput" name="summary" rows="4" placeholder="あらすじ"></textarea>
-        </div>
-        <div class="col-lg-3 col-md-4">
-          <label class="form-label" for="projectPlayTimeInput">想定プレイ時間（分）</label>
-          <input class="form-control" id="projectPlayTimeInput" type="number" name="play_time_minutes" min="0" placeholder="60">
+          <label class="form-label" for="projectSummaryInput">説明</label>
+          <textarea class="form-control" id="projectSummaryInput" name="summary" rows="4" placeholder="プロジェクトの説明や利用者向けのメモを入力"></textarea>
         </div>
         <div class="col-12 d-flex justify-content-end gap-2">
           <button class="btn btn-outline-dark" type="button" id="projectEditCancelButton">閉じる</button>
@@ -95,11 +77,8 @@
   const editCancelButton = document.getElementById("projectEditCancelButton");
   const editForm = document.getElementById("projectEditForm");
   const titleInput = document.getElementById("projectTitleInput");
-  const genreInput = document.getElementById("projectGenreInput");
   const summaryInput = document.getElementById("projectSummaryInput");
-  const projectTypeSelect = document.getElementById("projectTypeSelect");
   const projectStatusSelect = document.getElementById("projectStatusSelect");
-  const playTimeInput = document.getElementById("projectPlayTimeInput");
   const params = new URLSearchParams(window.location.search);
 
   function setEditVisible(visible) {
@@ -111,15 +90,16 @@
     }
   }
 
+  function normalizeProjectStatus(status) {
+    return status === "published" || status === "active" ? "published" : "draft";
+  }
+
+  function statusLabel(status) {
+    return normalizeProjectStatus(status) === "published" ? "公開" : "下書き";
+  }
+
   function renderMetaChips(project) {
-    const chips = [
-      `ジャンル: ${project?.genre || "-"}`,
-      `制作方式: ${project?.project_type || "-"}`,
-      `ステータス: ${project?.status || "-"}`,
-    ];
-    if (project?.play_time_minutes) {
-      chips.push(`想定プレイ時間: ${project.play_time_minutes}分`);
-    }
+    const chips = [`ステータス: ${statusLabel(project?.status)}`];
     document.getElementById("projectMetaChips").innerHTML = chips
       .map((item) => `<span class="soft-code">${NovelUI.escape(item)}</span>`)
       .join("");
@@ -136,23 +116,20 @@
     const sessionList = Array.isArray(sessions) ? sessions : [];
 
     document.getElementById("projectHomeTitle").textContent = project?.title || "Untitled";
-    document.getElementById("projectHomeSummary").textContent = project?.summary || "あらすじはまだ登録されていません。";
+    document.getElementById("projectHomeSummary").textContent =
+      project?.summary || "キャラクター、世界観、ライブチャットの起点になる画面です。";
     renderMetaChips(project);
 
     titleInput.value = project?.title || "";
-    genreInput.value = project?.genre || "";
     summaryInput.value = project?.summary || "";
-    projectTypeSelect.value = project?.project_type || "linear";
-    projectStatusSelect.value = project?.status || "draft";
-    playTimeInput.value = project?.play_time_minutes ?? "";
+    projectStatusSelect.value = normalizeProjectStatus(project?.status);
 
     document.getElementById("projectStatsRow").innerHTML = [
       ["キャラクター", characterList.length],
       ["ライブチャット", sessionList.length],
-      ["ステータス", project?.status || "draft"],
-      ["ジャンル", project?.genre || "-"],
+      ["ステータス", statusLabel(project?.status)],
     ].map(([label, value]) => `
-      <article class="metric-card"><div class="metric-label">${label}</div><div class="metric-value">${NovelUI.escape(String(value))}</div></article>
+      <article class="metric-card"><div class="metric-label">${NovelUI.escape(label)}</div><div class="metric-value">${NovelUI.escape(String(value))}</div></article>
     `).join("");
 
     const recentList = sessionList
@@ -163,7 +140,7 @@
     document.getElementById("recentLiveChatList").innerHTML = recentList.length ? recentList.map((item) => `
       <a class="list-row" href="/projects/${projectId}/live-chat/${item.id}">
         <div>
-          <div class="list-title">${NovelUI.escape(item.title || "Live Chat Session")}</div>
+          <div class="list-title">${NovelUI.escape(item.title || "ライブチャットセッション")}</div>
           <div class="list-subtitle">${NovelUI.escape(item.last_message_text || "まだ会話メッセージがありません。")}</div>
         </div>
         <span class="soft-code">${NovelUI.escape(String(item.message_count || 0))} messages</span>
@@ -187,22 +164,13 @@
     event.preventDefault();
     const body = {
       title: titleInput.value.trim(),
-      genre: genreInput.value.trim(),
       summary: summaryInput.value.trim(),
-      project_type: projectTypeSelect.value,
       status: projectStatusSelect.value,
     };
-    const playTime = playTimeInput.value.trim();
-    body.play_time_minutes = playTime ? Number(playTime) : null;
 
     if (!body.title) {
       NovelUI.toast("作品名を入力してください。", "warning");
       titleInput.focus();
-      return;
-    }
-    if (!body.genre) {
-      NovelUI.toast("ジャンルを入力してください。", "warning");
-      genreInput.focus();
       return;
     }
 
