@@ -8,6 +8,10 @@
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}`);
   }
 
+  async function loadSettings() {
+    return NovelUI.api("/api/v1/settings");
+  }
+
   async function generateSessionImage(sessionId, body) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/images/generate`, {
       method: "POST",
@@ -72,7 +76,7 @@
   async function setReferenceImage(sessionId, imageId, isReference) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/images/${imageId}/reference`, {
       method: "POST",
-      body: { is_reference: !!isReference },
+      body: { is_reference: isReference !== false },
     });
   }
 
@@ -84,6 +88,7 @@
 
   window.LiveChatApi = {
     loadSessionCharacterOptions,
+    loadSettings,
     loadContext,
     generateSessionImage,
     updateSession,

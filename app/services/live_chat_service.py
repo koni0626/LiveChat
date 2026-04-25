@@ -177,7 +177,7 @@ class LiveChatService:
             "asset": self._serialize_asset(asset),
         }
 
-    def _collect_session_reference_assets(self, session_id: int, active_characters: list[dict], *, limit: int = 2):
+    def _collect_session_reference_assets(self, session_id: int, active_characters: list[dict], *, limit: int = 1):
         session_images = self._session_image_service.list_session_images(session_id)
         reference_paths = []
         reference_asset_ids = []
@@ -476,7 +476,7 @@ class LiveChatService:
         if not visual_decision.get("show_gift_visual"):
             return None
         prompt = self._build_gift_visual_prompt(context, character, recognized_label, visual_decision)
-        reference_paths, reference_asset_ids = self._collect_session_reference_assets(session.id, [character], limit=2)
+        reference_paths, reference_asset_ids = self._collect_session_reference_assets(session.id, [character], limit=1)
         result = self._image_ai_client.generate_image(
             prompt,
             size="1536x1024",
@@ -535,6 +535,7 @@ class LiveChatService:
                 "quality": "low",
                 "size": "1536x1024",
                 "is_selected": 1,
+                "is_reference": 1,
             },
         )
         self.select_image(session_image.id)
@@ -579,8 +580,27 @@ class LiveChatService:
         self._session_state_service.upsert_state(session.id, {"state_json": initial_state})
         return self.get_session_context(session.id)
 
+    def _preserve_locked_session_characters(self, session_id: int, payload: dict) -> dict:
+        if "settings_json" not in payload:
+            return payload
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return payload
+        locked_character_ids = self._selected_character_ids_from_session(session)
+        settings_json = self._load_json(payload.get("settings_json")) or {}
+        if not isinstance(settings_json, dict):
+            settings_json = {}
+        settings_json.pop("selected_character_id", None)
+        if locked_character_ids:
+            settings_json["selected_character_ids"] = locked_character_ids
+        else:
+            settings_json.pop("selected_character_ids", None)
+        payload["settings_json"] = settings_json
+        return payload
+
     def update_session(self, session_id: int, payload: dict | None = None):
         payload = dict(payload or {})
+        payload = self._preserve_locked_session_characters(session_id, payload)
         session = self._chat_session_service.update_session(session_id, payload)
         if not session:
             return None
@@ -900,7 +920,7 @@ class LiveChatService:
         state_json["visual_state"] = visual_state
 
         active_characters = image_support.resolve_active_characters(context, state_json, conversation_prompt)
-        reference_paths, reference_asset_ids = self._collect_session_reference_assets(session_id, active_characters, limit=2)
+        reference_paths, reference_asset_ids = self._collect_session_reference_assets(session_id, active_characters, limit=1)
         result = self._image_ai_client.generate_image(
             prompt,
             size=payload.get("size") or "1536x1024",
@@ -948,6 +968,7 @@ class LiveChatService:
                 "quality": payload.get("quality") or "low",
                 "size": payload.get("size") or "1536x1024",
                 "is_selected": 1,
+                "is_reference": 1,
             },
         )
         self.select_image(session_image.id)

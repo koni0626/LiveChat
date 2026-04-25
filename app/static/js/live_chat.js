@@ -24,6 +24,7 @@
   let currentContext = null;
   let giftController = null;
   let composeVisible = true;
+  let userDefaultImageSettings = {};
 
   function getMessageListElement() {
     return document.getElementById("liveChatMessageList");
@@ -71,13 +72,19 @@
         ].join("");
         const selectedIds = LiveChatView.normalizeSelectedCharacterIds(context.session.settings_json);
         sessionCharacterSelect.value = selectedIds.length ? String(selectedIds[0]) : "";
+        sessionCharacterSelect.disabled = true;
+        sessionCharacterSelect.title = "\u4f5c\u6210\u6e08\u307f\u30bb\u30c3\u30b7\u30e7\u30f3\u306e\u8a71\u3059\u76f8\u624b\u306f\u5909\u66f4\u3067\u304d\u307e\u305b\u3093\u3002";
       })
       .catch((error) => {
         NovelUI.toast(error.message || "\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u4e00\u89a7\u306e\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
       });
 
-    stateBoard.textContent = LiveChatView.formatJson(context.state.state_json || {});
-    memoryBoard.textContent = LiveChatView.formatJson((context.state.state_json || {}).session_memory || {});
+    if (stateBoard) {
+      stateBoard.textContent = LiveChatView.formatJson(context.state.state_json || {});
+    }
+    if (memoryBoard) {
+      memoryBoard.textContent = LiveChatView.formatJson((context.state.state_json || {}).session_memory || {});
+    }
     imageForm.prompt_text.value = context.state.visual_prompt_text || "";
 
     shell.renderMessages(context.messages || [], context);
@@ -90,12 +97,28 @@
     applyContext(context);
   }
 
-  async function generateSessionImage(useExistingPrompt = false, mode = "generate") {
+  async function loadDefaultImageSettings() {
+    try {
+      const settings = await LiveChatApi.loadSettings();
+      userDefaultImageSettings = settings || {};
+      if (settings?.default_quality && imageForm.quality) {
+        imageForm.quality.value = settings.default_quality;
+      }
+      if (settings?.default_size && imageForm.size) {
+        imageForm.size.value = settings.default_size;
+      }
+    } catch (error) {
+      userDefaultImageSettings = {};
+    }
+  }
+
+  async function generateSessionImage(useExistingPrompt = false, mode = "generate", overrides = {}) {
     shell.setImageLoading(true, mode);
     try {
       const body = {
         size: imageForm.size.value,
         quality: imageForm.quality.value,
+        ...overrides,
       };
       if (useExistingPrompt) {
         body.prompt_text = imageForm.prompt_text.value;
@@ -195,7 +218,7 @@
   shell.initialize();
   setComposeVisible(true);
 
-  loadContext().catch((error) => {
+  loadDefaultImageSettings().then(loadContext).catch((error) => {
     NovelUI.toast(error.message || "\u30e9\u30a4\u30d6\u30c1\u30e3\u30c3\u30c8\u753b\u9762\u306e\u521d\u671f\u5316\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
   });
 

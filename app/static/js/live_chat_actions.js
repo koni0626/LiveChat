@@ -13,13 +13,13 @@
     sessionMetaForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
+        const currentSettings = (getCurrentContext()?.session?.settings_json) || {};
         const updated = await api.updateSession(getSessionId(), {
           title: sessionMetaForm.title.value,
           player_name: sessionMetaForm.player_name.value,
           settings_json: {
-            ...((getCurrentContext()?.session?.settings_json) || {}),
+            ...currentSettings,
             conversation_objective: sessionMetaForm.conversation_objective.value,
-            selected_character_ids: sessionCharacterSelect.value ? [Number(sessionCharacterSelect.value)] : [],
           },
         });
         applyContext(updated);
@@ -84,7 +84,21 @@
     });
 
     imageGrid.addEventListener("click", async (event) => {
-      if (event.target.closest("[data-reference-image-id]")) {
+      const referenceRadio = event.target.closest("[data-reference-image-id]")
+        || event.target.closest(".live-chat-thumb-reference")?.querySelector("[data-reference-image-id]");
+      if (referenceRadio) {
+        if (referenceRadio.dataset.wasChecked === "true") {
+          event.preventDefault();
+          referenceRadio.checked = false;
+          try {
+            await api.setReferenceImage(getSessionId(), referenceRadio.dataset.referenceImageId, false);
+            await loadContext();
+            NovelUI.toast("セッション基準画像を解除しました。キャラクター設定の基準画像を参照します。");
+          } catch (error) {
+            await loadContext();
+            NovelUI.toast(error.message || "基準画像の解除に失敗しました。", "danger");
+          }
+        }
         return;
       }
       const button = event.target.closest("[data-image-id]");
@@ -98,15 +112,22 @@
       }
     });
 
+    imageGrid.addEventListener("pointerdown", (event) => {
+      const radio = event.target.closest("[data-reference-image-id]")
+        || event.target.closest(".live-chat-thumb-reference")?.querySelector("[data-reference-image-id]");
+      if (!radio) return;
+      radio.dataset.wasChecked = radio.checked ? "true" : "false";
+    });
+
     imageGrid.addEventListener("change", async (event) => {
-      const checkbox = event.target.closest("[data-reference-image-id]");
-      if (!checkbox) return;
+      const radio = event.target.closest("[data-reference-image-id]");
+      if (!radio) return;
       try {
-        await api.setReferenceImage(getSessionId(), checkbox.dataset.referenceImageId, checkbox.checked);
+        await api.setReferenceImage(getSessionId(), radio.dataset.referenceImageId, true);
         await loadContext();
-        NovelUI.toast(checkbox.checked ? "基準画像に追加しました。" : "基準画像から外しました。");
+        NovelUI.toast("基準画像を変更しました。");
       } catch (error) {
-        checkbox.checked = !checkbox.checked;
+        await loadContext();
         NovelUI.toast(error.message || "基準画像の更新に失敗しました。", "danger");
       }
     });

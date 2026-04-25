@@ -19,6 +19,21 @@ def get_session_objective(context: dict) -> str | None:
     return None
 
 
+def _conversation_score(evaluation: dict | None) -> int | None:
+    if not isinstance(evaluation, dict):
+        return None
+    try:
+        return int(evaluation.get("score"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_romance_goal(session_objective: str | None, evaluation: dict | None = None) -> bool:
+    objective = str(session_objective or "")
+    theme = str((evaluation or {}).get("theme") or "")
+    return theme == "romance" or any(token in objective for token in ("恋愛", "好き", "惚れ", "感情"))
+
+
 def _normalize_memory_items(values) -> list[str]:
     normalized = []
     seen = set()
@@ -360,6 +375,30 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     if conversation_evaluation:
         lines.append(f"Conversation progress score: {conversation_evaluation.get('score')}")
         lines.append(f"Conversation progress reason: {conversation_evaluation.get('reason') or ''}")
+        score = _conversation_score(conversation_evaluation)
+        is_romance = _is_romance_goal(session_objective, conversation_evaluation)
+        if score is not None and score <= 35:
+            lines.append(
+                "Low progress recovery rule: the character must not stay passive. "
+                "They should create one easy emotional opening that moves toward the session objective."
+            )
+            if is_romance:
+                lines.append(
+                    "For a low romance score, use a small personal disclosure, gentle affection, teasing warmth, "
+                    "or a character-specific invitation that makes the player want to get closer."
+                )
+            else:
+                lines.append(
+                    "For a low general score, make the objective feel more attractive and offer one concrete hook the player can answer."
+                )
+        elif score is not None and score <= 65:
+            lines.append(
+                "Medium progress rule: keep momentum by rewarding useful player input and steering to the next attractive topic."
+            )
+        elif score is not None and score >= 80:
+            lines.append(
+                "High progress rule: deepen the exchange with a more intimate, confident, or goal-advancing response."
+            )
     if relationship_state:
         lines.append("Relationship state:")
         for name, metrics in relationship_state.items():
@@ -388,6 +427,9 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
             lines.append(f"  memory={summary}")
     lines.append("If the player mentions something a character likes, remembers, or responds well to, let that improve the reaction.")
     lines.append("If the player touches a taboo, dislike, or romantic boundary, cool the reaction and let it affect the tone.")
+    lines.append(
+        "Avoid empty loops such as only saying 'what do you want to talk about' or simply agreeing; always add a new emotional or concrete hook."
+    )
     lines.append("Recent conversation:")
     for message in context["messages"][-8:]:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
@@ -399,10 +441,18 @@ def fallback_reply(context: dict, user_message_text: str) -> dict:
     speaker = context["characters"][0]["name"] if context["characters"] else "Character"
     shortened = user_message_text[:40]
     memory_match = _analyze_player_memory_match(context)
+    state_json = context["state"].get("state_json") or {}
+    conversation_evaluation = state_json.get("conversation_evaluation") or {}
+    score = _conversation_score(conversation_evaluation)
+    is_romance = _is_romance_goal(get_session_objective(context), conversation_evaluation)
     if memory_match["penalty"] > 0:
         message = f"{shortened}……その話は、あまり気分がよくないかも。"
     elif memory_match["bonus"] > 0:
         message = f"{shortened}……覚えていてくれたんだね。少し嬉しい。"
+    elif score is not None and score <= 35 and is_romance:
+        message = f"{shortened}……ねえ、少しだけあなたのことを知りたくなった。今の気持ち、わたしに聞かせて。"
+    elif score is not None and score <= 35:
+        message = f"{shortened}……それなら、わたしから一つ面白い話を出すね。ここから少し踏み込んでみよう。"
     else:
         message = f"{shortened}……うん、その話は気になる。もう少し聞かせて。"
     return {"speaker_name": speaker, "message_text": message}
@@ -623,6 +673,30 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
         lines.append(f"- label={conversation_evaluation.get('label') or ''}")
         lines.append(f"- theme={conversation_evaluation.get('theme') or ''}")
         lines.append(f"- mood={conversation_evaluation.get('mood') or ''}")
+        score = _conversation_score(conversation_evaluation)
+        is_romance = _is_romance_goal(session_objective, conversation_evaluation)
+        if score is not None and score <= 35:
+            lines.append(
+                "Director strategy: progress is low. Do not choose a passive or purely explanatory turn. "
+                "Choose invite, comfort, reveal, or tease and give the character a concrete recovery move."
+            )
+            if is_romance:
+                lines.append(
+                    "Romance recovery: the character should make the player feel personally noticed, "
+                    "show a tiny vulnerability or playful affection, and invite a response that can raise affection/trust."
+                )
+            else:
+                lines.append(
+                    "Objective recovery: make the session objective feel appealing, specific, and easy for the player to engage with."
+                )
+        elif score is not None and score <= 65:
+            lines.append(
+                "Director strategy: progress is moderate. Reward the player's useful input and steer to a more specific next beat."
+            )
+        elif score is not None and score >= 80:
+            lines.append(
+                "Director strategy: progress is high. Escalate emotional intimacy or commitment toward the session objective."
+            )
     if memory_match["reasons"]:
         lines.append(f"Memory match analysis: {', '.join(memory_match['reasons'])}")
     lines.append("Characters:")
@@ -638,12 +712,16 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
     for message in context["messages"][-8:]:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
     lines.append(f"- player: {user_message_text}")
+    lines.append("Avoid repeating guide-like movement offers. The director must add a fresh emotional or dramatic beat.")
     return "\n".join(lines)
 
 
 def fallback_conversation_director(context: dict, user_message_text: str) -> dict:
     state_json = context["state"].get("state_json") or {}
     scene_progression = state_json.get("scene_progression") or {}
+    conversation_evaluation = state_json.get("conversation_evaluation") or {}
+    score = _conversation_score(conversation_evaluation)
+    is_romance = _is_romance_goal(get_session_objective(context), conversation_evaluation)
     lowered = str(user_message_text or "").lower()
     memory_match = _analyze_player_memory_match(context)
     if memory_match["penalty"] > 0:
@@ -663,6 +741,33 @@ def fallback_conversation_director(context: dict, user_message_text: str) -> dic
             "scene_goal": scene_progression.get("next_topic") or "deepen the emotional exchange",
             "must_include": ["warm appreciation", "one emotionally closer reaction"],
             "avoid": ["flat acknowledgment", "forgetting the matched preference"],
+        }
+    if score is not None and score <= 35:
+        if is_romance:
+            return {
+                "turn_intent": "tease",
+                "emotional_tone": "softly proactive and inviting",
+                "relationship_goal": "recover low romantic progress by making the player feel personally noticed",
+                "scene_goal": scene_progression.get("next_topic") or "create a warmer emotional opening",
+                "must_include": ["one small personal disclosure", "one easy affectionate question or invitation"],
+                "avoid": ["passive waiting", "guide-like explanations", "generic acknowledgement"],
+            }
+        return {
+            "turn_intent": "invite",
+            "emotional_tone": "proactive and engaging",
+            "relationship_goal": "recover low progress by making the objective easier and more attractive to answer",
+            "scene_goal": scene_progression.get("next_topic") or "offer a concrete next hook",
+            "must_include": ["one specific hook", "one reason the player should care"],
+            "avoid": ["passive waiting", "empty acknowledgement", "vague explanation"],
+        }
+    if score is not None and score <= 65:
+        return {
+            "turn_intent": "reveal",
+            "emotional_tone": "warm and momentum-building",
+            "relationship_goal": "turn the player's input into stronger interest and trust",
+            "scene_goal": scene_progression.get("next_topic") or "deepen the current topic",
+            "must_include": ["one new concrete detail", "one question that advances the objective"],
+            "avoid": ["stalling", "repeating the same offer"],
         }
     if is_affirmative_progress_message(user_message_text):
         return {

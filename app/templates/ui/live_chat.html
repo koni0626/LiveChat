@@ -17,9 +17,10 @@
       </div>
       <div class="col-lg-3 col-md-6">
         <label class="form-label" for="liveChatSessionCharacterSelect">話す相手</label>
-        <select class="form-select" id="liveChatSessionCharacterSelect" name="selected_character_id">
+        <select class="form-select" id="liveChatSessionCharacterSelect" name="selected_character_id" disabled>
           <option value="">キャラクターを選択</option>
         </select>
+        <div class="form-text">作成済みセッションの話す相手は変更できません。</div>
       </div>
       <div class="col-lg-6 col-12">
         <label class="form-label" for="liveChatSessionObjectiveInput">会話の目的</label>
@@ -33,58 +34,6 @@
       </div>
       <div class="col-12 d-grid justify-content-md-end">
         <button class="btn btn-sunrise" type="submit">設定を保存</button>
-      </div>
-      <div class="col-12">
-        <div class="accordion" id="liveChatMetaAccordion">
-          <div class="accordion-item">
-            <h2 class="accordion-header" id="liveChatStateHeading">
-              <button
-                class="accordion-button collapsed"
-                type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#liveChatStateCollapse"
-                aria-expanded="false"
-                aria-controls="liveChatStateCollapse"
-              >
-                表示状態
-              </button>
-            </h2>
-            <div
-              id="liveChatStateCollapse"
-              class="accordion-collapse collapse"
-              aria-labelledby="liveChatStateHeading"
-              data-bs-parent="#liveChatMetaAccordion"
-            >
-              <div class="accordion-body">
-                <pre class="json-board mb-0" id="liveChatStateBoard"></pre>
-              </div>
-            </div>
-          </div>
-          <div class="accordion-item">
-            <h2 class="accordion-header" id="liveChatMemoryHeading">
-              <button
-                class="accordion-button collapsed"
-                type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#liveChatMemoryCollapse"
-                aria-expanded="false"
-                aria-controls="liveChatMemoryCollapse"
-              >
-                会話メモ
-              </button>
-            </h2>
-            <div
-              id="liveChatMemoryCollapse"
-              class="accordion-collapse collapse"
-              aria-labelledby="liveChatMemoryHeading"
-              data-bs-parent="#liveChatMetaAccordion"
-            >
-              <div class="accordion-body">
-                <pre class="json-board mb-0" id="liveChatMemoryBoard"></pre>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </form>
   </section>

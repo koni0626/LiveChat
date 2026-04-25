@@ -18,6 +18,9 @@ class SessionImageRepository:
         state_json = payload.get("state_json")
         if isinstance(state_json, (dict, list)):
             state_json = json_util.dumps(state_json)
+        is_reference = 1 if payload.get("is_reference", 0) else 0
+        if is_reference:
+            SessionImage.query.filter(SessionImage.session_id == session_id).update({"is_reference": 0})
         row = SessionImage(
             session_id=session_id,
             asset_id=payload["asset_id"],
@@ -27,7 +30,7 @@ class SessionImageRepository:
             quality=payload.get("quality"),
             size=payload.get("size"),
             is_selected=payload.get("is_selected", 0),
-            is_reference=payload.get("is_reference", 0),
+            is_reference=is_reference,
         )
         db.session.add(row)
         db.session.commit()
@@ -51,6 +54,10 @@ class SessionImageRepository:
         )
         if not row:
             return None
-        row.is_reference = 1 if is_reference else 0
+        if is_reference:
+            SessionImage.query.filter(SessionImage.session_id == session_id).update({"is_reference": 0})
+            row.is_reference = 1
+        else:
+            row.is_reference = 0
         db.session.commit()
         return row
