@@ -57,6 +57,7 @@ class CharacterService:
         character = self.get_character(character_id)
         if not character:
             return None
+        resolved_art_style = str(payload.get("art_style") or getattr(character, "art_style", None) or "").strip()
         prompt = self._build_base_image_prompt(character, payload)
         result = self._image_ai_client.generate_image(
             prompt,
@@ -92,12 +93,15 @@ class CharacterService:
                         "model": result.get("model"),
                         "quality": result.get("quality"),
                         "size": payload.get("size") or "1024x1536",
-                        "art_style": payload.get("art_style"),
+                        "art_style": resolved_art_style,
                     }
                 ),
             },
         )
-        character = self._repo.update(character.id, {"base_asset_id": asset.id})
+        update_payload = {"base_asset_id": asset.id}
+        if resolved_art_style:
+            update_payload["art_style"] = resolved_art_style
+        character = self._repo.update(character.id, update_payload)
         self._refresh_thumbnail(character)
         return self.get_character(character.id)
 
@@ -126,11 +130,11 @@ class CharacterService:
         return character
 
     def _build_base_image_prompt(self, character, payload: dict) -> str:
-        art_style = str(payload.get("art_style") or "").strip()
+        art_style = str(payload.get("art_style") or getattr(character, "art_style", None) or "").strip()
         parts = [
             "Create a full-body character reference image for a visual novel / live chat character.",
             "Show exactly one character, full body, standing pose, clear face, clear outfit, centered composition.",
-            "No text, no subtitles, no speech bubbles, no watermark, no logo.",
+            "No text, no words, no letters, no subtitles, no captions, no speech bubbles, no readable signs, no UI overlay, no watermark, no logo.",
             "Use a clean character design sheet feel, but make it attractive and polished.",
             f"Name: {character.name}",
         ]
@@ -175,7 +179,7 @@ class CharacterService:
             "Avoid overlap with existing characters in the same project.",
             "Do not reuse existing character names, nicknames, visual motifs, personality archetypes, speech style, romantic preferences, or conversation role.",
             "If the world already has several characters, create a new contrastive character who expands the cast dynamics.",
-            "Required JSON keys: name, nickname, gender, age_impression, first_person, second_person, appearance_summary, personality, favorite_items_text, likes_text, dislikes_text, hobbies_text, taboos_text, romance_favorite_approach_text, romance_avoid_approach_text, romance_attraction_points_text, romance_boundaries_text, memorable_events_text, memory_notes, speech_style, speech_sample, ng_rules.",
+            "Required JSON keys: name, nickname, gender, age_impression, first_person, second_person, appearance_summary, art_style, personality, favorite_items_text, likes_text, dislikes_text, hobbies_text, taboos_text, romance_favorite_approach_text, romance_avoid_approach_text, romance_attraction_points_text, romance_boundaries_text, memorable_events_text, memory_notes, speech_style, speech_sample, ng_rules.",
             "All values must be Japanese strings. Long fields should be Markdown-friendly with bullet lists where useful.",
             "",
             "World setting:",
@@ -227,6 +231,7 @@ class CharacterService:
             "first_person",
             "second_person",
             "appearance_summary",
+            "art_style",
             "personality",
             "favorite_items_text",
             "likes_text",

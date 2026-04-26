@@ -80,6 +80,7 @@ def _serialize_character(character):
         "speech_sample": character.speech_sample,
         "ng_rules": character.ng_rules,
         "appearance_summary": character.appearance_summary,
+        "art_style": character.art_style,
         "memory_notes": character.memory_notes,
         "favorite_items": favorite_items,
         "favorite_items_text": "\n".join(str(item) for item in favorite_items if str(item).strip()),

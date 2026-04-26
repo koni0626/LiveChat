@@ -26,6 +26,7 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
     user_id = session.get("user_id")
     current_user = User.query.get(user_id) if user_id else None
     global_nav_links = [
+        {"label": "\u304a\u624b\u7d19", "icon": "bi-envelope-heart", "href": url_for("ui.letters_page")},
         {"label": "ダッシュボード", "icon": "bi-house-door", "href": url_for("ui.dashboard_page")},
         {"label": "プロジェクト", "icon": "bi-collection", "href": url_for("ui.project_list_page")},
     ]
@@ -69,6 +70,11 @@ def dashboard_page():
 @ui_bp.route("/projects", methods=["GET"])
 def project_list_page():
     return _render("ui/projects.html", title="プロジェクト一覧", screen_id="project-list")
+
+
+@ui_bp.route("/letters", methods=["GET"])
+def letters_page():
+    return _render("ui/letters.html", title="お手紙", screen_id="letters")
 
 
 @ui_bp.route("/projects/new", methods=["GET"])
@@ -163,6 +169,17 @@ def live_chat_page(project_id: int, session_id: int):
         "ui/live_chat.html",
         title="ライブチャット",
         screen_id="live-chat",
+        project_id=project_id,
+        session_id=session_id,
+    )
+
+
+@ui_bp.route("/projects/<int:project_id>/live-chat/<int:session_id>/costumes/new", methods=["GET"])
+def live_chat_costume_create_page(project_id: int, session_id: int):
+    return _render(
+        "ui/live_chat_costume_create.html",
+        title="衣装生成",
+        screen_id="live-chat-costume-create",
         project_id=project_id,
         session_id=session_id,
     )

@@ -287,6 +287,32 @@ def list_chat_images(session_id: int):
     return json_response(context["images"], meta={"count": len(context["images"])})
 
 
+@chat_bp.route("/chat/sessions/<int:session_id>/costumes", methods=["GET"])
+def list_chat_costumes(session_id: int):
+    _require_session(session_id)
+    costumes = live_chat_service.list_costumes(session_id)
+    return json_response(costumes, meta={"count": len(costumes)})
+
+
+@chat_bp.route("/chat/sessions/<int:session_id>/costumes/generate", methods=["POST"])
+def generate_chat_costume(session_id: int):
+    _require_session(session_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    result = live_chat_service.generate_costume(session_id, payload)
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
+@chat_bp.route("/chat/sessions/<int:session_id>/costumes/<int:image_id>/select", methods=["POST"])
+def select_chat_costume(session_id: int, image_id: int):
+    _require_session(session_id, for_manage=True)
+    result = live_chat_service.select_costume(session_id, image_id)
+    if not result:
+        raise NotFoundError()
+    return json_response(result)
+
+
 @chat_bp.route("/chat/sessions/<int:session_id>/images/generate", methods=["POST"])
 def generate_chat_image(session_id: int):
     _require_session(session_id, for_manage=True)

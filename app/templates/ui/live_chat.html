@@ -74,7 +74,7 @@
             name="message_text"
             rows="2"
             placeholder="メッセージを入力。ここへ画像をドラッグ&ドロップすると贈り物として添付できます。"
-          ></textarea>
+          "></textarea>
           <div class="live-chat-compose-editor-bar">
             <button class="live-chat-compose-attach" type="button" id="liveChatGiftSelectButton" aria-label="画像を添付" title="画像を添付">
               <span class="live-chat-compose-attach-icon">+</span>
@@ -107,6 +107,57 @@
   </section>
 
   <aside class="panel-card live-chat-side">
+    <section class="live-chat-costume-room" id="liveChatCostumeRoom">
+      <div class="panel-head live-chat-costume-head">
+        <div>
+          <h3>衣装ルーム</h3>
+          <p>選択中の衣装を次の画像生成の基準にします。</p>
+        </div>
+      </div>
+
+      <div class="live-chat-costume-preview" id="liveChatCostumePreview">
+        <div class="empty-panel">衣装の基準画像を読み込み中です。</div>
+      </div>
+
+      <div class="d-grid mb-3">
+        <a class="btn btn-outline-dark" id="liveChatGenerateCostumeLink" href="{{ url_for('ui.live_chat_costume_create_page', project_id=project_id, session_id=session_id) }}">衣装を生成</a>
+      </div>
+      <form class="vstack gap-2 mb-3 d-none" id="liveChatCostumeForm" hidden>
+        <div>
+          <label class="form-label" for="liveChatCostumePromptInput">着替え指示</label>
+          <textarea
+            class="form-control"
+            id="liveChatCostumePromptInput"
+            name="prompt_text"
+            rows="3"
+            placeholder="例：白いワンピースに着替える。雰囲気は清楚で、髪型と顔は変えない。"
+          ></textarea>
+        </div>
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label" for="liveChatCostumeSizeSelect">サイズ</label>
+            <select class="form-select" id="liveChatCostumeSizeSelect" name="size">
+              <option value="1024x1536" selected>1024x1536</option>
+              <option value="1024x1024">1024x1024</option>
+              <option value="1536x1024">1536x1024</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label" for="liveChatCostumeQualitySelect">品質</label>
+            <select class="form-select" id="liveChatCostumeQualitySelect" name="quality">
+              <option value="medium" selected>medium</option>
+              <option value="low">low</option>
+              <option value="high">high</option>
+            </select>
+          </div>
+        </div>
+        <div class="d-grid">
+          <button class="btn btn-outline-dark" type="submit" id="liveChatGenerateCostumeButton">衣装を生成</button>
+        </div>
+      </form>
+
+      <div class="live-chat-costume-grid" id="liveChatCostumeGrid"></div>
+    </section>
     <div class="panel-head">
       <h3>画像設定</h3>
       <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatReloadImagesButton">再読み込み</button>

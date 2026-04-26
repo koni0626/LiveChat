@@ -26,9 +26,12 @@
           <div class="nav-section-title">Global</div>
           <nav class="nav flex-column">
             {% for item in global_nav_links %}
-            <a class="nav-link app-nav-link" href="{{ item.href }}">
+            <a class="nav-link app-nav-link" href="{{ item.href }}"{% if item.href == url_for('ui.letters_page') %} data-letter-nav="true"{% endif %}>
               <i class="bi {{ item.icon }}"></i>
               <span>{{ item.label }}</span>
+              {% if item.href == url_for('ui.letters_page') %}
+              <span class="letter-nav-badge d-none" id="letterNavBadge">0</span>
+              {% endif %}
             </a>
             {% endfor %}
           </nav>

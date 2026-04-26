@@ -44,6 +44,30 @@ def fallback_reply(context: dict, user_message_text: str) -> dict:
     return text_prompt_support.fallback_reply(context, user_message_text)
 
 
+def build_input_intent_prompt(context: dict, user_message_text: str) -> str:
+    return text_prompt_support.build_input_intent_prompt(context, user_message_text)
+
+
+def fallback_input_intent(user_message_text: str) -> dict:
+    return text_prompt_support.fallback_input_intent(user_message_text)
+
+
+def build_narration_scene_prompt(context: dict, user_message_text: str, intent: dict) -> str:
+    return text_prompt_support.build_narration_scene_prompt(context, user_message_text, intent)
+
+
+def fallback_narration_scene(context: dict, user_message_text: str, intent: dict) -> dict:
+    return text_prompt_support.fallback_narration_scene(context, user_message_text, intent)
+
+
+def build_narration_reaction_prompt(context: dict, user_message_text: str, scene_update: dict) -> str:
+    return text_prompt_support.build_narration_reaction_prompt(context, user_message_text, scene_update)
+
+
+def fallback_narration_reaction(context: dict, scene_update: dict) -> dict:
+    return text_prompt_support.fallback_narration_reaction(context, scene_update)
+
+
 def build_line_visual_note_prompt(context: dict, speaker_name: str, message_text: str) -> str:
     return text_prompt_support.build_line_visual_note_prompt(context, speaker_name, message_text)
 
@@ -98,6 +122,14 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
 
 def fallback_japanese_conversation_image_prompt(context: dict, state: dict) -> dict:
     return visual_prompt_support.fallback_japanese_conversation_image_prompt(context, state)
+
+
+def apply_visual_style(prompt: str, context: dict) -> str:
+    return visual_prompt_support.apply_visual_style(prompt, context)
+
+
+def forbid_text_in_image(prompt: str) -> str:
+    return visual_prompt_support.forbid_text_in_image(prompt)
 
 
 def normalize_first_person_visual_prompt(prompt: str) -> str:

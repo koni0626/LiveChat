@@ -18,6 +18,10 @@
   const toggleComposeButton = document.getElementById("liveChatToggleComposeButton");
   const imageForm = document.getElementById("liveChatImageForm");
   const uploadForm = document.getElementById("liveChatImageUploadForm");
+  const costumeForm = document.getElementById("liveChatCostumeForm");
+  const costumeGrid = document.getElementById("liveChatCostumeGrid");
+  const costumePreview = document.getElementById("liveChatCostumePreview");
+  const generateCostumeButton = document.getElementById("liveChatGenerateCostumeButton");
 
   let currentContext = null;
   let giftController = null;
@@ -72,6 +76,7 @@
     shell.renderMessages(context.messages || [], context);
     shell.renderSelectedImage(context.selected_image, context);
     shell.renderImageGrid(context.images || []);
+    renderCostumeRoom(context);
   }
 
   async function loadContext() {
@@ -85,6 +90,9 @@
       userDefaultImageSettings = settings || {};
       if (settings?.default_quality && imageForm.quality) {
         imageForm.quality.value = settings.default_quality;
+      }
+      if (settings?.default_quality && costumeForm?.quality) {
+        costumeForm.quality.value = settings.default_quality;
       }
       if (settings?.default_size && imageForm.size) {
         imageForm.size.value = settings.default_size;
@@ -106,7 +114,16 @@
         body.prompt_text = imageForm.prompt_text.value;
         body.use_existing_prompt = true;
       }
-      await LiveChatApi.generateSessionImage(sessionId, body);
+      const generatedImage = await LiveChatApi.generateSessionImage(sessionId, body);
+      if (generatedImage?.asset?.media_url) {
+        currentContext = {
+          ...(currentContext || {}),
+          selected_image: generatedImage,
+          images: [generatedImage, ...((currentContext?.images || []).filter((item) => item.id !== generatedImage.id))],
+        };
+        shell.renderSelectedImage(generatedImage, currentContext);
+        shell.renderImageGrid(currentContext.images || []);
+      }
       await loadContext();
     } finally {
       shell.setImageLoading(false, mode);
@@ -124,6 +141,45 @@
     }
   }
 
+  function renderCostumeRoom(context) {
+    const costumes = context.costumes || [];
+    const selectedCostume = context.selected_costume || costumes.find((item) => item.is_selected) || costumes[0] || null;
+    if (costumePreview) {
+      const mediaUrl = selectedCostume?.asset?.media_url;
+      costumePreview.innerHTML = mediaUrl
+        ? `
+          <button class="live-chat-costume-preview-button" type="button" data-costume-id="${selectedCostume.id}">
+            <img src="${mediaUrl}" alt="selected costume reference">
+            <span>現在の衣装基準</span>
+          </button>
+        `
+        : '<div class="empty-panel">衣装の基準画像がありません。</div>';
+    }
+    if (!costumeGrid) return;
+    if (!costumes.length) {
+      costumeGrid.innerHTML = '<div class="empty-panel">衣装候補がありません。</div>';
+      return;
+    }
+    costumeGrid.innerHTML = costumes.map((item) => {
+      const mediaUrl = item.asset?.media_url;
+      const label = item.image_type === "costume_initial" ? "初期衣装" : "衣装";
+      return `
+        <button class="live-chat-costume-card ${item.is_selected ? "selected" : ""}" type="button" data-costume-id="${item.id}">
+          ${mediaUrl ? `<img src="${mediaUrl}" alt="${label}">` : "<span>No Image</span>"}
+          <span class="live-chat-costume-card-label">${item.is_selected ? "選択中" : label}</span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function setCostumeLoading(active) {
+    if (!generateCostumeButton) return;
+    generateCostumeButton.disabled = active;
+    generateCostumeButton.innerHTML = active
+      ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>衣装生成中...'
+      : "衣装を生成";
+  }
+
   composeForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const rawMessage = composeForm.message_text.value.trim();
@@ -135,10 +191,17 @@
           throw new Error("\u8d08\u308a\u7269\u753b\u50cf\u306e\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002");
         }
       } else {
-        await LiveChatApi.postMessage(sessionId, {
+        const result = await LiveChatApi.postMessage(sessionId, {
           message_text: rawMessage || "\u8a71\u3092\u9032\u3081\u3066",
           auto_reply: true,
         });
+        if (result?.new_letter) {
+          NovelUI.toast("\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304b\u3089\u304a\u624b\u7d19\u304c\u5c4a\u304d\u307e\u3057\u305f\u3002");
+          NovelUI.refreshLetterBadge?.();
+        }
+        if (result?.input_intent?.intent !== "dialogue" && result?.generated_image) {
+          NovelUI.toast("\u5834\u9762\u6307\u793a\u3092\u53cd\u6620\u3057\u3066\u753b\u50cf\u3092\u751f\u6210\u3057\u307e\u3057\u305f\u3002");
+        }
         await loadContext();
       }
       composeForm.message_text.value = "";
@@ -186,6 +249,45 @@
   toggleComposeButton?.addEventListener("click", () => {
     setComposeVisible(!composeVisible);
   });
+
+  costumeForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const promptText = costumeForm.prompt_text.value.trim();
+    if (!promptText) {
+      NovelUI.toast("着替え指示を入力してください。", "warning");
+      return;
+    }
+    setCostumeLoading(true);
+    try {
+      await LiveChatApi.generateCostume(sessionId, {
+        prompt_text: promptText,
+        size: costumeForm.size.value,
+        quality: costumeForm.quality.value,
+      });
+      costumeForm.prompt_text.value = "";
+      await loadContext();
+      NovelUI.toast("衣装を生成し、基準画像に設定しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "衣装生成に失敗しました。", "danger");
+    } finally {
+      setCostumeLoading(false);
+    }
+  });
+
+  const handleCostumeSelect = async (event) => {
+    const button = event.target.closest("[data-costume-id]");
+    if (!button) return;
+    try {
+      await LiveChatApi.selectCostume(sessionId, button.dataset.costumeId);
+      await loadContext();
+      NovelUI.toast("衣装の基準画像を変更しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "衣装の選択に失敗しました。", "danger");
+    }
+  };
+
+  costumeGrid?.addEventListener("click", handleCostumeSelect);
+  costumePreview?.addEventListener("click", handleCostumeSelect);
 
   shell.initialize();
   setComposeVisible(true);

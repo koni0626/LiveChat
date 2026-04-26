@@ -40,6 +40,7 @@
       <div class="world-markdown-grid character-markdown-grid" id="characterMarkdownGrid"></div>
 
       <textarea class="d-none" name="appearance_summary"></textarea>
+      <textarea class="d-none" name="art_style"></textarea>
       <textarea class="d-none" name="personality"></textarea>
       <textarea class="d-none" name="favorite_items_text"></textarea>
       <textarea class="d-none" name="likes_text"></textarea>
@@ -75,9 +76,9 @@
 
       <form id="baseAssetGenerateForm" class="vstack gap-3">
         <div>
-          <label class="form-label">画風</label>
-          <textarea class="form-control" name="art_style" rows="4" placeholder="例: 透明感のある近未来アニメ調。繊細な線画、柔らかい光、ラプラスシティのネオン感。"></textarea>
-          <div class="form-text text-secondary">未入力の場合は、ビジュアルノベル向けの高品質アニメ調で生成します。</div>
+          <label class="form-label">生成時の画風</label>
+          <textarea class="form-control" name="art_style" rows="4" placeholder="未入力の場合は、キャラクター設定の画風を使います。"></textarea>
+          <div class="form-text text-secondary">ここに入力した場合は一時的に上書きします。未入力なら保存済みの画風を使います。</div>
         </div>
         <div class="row g-3">
           <div class="col-md-6">
@@ -179,6 +180,7 @@
 
   const markdownFields = [
     { name: "appearance_summary", label: "外見要約", hint: "見た目、服装、雰囲気、画像生成で守りたい特徴", placeholder: "## 全体印象\n- \n\n## 髪・顔\n- \n\n## 衣装\n- " },
+    { name: "art_style", label: "画風", hint: "ライブチャット画像、場面転換画像、お手紙画像で優先する絵柄・塗り・色味", placeholder: "- サイバー都市のネオン感\n- 高品質な日本アニメ調\n- 線は繊細、塗りは透明感強め\n- 文字・字幕・吹き出しなし" },
     { name: "personality", label: "性格", hint: "価値観、癖、反応、怒り方・喜び方", placeholder: "- 基本性格\n- 嬉しい時\n- 嫌な時" },
     { name: "favorite_items_text", label: "好きなものメモ", hint: "贈り物判定などに使う好きな物品やモチーフ", placeholder: "- ぬいぐるみ\n- 甘いもの\n- 夜景" },
     { name: "likes_text", label: "好きなもの", hint: "会話から覚えておく好み、話題、行動", placeholder: "- 丁寧に褒められる\n- 共通の趣味を見つける" },

@@ -11,29 +11,29 @@
       generateSessionImage,
     } = options;
 
-    document.getElementById("liveChatGenerateImageButton").addEventListener("click", async () => {
+    document.getElementById("liveChatGenerateImageButton")?.addEventListener("click", async () => {
       try {
         await generateSessionImage(false, "generate");
-        NovelUI.toast("画像を生成しました。");
+        NovelUI.toast("\u753b\u50cf\u3092\u751f\u6210\u3057\u307e\u3057\u305f\u3002");
       } catch (error) {
-        NovelUI.toast(error.message || "画像生成に失敗しました。", "danger");
+        NovelUI.toast(error.message || "\u753b\u50cf\u751f\u6210\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
       }
     });
 
-    document.getElementById("liveChatRegenerateImageButton").addEventListener("click", async () => {
+    document.getElementById("liveChatRegenerateImageButton")?.addEventListener("click", async () => {
       try {
         await generateSessionImage(true, "regenerate");
-        NovelUI.toast("プロンプトを元に画像を再生成しました。");
+        NovelUI.toast("\u30d7\u30ed\u30f3\u30d7\u30c8\u3092\u5143\u306b\u753b\u50cf\u3092\u518d\u751f\u6210\u3057\u307e\u3057\u305f\u3002");
       } catch (error) {
-        NovelUI.toast(error.message || "画像の再生成に失敗しました。", "danger");
+        NovelUI.toast(error.message || "\u753b\u50cf\u306e\u518d\u751f\u6210\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
       }
     });
 
-    uploadForm.addEventListener("submit", async (event) => {
+    uploadForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       const fileInput = document.getElementById("liveChatImageUploadInput");
-      if (!fileInput.files.length) {
-        NovelUI.toast("画像ファイルを選択してください。", "warning");
+      if (!fileInput?.files.length) {
+        NovelUI.toast("\u753b\u50cf\u30d5\u30a1\u30a4\u30eb\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044\u3002", "warning");
         return;
       }
       const body = new FormData();
@@ -45,58 +45,21 @@
         await api.uploadImage(getSessionId(), body);
         fileInput.value = "";
         await loadContext();
-        NovelUI.toast("画像をアップロードしました。");
+        NovelUI.toast("\u753b\u50cf\u3092\u30a2\u30c3\u30d7\u30ed\u30fc\u30c9\u3057\u307e\u3057\u305f\u3002");
       } catch (error) {
-        NovelUI.toast(error.message || "画像アップロードに失敗しました。", "danger");
+        NovelUI.toast(error.message || "\u753b\u50cf\u30a2\u30c3\u30d7\u30ed\u30fc\u30c9\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
       }
     });
 
-    imageGrid.addEventListener("click", async (event) => {
-      const referenceRadio = event.target.closest("[data-reference-image-id]")
-        || event.target.closest(".live-chat-thumb-reference")?.querySelector("[data-reference-image-id]");
-      if (referenceRadio) {
-        if (referenceRadio.dataset.wasChecked === "true") {
-          event.preventDefault();
-          referenceRadio.checked = false;
-          try {
-            await api.setReferenceImage(getSessionId(), referenceRadio.dataset.referenceImageId, false);
-            await loadContext();
-            NovelUI.toast("セッション基準画像を解除しました。キャラクター設定の基準画像を参照します。");
-          } catch (error) {
-            await loadContext();
-            NovelUI.toast(error.message || "基準画像の解除に失敗しました。", "danger");
-          }
-        }
-        return;
-      }
+    imageGrid?.addEventListener("click", async (event) => {
       const button = event.target.closest("[data-image-id]");
       if (!button) return;
       try {
         await api.selectImage(getSessionId(), button.dataset.imageId);
         await loadContext();
-        NovelUI.toast("表示画像を切り替えました。");
+        NovelUI.toast("\u8868\u793a\u753b\u50cf\u3092\u5207\u308a\u66ff\u3048\u307e\u3057\u305f\u3002");
       } catch (error) {
-        NovelUI.toast(error.message || "画像選択に失敗しました。", "danger");
-      }
-    });
-
-    imageGrid.addEventListener("pointerdown", (event) => {
-      const radio = event.target.closest("[data-reference-image-id]")
-        || event.target.closest(".live-chat-thumb-reference")?.querySelector("[data-reference-image-id]");
-      if (!radio) return;
-      radio.dataset.wasChecked = radio.checked ? "true" : "false";
-    });
-
-    imageGrid.addEventListener("change", async (event) => {
-      const radio = event.target.closest("[data-reference-image-id]");
-      if (!radio) return;
-      try {
-        await api.setReferenceImage(getSessionId(), radio.dataset.referenceImageId, true);
-        await loadContext();
-        NovelUI.toast("基準画像を変更しました。");
-      } catch (error) {
-        await loadContext();
-        NovelUI.toast(error.message || "基準画像の更新に失敗しました。", "danger");
+        NovelUI.toast(error.message || "\u753b\u50cf\u9078\u629e\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
       }
     });
 
@@ -104,22 +67,22 @@
       const button = event.target.closest("[data-delete-message-id]");
       if (!button) return;
       const messageId = Number(button.dataset.deleteMessageId);
-      if (!messageId || !window.confirm("このログを削除しますか？")) return;
+      if (!messageId || !window.confirm("\u3053\u306e\u30ed\u30b0\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f")) return;
       try {
         await api.deleteMessage(getSessionId(), messageId);
         await loadContext();
-        NovelUI.toast("ログを削除しました。");
+        NovelUI.toast("\u30ed\u30b0\u3092\u524a\u9664\u3057\u307e\u3057\u305f\u3002");
       } catch (error) {
-        NovelUI.toast(error.message || "ログの削除に失敗しました。", "danger");
+        NovelUI.toast(error.message || "\u30ed\u30b0\u306e\u524a\u9664\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
       }
     };
 
-    selectedImagePanel.addEventListener("click", handleMessageDelete);
+    selectedImagePanel?.addEventListener("click", handleMessageDelete);
     document.getElementById("liveChatMessageList")?.addEventListener("click", handleMessageDelete);
 
-    document.getElementById("liveChatReloadImagesButton").addEventListener("click", () => {
+    document.getElementById("liveChatReloadImagesButton")?.addEventListener("click", () => {
       loadContext().catch((error) => {
-        NovelUI.toast(error.message || "画像一覧の再読み込みに失敗しました。", "danger");
+        NovelUI.toast(error.message || "\u753b\u50cf\u4e00\u89a7\u306e\u518d\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
       });
     });
   }

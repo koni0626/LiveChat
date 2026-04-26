@@ -15,6 +15,7 @@ from .character_service import CharacterService
 from .chat_message_service import ChatMessageService
 from .chat_session_service import ChatSessionService
 from .live_chat_room_service import LiveChatRoomService
+from .letter_service import LetterService
 from .project_service import ProjectService
 from .session_gift_event_service import SessionGiftEventService
 from .session_image_service import SessionImageService
@@ -34,6 +35,7 @@ class LiveChatService:
         asset_service: AssetService | None = None,
         session_gift_event_service: SessionGiftEventService | None = None,
         live_chat_room_service: LiveChatRoomService | None = None,
+        letter_service: LetterService | None = None,
         world_service: WorldService | None = None,
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
@@ -47,6 +49,7 @@ class LiveChatService:
         self._asset_service = asset_service or AssetService()
         self._session_gift_event_service = session_gift_event_service or SessionGiftEventService()
         self._live_chat_room_service = live_chat_room_service or LiveChatRoomService()
+        self._letter_service = letter_service or LetterService()
         self._world_service = world_service or WorldService()
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
@@ -114,6 +117,7 @@ class LiveChatService:
             "speech_sample": character.speech_sample,
             "ng_rules": character.ng_rules,
             "appearance_summary": character.appearance_summary,
+            "art_style": getattr(character, "art_style", None),
             "memory_notes": getattr(character, "memory_notes", None),
             "favorite_items": self._load_json(getattr(character, "favorite_items_json", None)) or [],
             "memory_profile": memory_profile,
@@ -168,6 +172,8 @@ class LiveChatService:
         }
 
     def _serialize_session_image(self, row):
+        if not row:
+            return None
         asset = self._asset_service.get_asset(row.asset_id)
         return {
             "id": row.id,
@@ -185,22 +191,47 @@ class LiveChatService:
         }
 
     def _collect_session_reference_assets(self, session_id: int, active_characters: list[dict], *, limit: int = 1):
-        session_images = self._session_image_service.list_session_images(session_id)
+        selected_costume = self._session_image_service.get_selected_costume(session_id)
         reference_paths = []
         reference_asset_ids = []
-        for row in session_images:
-            if not bool(getattr(row, "is_reference", 0)):
-                continue
-            asset = self._asset_service.get_asset(row.asset_id)
+        if selected_costume:
+            asset = self._asset_service.get_asset(selected_costume.asset_id)
             if not asset or not getattr(asset, "file_path", None):
-                continue
-            reference_paths.append(asset.file_path)
-            reference_asset_ids.append(asset.id)
-            if len(reference_paths) >= limit:
-                break
+                asset = None
+            if asset:
+                reference_paths.append(asset.file_path)
+                reference_asset_ids.append(asset.id)
         if reference_paths:
             return reference_paths, reference_asset_ids
         return image_support.collect_reference_assets(active_characters, limit=limit)
+
+    def _ensure_initial_costume(self, session_id: int):
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return None
+        existing = self._session_image_service.list_costumes(session_id)
+        if existing:
+            return self._serialize_session_image(next((item for item in existing if item.is_selected), existing[0]))
+        characters = self._select_characters(session_id)
+        character = characters[0] if characters else None
+        base_asset = (character or {}).get("base_asset") or {}
+        asset_id = base_asset.get("id")
+        if not asset_id:
+            return None
+        row = self._session_image_service.create_session_image(
+            session_id,
+            {
+                "asset_id": asset_id,
+                "image_type": "costume_initial",
+                "prompt_text": "キャラクター設定の基準画像",
+                "state_json": {"source": "character_base_asset", "character_id": character.get("id")},
+                "quality": "source",
+                "size": "source",
+                "is_selected": 1,
+                "is_reference": 0,
+            },
+        )
+        return self._serialize_session_image(row)
 
     def _serialize_gift_event(self, row):
         asset = self._asset_service.get_asset(row.asset_id) if getattr(row, "asset_id", None) else None
@@ -478,6 +509,33 @@ class LiveChatService:
         prompt_parts.append("show the character naturally using or holding the gift if appropriate")
         return prompt_support.normalize_first_person_visual_prompt(", ".join(part for part in prompt_parts if part))
 
+    def _analyze_displayed_image(self, file_path: str, *, prompt: str | None = None, source: str = "generated_image"):
+        analysis_prompt = (
+            "Return only JSON. Analyze this generated visual novel image so the chat character can understand "
+            "what is currently shown on screen. Required keys: location, background, visible_characters, "
+            "character_poses, character_expressions, mood, time_of_day, notable_objects, short_summary, "
+            "conversation_context_hint. Use concise Japanese strings. visible_characters, notable_objects must be arrays. "
+            "If the image contains ocean, beach, harbor, shop interior, city street, room, sky, or similar background, "
+            "state it clearly in location/background. Do not infer from the prompt alone; describe what is visible."
+        )
+        result = self._text_ai_client.analyze_image(file_path, prompt=analysis_prompt)
+        parsed = result.get("parsed_json") or {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+        parsed.setdefault("location", None)
+        parsed.setdefault("background", None)
+        parsed.setdefault("visible_characters", [])
+        parsed.setdefault("character_poses", None)
+        parsed.setdefault("character_expressions", None)
+        parsed.setdefault("mood", None)
+        parsed.setdefault("time_of_day", None)
+        parsed.setdefault("notable_objects", [])
+        parsed.setdefault("short_summary", None)
+        parsed.setdefault("conversation_context_hint", None)
+        parsed["source"] = source
+        parsed["image_prompt"] = prompt
+        return parsed
+
     def _generate_gift_visual_image(self, session, context: dict, character: dict, recognized_label: str, recognized_tags: list[str], visual_decision: dict):
         if not visual_decision.get("show_gift_visual"):
             return None
@@ -531,6 +589,17 @@ class LiveChatService:
             state_json["focus_summary"] = visual_decision["visual_direction"]
         if visual_decision.get("mood"):
             state_json["mood"] = visual_decision["mood"]
+        try:
+            observation = self._analyze_displayed_image(file_path, prompt=prompt, source="gift_visual")
+            state_json["displayed_image_observation"] = observation
+            if observation.get("location"):
+                state_json["location"] = observation["location"]
+            if observation.get("background"):
+                state_json["background"] = observation["background"]
+            if observation.get("short_summary"):
+                state_json["focus_summary"] = observation["short_summary"]
+        except Exception:
+            observation = None
         session_image = self._session_image_service.create_session_image(
             session.id,
             {
@@ -544,7 +613,7 @@ class LiveChatService:
                 "is_reference": 1,
             },
         )
-        self.select_image(session_image.id)
+        self.select_image(session_image.id, update_observation=False)
         self._session_state_service.upsert_state(
             session.id,
             {
@@ -575,7 +644,12 @@ class LiveChatService:
             )
             messages = self._chat_message_service.list_messages(item.id)
             images = self._session_image_service.list_session_images(item.id)
-            selected_image_row = next((image for image in images if image.is_selected), None)
+            scene_images = [
+                image
+                for image in images
+                if image.image_type not in {"costume_initial", "costume_reference"}
+            ]
+            selected_image_row = next((image for image in scene_images if image.is_selected), None)
             session_characters = self._select_characters(item.id)
             serialized.append(
                 {
@@ -640,6 +714,7 @@ class LiveChatService:
                 }
             },
         )
+        self._ensure_initial_costume(session.id)
         return self.get_session_context(session.id)
 
     def _preserve_locked_session_characters(self, session_id: int, payload: dict) -> dict:
@@ -693,8 +768,17 @@ class LiveChatService:
         state = self._session_state_service.get_state(session_id)
         messages = self._chat_message_service.list_messages(session_id)
         images = self._session_image_service.list_session_images(session_id)
+        costumes = self._session_image_service.list_costumes(session_id)
+        if not costumes:
+            self._ensure_initial_costume(session_id)
+            images = self._session_image_service.list_session_images(session_id)
+            costumes = self._session_image_service.list_costumes(session_id)
         gift_events = self._session_gift_event_service.list_gift_events(session_id)
-        selected_image = next((item for item in images if item.is_selected), None)
+        costume_types = {"costume_initial", "costume_reference"}
+        scene_images = [item for item in images if item.image_type not in costume_types]
+        selected_image = next((item for item in scene_images if item.is_selected), None)
+        if not selected_image and scene_images:
+            selected_image = scene_images[0]
         characters = self._select_characters(session_id)
         world = self._world_service.get_world(session.project_id)
         if not messages and characters:
@@ -735,7 +819,9 @@ class LiveChatService:
             "messages": [self._serialize_message(item) for item in messages],
             "state": self._serialize_state(state),
             "characters": characters,
-            "images": [self._serialize_session_image(item) for item in images],
+            "images": [self._serialize_session_image(item) for item in scene_images],
+            "costumes": [self._serialize_session_image(item) for item in costumes],
+            "selected_costume": self._serialize_session_image(next((item for item in costumes if item.is_selected), None)),
             "gift_events": [self._serialize_gift_event(item) for item in gift_events],
             "selected_image": self._serialize_session_image(selected_image) if selected_image else None,
         }
@@ -820,21 +906,119 @@ class LiveChatService:
             },
         )
 
+    def _apply_directed_scene(self, session_id: int, context: dict, user_message_text: str, intent: dict):
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        scene_update = text_support.generate_narration_scene(
+            self._text_ai_client,
+            context,
+            user_message_text,
+            intent,
+        )
+        state_json["input_intent"] = intent
+        state_json["scene_progression"] = scene_update
+        state_json["directed_scene"] = scene_update
+        if scene_update.get("location"):
+            state_json["location"] = scene_update["location"]
+        if scene_update.get("background"):
+            state_json["background"] = scene_update["background"]
+        if scene_update.get("focus_summary"):
+            state_json["focus_summary"] = scene_update["focus_summary"]
+        return self._session_state_service.upsert_state(
+            session_id,
+            {
+                "state_json": state_json,
+                "narration_note": scene_update.get("focus_summary"),
+                "visual_prompt_text": scene_update.get("image_focus") or scene_update.get("focus_summary"),
+            },
+        )
+
+    def _post_directed_scene_message(self, session, session_id: int, user_message, intent: dict):
+        context = self.get_session_context(session_id)
+        self._apply_directed_scene(session_id, context, user_message.message_text, intent)
+        context = self.get_session_context(session_id)
+        scene_update = ((context.get("state") or {}).get("state_json") or {}).get("directed_scene") or {}
+        reply = text_support.generate_narration_reaction(
+            self._text_ai_client,
+            context,
+            user_message.message_text,
+            scene_update,
+        )
+        assistant_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "character",
+                "speaker_name": reply["speaker_name"],
+                "message_text": reply["message_text"],
+                "message_role": "assistant",
+                "state_snapshot_json": {
+                    "input_intent": intent,
+                    "directed_scene": scene_update,
+                },
+            },
+        )
+        updated_context = self.get_session_context(session_id)
+        self._update_line_visual_note(session_id, updated_context)
+        generated_image = None
+        if intent.get("should_generate_image"):
+            try:
+                generated_image = self.generate_image(session_id, {"image_type": "directed_scene"})
+            except Exception:
+                generated_image = None
+        updated_context = self.get_session_context(session_id)
+        self._update_session_memory(session_id, updated_context)
+        updated_context = self.get_session_context(session_id)
+        self._update_conversation_evaluation(session_id, updated_context)
+        updated_context = self.get_session_context(session_id)
+        state = self._session_state_service.extract_state(
+            session=session,
+            messages=updated_context["messages"],
+            characters=updated_context["characters"],
+        )
+        updated_context = self.get_session_context(session_id)
+        new_letter = self._letter_service.try_generate_for_context(
+            session,
+            updated_context,
+            trigger_type="scene_transition",
+        )
+        return {
+            "messages": [self._serialize_message(user_message), self._serialize_message(assistant_message)],
+            "state": self._serialize_state(state),
+            "session": updated_context["session"],
+            "input_intent": intent,
+            "generated_image": generated_image,
+            "new_letter": new_letter,
+        }
+
     def post_message(self, session_id: int, payload: dict | None = None):
         payload = dict(payload or {})
         session = self._chat_session_service.get_session(session_id)
         if not session:
             return None
         message_text = str(payload.get("message_text") or "").strip() or "話を進めて"
+        initial_context = self.get_session_context(session_id)
+        forced_intent = str(payload.get("input_intent") or "").strip()
+        if forced_intent in {"dialogue", "narration", "visual_request"}:
+            input_intent = {
+                "intent": forced_intent,
+                "reason": "forced by client",
+                "should_generate_image": forced_intent in {"narration", "visual_request"},
+            }
+        else:
+            input_intent = text_support.classify_user_input(self._text_ai_client, initial_context, message_text)
+        is_directed_scene = input_intent.get("intent") in {"narration", "visual_request"}
         user_message = self._chat_message_service.create_message(
             session_id,
             {
-                "sender_type": payload.get("sender_type") or "user",
-                "speaker_name": payload.get("speaker_name") or session.player_name or "プレイヤー",
+                "sender_type": "narration" if is_directed_scene else payload.get("sender_type") or "user",
+                "speaker_name": "ナレーション" if is_directed_scene else payload.get("speaker_name") or session.player_name or "プレイヤー",
                 "message_text": message_text,
-                "message_role": "player",
+                "message_role": "narration" if is_directed_scene else "player",
+                "state_snapshot_json": {"input_intent": input_intent},
             },
         )
+        if is_directed_scene:
+            return self._post_directed_scene_message(session, session_id, user_message, input_intent)
         created = [self._serialize_message(user_message)]
         context = self.get_session_context(session_id)
         self._update_scene_progression(session_id, context, user_message.message_text)
@@ -866,10 +1050,17 @@ class LiveChatService:
             messages=updated_context["messages"],
             characters=updated_context["characters"],
         )
+        updated_context = self.get_session_context(session_id)
+        new_letter = self._letter_service.try_generate_for_context(
+            session,
+            updated_context,
+            trigger_type="conversation",
+        )
         return {
             "messages": created,
             "state": self._serialize_state(state),
             "session": updated_context["session"],
+            "new_letter": new_letter,
         }
 
     def extract_state(self, session_id: int):
@@ -899,6 +1090,8 @@ class LiveChatService:
         if not prompt:
             prompt = str(conversation_prompt.get("prompt_ja") or "").strip()
         prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        prompt = prompt_support.forbid_text_in_image(prompt)
         visual_state = prompt_support.build_visual_state(context, state, prompt=prompt)
         state_json["visual_state"] = visual_state
 
@@ -947,14 +1140,33 @@ class LiveChatService:
                 "asset_id": asset.id,
                 "image_type": payload.get("image_type") or "live_scene",
                 "prompt_text": prompt,
-                "state_json": state.get("state_json") or {},
+                "state_json": state_json,
                 "quality": payload.get("quality") or "low",
                 "size": payload.get("size") or "1536x1024",
                 "is_selected": 1,
                 "is_reference": 1,
             },
         )
-        self.select_image(session_image.id)
+        self.select_image(session_image.id, update_observation=False)
+        try:
+            observation = self._analyze_displayed_image(
+                file_path,
+                prompt=result.get("revised_prompt") or prompt,
+                source=payload.get("image_type") or "live_scene",
+            )
+            state_json["displayed_image_observation"] = observation
+            if observation.get("location"):
+                state_json["location"] = observation["location"]
+            if observation.get("background"):
+                state_json["background"] = observation["background"]
+            if observation.get("mood"):
+                state_json["mood"] = observation["mood"]
+            if observation.get("time_of_day"):
+                state_json["time_of_day"] = observation["time_of_day"]
+            if observation.get("short_summary"):
+                state_json["focus_summary"] = observation["short_summary"]
+        except Exception:
+            observation = None
         self._session_state_service.upsert_state(
             session_id,
             {
@@ -966,13 +1178,33 @@ class LiveChatService:
 
     def register_uploaded_image(self, session_id: int, asset_id: int, payload: dict | None = None):
         payload = dict(payload or {})
+        session = self._chat_session_service.get_session(session_id)
+        asset = self._asset_service.get_asset(asset_id)
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        if asset and getattr(asset, "file_path", None):
+            try:
+                observation = self._analyze_displayed_image(
+                    asset.file_path,
+                    prompt=payload.get("prompt_text"),
+                    source="uploaded_live_scene",
+                )
+                state_json["displayed_image_observation"] = observation
+                if observation.get("location"):
+                    state_json["location"] = observation["location"]
+                if observation.get("background"):
+                    state_json["background"] = observation["background"]
+                if observation.get("short_summary"):
+                    state_json["focus_summary"] = observation["short_summary"]
+            except Exception:
+                pass
         session_image = self._session_image_service.create_session_image(
             session_id,
             {
                 "asset_id": asset_id,
                 "image_type": payload.get("image_type") or "live_scene",
                 "prompt_text": payload.get("prompt_text"),
-                "state_json": payload.get("state_json"),
+                "state_json": state_json if state_json else payload.get("state_json"),
                 "quality": payload.get("quality") or "external",
                 "size": payload.get("size") or "uploaded",
                 "is_selected": 1 if payload.get("is_selected", True) else 0,
@@ -980,14 +1212,157 @@ class LiveChatService:
             },
         )
         if payload.get("is_selected", True):
-            self.select_image(session_image.id)
+            self.select_image(session_image.id, update_observation=False)
+            if state_json:
+                self._session_state_service.upsert_state(
+                    session_id,
+                    {
+                        "state_json": state_json,
+                        "visual_prompt_text": payload.get("prompt_text"),
+                    },
+                )
         return self._serialize_session_image(session_image)
 
-    def select_image(self, session_image_id: int):
+    def list_costumes(self, session_id: int):
+        self._ensure_initial_costume(session_id)
+        return [self._serialize_session_image(item) for item in self._session_image_service.list_costumes(session_id)]
+
+    def select_costume(self, session_id: int, session_image_id: int):
+        row = self._session_image_service.get_session_image(session_image_id)
+        if not row or row.session_id != session_id or row.image_type not in {"costume_initial", "costume_reference"}:
+            return None
+        selected = self._session_image_service.select_session_image(session_image_id)
+        return self._serialize_session_image(selected)
+
+    def generate_costume(self, session_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return None
+        instruction = str(payload.get("prompt_text") or "").strip()
+        if not instruction:
+            raise ValueError("prompt_text is required")
+        context = self.get_session_context(session_id)
+        character = self._resolve_target_character(context, payload.get("character_id"))
+        if not character:
+            raise ValueError("target character is required")
+        selected_costume = self._session_image_service.get_selected_costume(session_id)
+        reference_paths = []
+        reference_asset_ids = []
+        if selected_costume:
+            asset = self._asset_service.get_asset(selected_costume.asset_id)
+            if asset and getattr(asset, "file_path", None):
+                reference_paths.append(asset.file_path)
+                reference_asset_ids.append(asset.id)
+        if not reference_paths:
+            base_asset = character.get("base_asset") or {}
+            if base_asset.get("file_path"):
+                reference_paths.append(base_asset["file_path"])
+                reference_asset_ids.append(base_asset.get("id"))
+        if not reference_paths:
+            raise ValueError("costume reference image is required")
+        art_style = character.get("art_style") or ""
+        prompt = (
+            "同一キャラクターの衣装参照画像を生成してください。"
+            "参照画像と同じ人物として、顔、髪型、体型、雰囲気、キャラクター性を保つ。"
+            "変更するのは主に衣装と小物のみ。"
+            f"衣装変更指示: {instruction}。"
+            f"キャラクター名: {character.get('name') or ''}。"
+            f"画風: {art_style}。"
+            "キャラクター単体、全身または膝上、シンプル背景、衣装が分かる構図。"
+            "ライブチャット用の参照画像なので、複雑な背景やイベントCG構図にしない。"
+        )
+        prompt = prompt_support.forbid_text_in_image(prompt)
+        result = self._image_ai_client.generate_image(
+            prompt,
+            size=payload.get("size") or "1024x1536",
+            quality=payload.get("quality") or "medium",
+            input_image_paths=reference_paths,
+            input_fidelity="high",
+        )
+        image_base64 = result.get("image_base64")
+        if not image_base64:
+            raise RuntimeError("costume image generation response did not include image_base64")
+        storage_root = current_app.config.get("STORAGE_ROOT") or os.path.join(os.getcwd(), "storage")
+        file_name, file_path, file_size = image_support.store_generated_image(
+            storage_root=storage_root,
+            project_id=session.project_id,
+            session_id=session.id,
+            image_base64=image_base64,
+        )
+        asset = self._asset_service.create_asset(
+            session.project_id,
+            {
+                "asset_type": "costume_reference",
+                "file_name": file_name,
+                "file_path": file_path,
+                "mime_type": "image/png",
+                "file_size": file_size,
+                "metadata_json": json_util.dumps(
+                    {
+                        "source": "costume_room",
+                        "instruction": instruction,
+                        "reference_asset_ids": reference_asset_ids,
+                        "revised_prompt": result.get("revised_prompt"),
+                    }
+                ),
+            },
+        )
+        row = self._session_image_service.create_session_image(
+            session_id,
+            {
+                "asset_id": asset.id,
+                "image_type": "costume_reference",
+                "prompt_text": prompt,
+                "state_json": {
+                    "source": "costume_room",
+                    "instruction": instruction,
+                    "character_id": character.get("id"),
+                    "reference_asset_ids": reference_asset_ids,
+                },
+                "quality": payload.get("quality") or "medium",
+                "size": payload.get("size") or "1024x1536",
+                "is_selected": 1,
+                "is_reference": 0,
+            },
+        )
+        self._session_image_service.select_session_image(row.id)
+        return self._serialize_session_image(row)
+
+    def select_image(self, session_image_id: int, *, update_observation: bool = True):
         row = self._session_image_service.select_session_image(session_image_id)
         if not row:
             return None
         self._chat_session_service.update_session(row.session_id, {"active_image_id": row.asset_id})
+        if not update_observation:
+            return self._serialize_session_image(row)
+        asset = self._asset_service.get_asset(row.asset_id)
+        if asset and getattr(asset, "file_path", None):
+            try:
+                state_json = self._load_json(getattr(row, "state_json", None)) or {}
+                observation = self._analyze_displayed_image(
+                    asset.file_path,
+                    prompt=row.prompt_text,
+                    source=row.image_type or "selected_image",
+                )
+                state_json["displayed_image_observation"] = observation
+                if observation.get("location"):
+                    state_json["location"] = observation["location"]
+                if observation.get("background"):
+                    state_json["background"] = observation["background"]
+                if observation.get("mood"):
+                    state_json["mood"] = observation["mood"]
+                if observation.get("short_summary"):
+                    state_json["focus_summary"] = observation["short_summary"]
+                self._session_state_service.upsert_state(
+                    row.session_id,
+                    {
+                        "state_json": state_json,
+                        "visual_prompt_text": row.prompt_text,
+                    },
+                )
+            except Exception:
+                pass
         return self._serialize_session_image(row)
 
     def set_reference_image(self, session_id: int, session_image_id: int, is_reference: bool):
@@ -1089,6 +1464,11 @@ class LiveChatService:
         updated_context = self.get_session_context(session_id)
         self._update_conversation_evaluation(session_id, updated_context)
         updated_context = self.get_session_context(session_id)
+        new_letter = self._letter_service.try_generate_for_context(
+            session,
+            updated_context,
+            trigger_type="gift",
+        )
         return {
             "gift_event": self._serialize_gift_event(gift_event),
             "messages": [self._serialize_message(user_message), self._serialize_message(assistant_message)],
@@ -1096,4 +1476,5 @@ class LiveChatService:
             "generated_image": generated_image,
             "session": updated_context["session"],
             "state": updated_context["state"],
+            "new_letter": new_letter,
         }

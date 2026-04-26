@@ -397,20 +397,13 @@
       imageGrid.innerHTML = '<div class="empty-panel">\u753b\u50cf\u5019\u88dc\u304c\u3042\u308a\u307e\u305b\u3093\u3002</div>';
       return;
     }
-    const referenceItem = images.find((item) => item.is_reference);
-    const referenceId = referenceItem?.id;
     imageGrid.innerHTML = images.map((item) => {
       const mediaUrl = item.asset?.media_url;
-      const isReference = item.id === referenceId;
       return `
-        <div class="live-chat-thumb-card ${item.is_selected ? "selected" : ""} ${isReference ? "reference" : ""}">
+        <div class="live-chat-thumb-card ${item.is_selected ? "selected" : ""}">
           <button class="live-chat-thumb ${item.is_selected ? "selected" : ""}" type="button" data-image-id="${item.id}">
             ${mediaUrl ? `<img src="${mediaUrl}" alt="thumb">` : `<span>No Image</span>`}
           </button>
-          <label class="live-chat-thumb-reference">
-            <input type="radio" name="liveChatReferenceImage" data-reference-image-id="${item.id}" ${isReference ? "checked" : ""}>
-            <span>基準画像</span>
-          </label>
         </div>
       `;
     }).join("");

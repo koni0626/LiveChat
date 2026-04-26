@@ -8,6 +8,12 @@ class SessionImageService:
     def list_session_images(self, session_id: int):
         return self._repo.list_by_session(session_id)
 
+    def list_costumes(self, session_id: int):
+        return self._repo.list_costumes_by_session(session_id)
+
+    def get_selected_costume(self, session_id: int):
+        return self._repo.get_selected_costume(session_id)
+
     def get_session_image(self, session_image_id: int):
         return self._repo.get(session_image_id)
 

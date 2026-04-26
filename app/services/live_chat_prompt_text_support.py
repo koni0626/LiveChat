@@ -358,6 +358,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     conversation_director = state_json.get("conversation_director") or {}
     relationship_state = state_json.get("relationship_state") or {}
     visual_state = state_json.get("visual_state") or {}
+    displayed_image = state_json.get("displayed_image_observation") or {}
     conversation_evaluation = state_json.get("conversation_evaluation") or {}
     lines = [
         "You are the reply generator for a live visual novel conversation.",
@@ -386,6 +387,19 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     if visual_state:
         lines.append(f"Current visual location: {visual_state.get('location') or ''}")
         lines.append(f"Current visual background: {visual_state.get('background_details') or ''}")
+    if displayed_image:
+        lines.append("Actual displayed image observation:")
+        lines.append(f"- location: {displayed_image.get('location') or ''}")
+        lines.append(f"- background: {displayed_image.get('background') or ''}")
+        lines.append(f"- visible characters: {displayed_image.get('visible_characters') or []}")
+        lines.append(f"- poses: {displayed_image.get('character_poses') or ''}")
+        lines.append(f"- expressions: {displayed_image.get('character_expressions') or ''}")
+        lines.append(f"- mood: {displayed_image.get('mood') or ''}")
+        lines.append(f"- notable objects: {displayed_image.get('notable_objects') or []}")
+        lines.append(f"- summary: {displayed_image.get('short_summary') or ''}")
+        lines.append(
+            "Use the actual displayed image observation as the highest priority for where the characters are and what they can refer to."
+        )
     if conversation_evaluation:
         lines.append(f"Conversation progress score: {conversation_evaluation.get('score')}")
         lines.append(f"Conversation progress reason: {conversation_evaluation.get('reason') or ''}")
@@ -473,6 +487,147 @@ def fallback_reply(context: dict, user_message_text: str) -> dict:
         message = f"{shortened}……それなら、わたしから一つ面白い話を出すね。ここから少し踏み込んでみよう。"
     else:
         message = f"{shortened}……うん、その話は気になる。もう少し聞かせて。"
+    return {"speaker_name": speaker, "message_text": message}
+
+
+def build_input_intent_prompt(context: dict, user_message_text: str) -> str:
+    state_json = context["state"].get("state_json") or {}
+    scene_progression = state_json.get("scene_progression") or {}
+    lines = [
+        "You classify the latest input for a live visual novel chat.",
+        "Return only a JSON object.",
+        "Required keys: intent, reason, should_generate_image.",
+        "intent must be one of: dialogue, narration, visual_request.",
+        "dialogue: the player is speaking directly to the character.",
+        "narration: the player is describing a scene transition, action, time skip, or staging direction, not asking for a spoken answer.",
+        "visual_request: the player wants to see an image, outfit, location, object, or event CG.",
+        "If the input is like 'そして僕たちは店の外に出た。', classify it as narration.",
+        "If the input is like 'この服を着て外に出た場面を見せて', classify it as visual_request.",
+        f"Current location: {state_json.get('location') or scene_progression.get('location') or ''}",
+        f"Current scene: {scene_progression.get('focus_summary') or state_json.get('focus_summary') or ''}",
+        "Recent conversation:",
+    ]
+    for message in context["messages"][-6:]:
+        lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
+    lines.append(f"Latest input: {user_message_text}")
+    return "\n".join(lines)
+
+
+def fallback_input_intent(user_message_text: str) -> dict:
+    text = str(user_message_text or "").strip()
+    lowered = text.lower()
+    narration_markers = (
+        "そして",
+        "その後",
+        "しばらくして",
+        "店の外",
+        "外に出",
+        "移動した",
+        "歩き出",
+        "向かった",
+        "場面",
+    )
+    visual_markers = (
+        "見せて",
+        "画像",
+        "絵",
+        "写真",
+        "生成",
+        "着て",
+        "ポーズ",
+        "背景",
+        "event cg",
+        "cg",
+    )
+    if any(marker in text for marker in visual_markers) or any(marker in lowered for marker in visual_markers):
+        return {"intent": "visual_request", "reason": "visual wording detected", "should_generate_image": True}
+    if any(marker in text for marker in narration_markers):
+        return {"intent": "narration", "reason": "scene direction wording detected", "should_generate_image": True}
+    return {"intent": "dialogue", "reason": "normal player dialogue", "should_generate_image": False}
+
+
+def build_narration_scene_prompt(context: dict, user_message_text: str, intent: dict) -> str:
+    state_json = context["state"].get("state_json") or {}
+    scene_progression = state_json.get("scene_progression") or {}
+    lines = [
+        "You are the stage director for a live visual novel.",
+        "The latest input is not normal dialogue. Convert it into a visual scene update.",
+        "Return only a JSON object.",
+        "Required keys: scene_phase, location, background, focus_summary, next_topic, transition_occurred, character_reaction_hint, image_focus.",
+        "Make the result concrete enough for image generation.",
+        "Do not include the player as a visible person in the image.",
+        "Prefer a dramatic visual-novel event CG moment, not a generic hallway/corridor.",
+        f"Intent: {intent.get('intent')}",
+        f"Intent reason: {intent.get('reason') or ''}",
+        f"Project: {context['project'].get('title') or 'Untitled'}",
+        f"World: {context['world'].get('overview') or context['world'].get('name') or ''}",
+        f"Current location: {state_json.get('location') or scene_progression.get('location') or ''}",
+        f"Current background: {state_json.get('background') or scene_progression.get('background') or ''}",
+        "Characters:",
+    ]
+    for character in context["characters"]:
+        lines.append(
+            f"- {character.get('name')}: appearance={character.get('appearance_summary') or ''}, personality={character.get('personality') or ''}"
+        )
+    lines.append("Recent conversation:")
+    for message in context["messages"][-8:]:
+        lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
+    lines.append(f"Scene direction from player: {user_message_text}")
+    return "\n".join(lines)
+
+
+def fallback_narration_scene(context: dict, user_message_text: str, intent: dict) -> dict:
+    state_json = dict(context["state"].get("state_json") or {})
+    current = dict(state_json.get("scene_progression") or {})
+    text = str(user_message_text or "").strip()
+    location = current.get("location") or state_json.get("location") or context["world"].get("name")
+    background = current.get("background") or state_json.get("background")
+    if "店の外" in text or "外に出" in text:
+        location = "店の外"
+        background = "店の外の歩道、街明かりが服を照らしている"
+    return {
+        "scene_phase": "directed_scene",
+        "location": location,
+        "background": background,
+        "focus_summary": text or "場面が切り替わった",
+        "next_topic": "新しい場面へのキャラクターの反応",
+        "transition_occurred": True,
+        "character_reaction_hint": "新しい場面や服装を見せながら、短く魅力的に反応する",
+        "image_focus": text or "新しい場面のイベントCG",
+    }
+
+
+def build_narration_reaction_prompt(context: dict, user_message_text: str, scene_update: dict) -> str:
+    lines = [
+        "You write one short spoken reaction after a visual scene transition in a live visual novel.",
+        "Return only a JSON object.",
+        "Required keys: speaker_name, message_text.",
+        "speaker_name must be one of the active characters.",
+        "message_text must be a short spoken line only. No narration.",
+        "The character should react to the new scene as if the image has just changed.",
+        "Make it feel like a visual novel event CG moment.",
+        "Do not explain that a scene changed.",
+        f"Player name: {context['session'].get('player_name') or 'あなた'}",
+        f"Scene direction: {user_message_text}",
+        f"New location: {scene_update.get('location') or ''}",
+        f"New background: {scene_update.get('background') or ''}",
+        f"Scene focus: {scene_update.get('focus_summary') or ''}",
+        f"Reaction hint: {scene_update.get('character_reaction_hint') or ''}",
+        "Characters:",
+    ]
+    for character in context["characters"]:
+        lines.append(
+            f"- {character.get('name')}: first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, sample={character.get('speech_sample') or ''}"
+        )
+    return "\n".join(lines)
+
+
+def fallback_narration_reaction(context: dict, scene_update: dict) -> dict:
+    speaker = context["characters"][0]["name"] if context["characters"] else "Character"
+    if scene_update.get("location"):
+        message = f"どう？　ここだと、少し違って見えるでしょう？"
+    else:
+        message = "どう？　今のわたし、ちゃんと見てくれてる？"
     return {"speaker_name": speaker, "message_text": message}
 
 

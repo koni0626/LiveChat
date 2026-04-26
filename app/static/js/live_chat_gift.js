@@ -78,7 +78,11 @@
         body.set("message_text", String(messageText).trim());
       }
       try {
-        await api.uploadGift(getSessionId(), body);
+        const result = await api.uploadGift(getSessionId(), body);
+        if (result?.data?.new_letter || result?.new_letter) {
+          NovelUI.toast("キャラクターからお手紙が届きました。");
+          NovelUI.refreshLetterBadge?.();
+        }
         clearSelectedGiftFile();
         if (typeof onUploaded === "function") {
           await onUploaded();

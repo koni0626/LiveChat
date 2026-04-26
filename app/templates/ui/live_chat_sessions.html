@@ -133,7 +133,7 @@
     const originalLabel = button?.textContent || "";
     if (button) {
       button.disabled = true;
-      button.textContent = "画像生成中...";
+      button.textContent = "準備中...";
     }
     try {
       const created = await NovelUI.api(`/api/v1/chat/rooms/${roomId}/sessions`, {

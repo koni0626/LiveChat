@@ -70,6 +70,80 @@ def generate_reply(text_ai_client, context: dict, user_message_text: str) -> dic
         return prompt_support.fallback_reply(context, user_message_text)
 
 
+def classify_user_input(text_ai_client, context: dict, user_message_text: str) -> dict:
+    try:
+        prompt = prompt_support.build_input_intent_prompt(context, user_message_text)
+        result = text_ai_client.generate_text(
+            prompt,
+            temperature=0.2,
+            response_format={"type": "json_object"},
+        )
+        parsed = text_ai_client._try_parse_json(result.get("text"))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("input intent response is invalid")
+        intent = str(parsed.get("intent") or "").strip()
+        if intent not in {"dialogue", "narration", "visual_request"}:
+            raise RuntimeError("input intent is invalid")
+        parsed["intent"] = intent
+        parsed["reason"] = str(parsed.get("reason") or "").strip()
+        parsed["should_generate_image"] = bool(parsed.get("should_generate_image")) or intent in {"narration", "visual_request"}
+        return parsed
+    except Exception:
+        return prompt_support.fallback_input_intent(user_message_text)
+
+
+def generate_narration_scene(text_ai_client, context: dict, user_message_text: str, intent: dict) -> dict:
+    try:
+        prompt = prompt_support.build_narration_scene_prompt(context, user_message_text, intent)
+        result = text_ai_client.generate_text(
+            prompt,
+            temperature=0.45,
+            response_format={"type": "json_object"},
+        )
+        parsed = text_ai_client._try_parse_json(result.get("text"))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("narration scene response is invalid")
+        parsed.setdefault("scene_phase", "directed_scene")
+        parsed.setdefault("location", (context["state"].get("state_json") or {}).get("location"))
+        parsed.setdefault("background", (context["state"].get("state_json") or {}).get("background"))
+        parsed.setdefault("focus_summary", user_message_text[:160])
+        parsed.setdefault("next_topic", "character reaction to the new scene")
+        parsed["transition_occurred"] = True
+        parsed.setdefault("character_reaction_hint", "")
+        parsed.setdefault("image_focus", parsed.get("focus_summary"))
+        return parsed
+    except Exception:
+        return prompt_support.fallback_narration_scene(context, user_message_text, intent)
+
+
+def generate_narration_reaction(text_ai_client, context: dict, user_message_text: str, scene_update: dict) -> dict:
+    try:
+        prompt = prompt_support.build_narration_reaction_prompt(
+            context,
+            user_message_text,
+            scene_update,
+        )
+        result = text_ai_client.generate_text(
+            prompt,
+            temperature=0.8,
+            response_format={"type": "json_object"},
+        )
+        parsed = text_ai_client._try_parse_json(result.get("text"))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("narration reaction response is invalid")
+        speaker_name = str(parsed.get("speaker_name") or "").strip()
+        message_text = str(parsed.get("message_text") or "").strip()
+        allowed_names = {character["name"] for character in context["characters"]}
+        if not speaker_name or speaker_name not in allowed_names:
+            raise RuntimeError("narration reaction speaker is invalid")
+        if not message_text:
+            raise RuntimeError("narration reaction message is empty")
+        message_text = enforce_character_voice(context, speaker_name, message_text)
+        return {"speaker_name": speaker_name, "message_text": message_text}
+    except Exception:
+        return prompt_support.fallback_narration_reaction(context, scene_update)
+
+
 def generate_line_visual_note(text_ai_client, context: dict, speaker_name: str, message_text: str) -> dict:
     prompt = prompt_support.build_line_visual_note_prompt(context, speaker_name, message_text)
     try:

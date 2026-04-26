@@ -84,6 +84,19 @@ window.NovelUI = (() => {
     }
   }
 
+  async function refreshLetterBadge() {
+    const badge = document.getElementById("letterNavBadge");
+    if (!badge) return;
+    try {
+      const payload = await api("/api/v1/letters/unread-count", { allowUnauthorized: true });
+      const count = Number(payload?.unread_count || 0);
+      badge.textContent = count > 99 ? "99+" : String(count);
+      badge.classList.toggle("d-none", count <= 0);
+    } catch (error) {
+      badge.classList.add("d-none");
+    }
+  }
+
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-action='logout']");
     if (!button) {
@@ -93,5 +106,8 @@ window.NovelUI = (() => {
     logout();
   });
 
-  return { api, toast, fillForm, escape: escapeHtml, logout };
+  refreshLetterBadge();
+  window.setInterval(refreshLetterBadge, 60000);
+
+  return { api, toast, fillForm, escape: escapeHtml, logout, refreshLetterBadge };
 })();

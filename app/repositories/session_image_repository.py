@@ -4,9 +4,21 @@ from ..models.session_image import SessionImage
 
 
 class SessionImageRepository:
+    COSTUME_TYPES = {"costume_initial", "costume_reference"}
+
     def list_by_session(self, session_id: int):
         return (
             SessionImage.query.filter(SessionImage.session_id == session_id)
+            .order_by(SessionImage.id.desc())
+            .all()
+        )
+
+    def list_costumes_by_session(self, session_id: int):
+        return (
+            SessionImage.query.filter(
+                SessionImage.session_id == session_id,
+                SessionImage.image_type.in_(self.COSTUME_TYPES),
+            )
             .order_by(SessionImage.id.desc())
             .all()
         )
@@ -40,10 +52,31 @@ class SessionImageRepository:
         row = self.get(session_image_id)
         if not row:
             return None
-        SessionImage.query.filter(SessionImage.session_id == row.session_id).update({"is_selected": 0})
+        if row.image_type in self.COSTUME_TYPES:
+            query = SessionImage.query.filter(
+                SessionImage.session_id == row.session_id,
+                SessionImage.image_type.in_(self.COSTUME_TYPES),
+            )
+        else:
+            query = SessionImage.query.filter(
+                SessionImage.session_id == row.session_id,
+                ~SessionImage.image_type.in_(self.COSTUME_TYPES),
+            )
+        query.update({"is_selected": 0}, synchronize_session=False)
         row.is_selected = 1
         db.session.commit()
         return row
+
+    def get_selected_costume(self, session_id: int):
+        return (
+            SessionImage.query.filter(
+                SessionImage.session_id == session_id,
+                SessionImage.image_type.in_(self.COSTUME_TYPES),
+                SessionImage.is_selected == 1,
+            )
+            .order_by(SessionImage.id.desc())
+            .first()
+        )
 
     def set_reference(self, session_id: int, session_image_id: int, is_reference: bool):
         row = (

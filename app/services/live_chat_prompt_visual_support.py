@@ -7,6 +7,66 @@ def active_characters(context: dict, state_json: dict) -> list[dict]:
     return scoped or context["characters"]
 
 
+def _load_jsonish(value):
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            import json
+
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def collect_visual_style(context: dict, state_json: dict | None = None) -> str:
+    state_json = state_json if isinstance(state_json, dict) else (context.get("state", {}).get("state_json") or {})
+    active = active_characters(context, state_json)
+    style_parts = []
+    project_settings = _load_jsonish((context.get("project") or {}).get("settings_json"))
+    for key in ("art_style_profile", "visual_style", "image_style"):
+        value = str(project_settings.get(key) or "").strip()
+        if value:
+            style_parts.append(value)
+    for character in active:
+        style = str(character.get("art_style") or "").strip()
+        if style:
+            style_parts.append(f"{character.get('name')}: {style}")
+    normalized = []
+    seen = set()
+    for item in style_parts:
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(item)
+    return " / ".join(normalized)
+
+
+def apply_visual_style(prompt: str, context: dict) -> str:
+    value = str(prompt or "").strip()
+    style = collect_visual_style(context)
+    if not style:
+        return value
+    return f"{value}\n\n画風・スタイル指定: {style}\nこの画風を優先し、以後のシーンでも線、塗り、色味、質感を一貫させる。"
+
+
+def forbid_text_in_image(prompt: str) -> str:
+    value = str(prompt or "").strip()
+    rule = (
+        "画像内には文字を一切入れない。セリフ、字幕、吹き出し、看板の読める文字、UI、ロゴ、透かし、"
+        "日本語・英語・記号・擬音文字を描かない。セリフは画像外のテキストボックスで表示するため、"
+        "絵の中には文章や文字情報を絶対に描写しない。no text, no words, no letters, no subtitles, "
+        "no captions, no speech bubbles, no readable signs, no UI overlay, no watermark, no logo."
+    )
+    lowered = value.lower()
+    if "no speech bubbles" in lowered and "画像内には文字を一切入れない" in value:
+        return value
+    return f"{value}\n\n{rule}"
+
+
 def build_recent_conversation_excerpt_ja(messages: list[dict], limit: int = 6) -> str:
     lines = []
     for message in messages[-limit:]:
@@ -69,6 +129,7 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
     line_visual_note = state_json.get("line_visual_note") or {}
     conversation_director = state_json.get("conversation_director") or {}
     active = active_characters(context, state_json)
+    visual_style = collect_visual_style(context, state_json)
 
     lines = [
         "あなたはノベルゲームのイベントCG演出担当です。",
@@ -89,6 +150,7 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
         f"背景のヒント: {line_visual_note.get('background') or scene_progression.get('background') or state_json.get('background') or ''}",
         f"場面要約: {line_visual_note.get('scene_moment') or scene_progression.get('focus_summary') or state_json.get('focus_summary') or ''}",
         f"感情トーン: {conversation_director.get('emotional_tone') or state_json.get('mood') or ''}",
+        f"画風・スタイル指定: {visual_style}",
         "登場キャラクター:",
     ]
     for character in active[:20]:
@@ -116,6 +178,7 @@ def fallback_japanese_conversation_image_prompt(context: dict, state: dict) -> d
     mood = state_json.get("mood") or "ドラマチック"
     camera = line_visual_note.get("camera") or state_json.get("camera") or "印象的なイベントCG構図"
     focus_object = line_visual_note.get("focus_object")
+    visual_style = collect_visual_style(context, state_json)
 
     prompt_parts = [
         "この会話に合う、ドラマチックなノベルゲーム風イベントCGを生成してください。",
@@ -129,6 +192,8 @@ def fallback_japanese_conversation_image_prompt(context: dict, state: dict) -> d
         prompt_parts.append(f"会話内容に合う背景として「{location}」が自然に分かるように描いてください。")
     if focus_object:
         prompt_parts.append(f"画面の見せ場は「{focus_object}」です。")
+    if visual_style:
+        prompt_parts.append(f"画風・スタイル指定は「{visual_style}」。線、塗り、色味、質感を一貫させてください。")
     prompt_parts.append("印象的で魅力的な一枚絵にしてください。")
     prompt_ja = " ".join(prompt_parts)
     return {

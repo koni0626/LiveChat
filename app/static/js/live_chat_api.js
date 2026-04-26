@@ -14,6 +14,20 @@
     });
   }
 
+  async function generateCostume(sessionId, body) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/costumes/generate`, {
+      method: "POST",
+      body,
+    });
+  }
+
+  async function selectCostume(sessionId, imageId) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/costumes/${imageId}/select`, {
+      method: "POST",
+      body: {},
+    });
+  }
+
   async function postMessage(sessionId, body) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/messages`, {
       method: "POST",
@@ -78,11 +92,13 @@
     loadSettings,
     loadContext,
     generateSessionImage,
+    generateCostume,
     postMessage,
     extractState,
     uploadImage,
     uploadGift,
     selectImage,
+    selectCostume,
     setReferenceImage,
     deleteMessage,
   };
