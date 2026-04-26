@@ -17,6 +17,9 @@ class ChatSessionService:
     def list_sessions(self, project_id: int, include_deleted: bool = False, owner_user_id: int | None = None):
         return self._repo.list_by_project(project_id, include_deleted=include_deleted, owner_user_id=owner_user_id)
 
+    def list_sessions_by_room(self, room_id: int, include_deleted: bool = False, owner_user_id: int | None = None):
+        return self._repo.list_by_room(room_id, include_deleted=include_deleted, owner_user_id=owner_user_id)
+
     def get_session(self, session_id: int, include_deleted: bool = False):
         return self._repo.get(session_id, include_deleted=include_deleted)
 
@@ -92,6 +95,7 @@ class ChatSessionService:
         return self._repo.create(
             {
                 "project_id": project_id,
+                "room_id": payload.get("room_id"),
                 "owner_user_id": owner_user_id,
                 "title": self._normalize_required_title(payload.get("title")),
                 "session_type": payload.get("session_type") or "live_chat",
@@ -99,6 +103,7 @@ class ChatSessionService:
                 "privacy_status": payload.get("privacy_status") or "private",
                 "player_name": self._normalize_required_player_name(payload.get("player_name")),
                 "settings_json": self._normalize_settings_json(payload.get("settings_json")),
+                "room_snapshot_json": self._normalize_settings_json(payload.get("room_snapshot_json")),
             }
         )
 
@@ -115,6 +120,10 @@ class ChatSessionService:
             normalized["active_image_id"] = payload.get("active_image_id")
         if "settings_json" in payload:
             normalized["settings_json"] = self._normalize_settings_json(payload.get("settings_json"))
+        if "room_snapshot_json" in payload:
+            normalized["room_snapshot_json"] = self._normalize_settings_json(payload.get("room_snapshot_json"))
+        if "room_id" in payload:
+            normalized["room_id"] = payload.get("room_id")
         if not normalized:
             raise ValueError("payload must not be empty")
         return self._repo.update(session_id, normalized)

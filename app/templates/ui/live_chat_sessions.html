@@ -1,47 +1,33 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="page-grid">
-  <div class="toolbar-panel">
-    <form class="row g-3 align-items-end" id="liveChatSessionForm">
-      <div class="col-md-4">
-        <label class="form-label" for="liveChatTitleInput">セッション名</label>
-        <input
-          class="form-control"
-          id="liveChatTitleInput"
-          name="title"
-          placeholder="例: ノアとの会話"
-          required
-        >
-      </div>
-      <div class="col-md-4">
-        <label class="form-label" for="liveChatPlayerNameInput">プレイヤー名</label>
-        <input
-          class="form-control"
-          id="liveChatPlayerNameInput"
-          name="player_name"
-          placeholder="主人公名"
-          required
-        >
-      </div>
-      <div class="col-md-4">
-        <label class="form-label" for="liveChatCharacterSelect">話す相手</label>
-        <select class="form-select" id="liveChatCharacterSelect" name="selected_character_id" required>
-          <option value="">キャラクターを選択</option>
-        </select>
-      </div>
-      <div class="col-12 d-flex gap-2">
-        <button class="btn btn-sunrise" type="submit">新規セッションを作成</button>
-        <button class="btn btn-outline-dark" type="button" id="liveChatReloadButton">再読み込み</button>
-      </div>
-    </form>
-  </div>
+<section class="page-grid live-chat-room-page" data-user-role="{{ current_user_role or 'user' }}" data-manage-mode="{{ 'true' if manage_mode else 'false' }}">
+  {% if manage_mode and current_user_role not in ["superuser", "project_user"] %}
+  <div class="empty-panel">ルーム作成はプロジェクトユーザー以上の権限が必要です。</div>
+  {% endif %}
 
   <section class="panel-card">
     <div class="panel-head">
-      <h3>ライブチャットセッション</h3>
-      <span class="soft-code" id="liveChatSessionCount">0 sessions</span>
+      <div>
+        <h3>{{ "作成済みルーム" if manage_mode else "ライブチャット" }}</h3>
+        <p class="section-copy mb-0">
+          {% if manage_mode %}
+          作成済みのルームを確認できます。新規追加または編集から、専用画面でルーム設定を行います。
+          {% else %}
+          話したい相手を選んで、自分だけのライブチャットを開始できます。
+          {% endif %}
+        </p>
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        {% if manage_mode and current_user_role in ["superuser", "project_user"] %}
+        <a class="btn btn-sunrise btn-sm" href="{{ url_for('ui.live_chat_room_create_page', project_id=project_id) }}">
+          <i class="bi bi-plus-lg"></i>
+          <span>新規追加</span>
+        </a>
+        {% endif %}
+        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatReloadButton">再読み込み</button>
+      </div>
     </div>
-    <div class="project-card-grid" id="liveChatSessionGrid"></div>
+    <div class="project-card-grid" id="liveChatRoomGrid"></div>
   </section>
 </section>
 {% endblock %}
@@ -49,157 +35,174 @@
 <script>
 (() => {
   const projectId = Number({{ project_id }});
-  const form = document.getElementById("liveChatSessionForm");
-  const grid = document.getElementById("liveChatSessionGrid");
-  const countLabel = document.getElementById("liveChatSessionCount");
-  const characterSelect = document.getElementById("liveChatCharacterSelect");
+  const page = document.querySelector(".live-chat-room-page");
+  const manageMode = page?.dataset.manageMode === "true";
+  const roomGrid = document.getElementById("liveChatRoomGrid");
+  let rooms = [];
 
-  function normalizeSelectedCharacterIds(settingsJson) {
-    if (!settingsJson || typeof settingsJson !== "object") {
-      return [];
-    }
-    const source = Array.isArray(settingsJson.selected_character_ids)
-      ? settingsJson.selected_character_ids
-      : (settingsJson.selected_character_id ? [settingsJson.selected_character_id] : []);
-    return source
-      .map((value) => Number(value))
-      .filter((value, index, array) => Number.isInteger(value) && value > 0 && array.indexOf(value) === index);
-  }
-
-  function truncateText(value, maxLength = 68) {
+  function truncateText(value, maxLength = 120) {
     const text = String(value || "").replace(/\s+/g, " ").trim();
-    if (!text) {
-      return "まだメッセージはありません。";
-    }
-    if (text.length <= maxLength) {
-      return text;
-    }
-    return `${text.slice(0, maxLength).trimEnd()}…`;
+    if (!text) return "";
+    return text.length > maxLength ? `${text.slice(0, maxLength).trimEnd()}...` : text;
   }
 
-  async function loadCharacterOptions() {
-    const data = await NovelUI.api(`/api/v1/projects/${projectId}/characters`);
-    const list = Array.isArray(data) ? data : [];
-    characterSelect.innerHTML = [
-      '<option value="">キャラクターを選択</option>',
-      ...list.map((item) => `<option value="${item.id}">${NovelUI.escape(item.name || "Unnamed")}</option>`),
-    ].join("");
+  function statusLabel(value) {
+    if (value === "published") return "公開";
+    if (value === "archived") return "アーカイブ";
+    return "下書き";
   }
 
-  async function loadSessions() {
-    const data = await NovelUI.api(`/api/v1/chat/sessions?project_id=${projectId}`);
-    const list = Array.isArray(data) ? data : [];
-    countLabel.textContent = `${list.length} sessions`;
-    if (!list.length) {
-        grid.innerHTML = '<div class="empty-panel">まだライブチャットセッションがありません。</div>';
+  async function loadRooms() {
+    const data = await NovelUI.api(`/api/v1/projects/${projectId}/chat/available-rooms`);
+    const loadedRooms = Array.isArray(data) ? data : [];
+    rooms = manageMode ? loadedRooms : loadedRooms.filter((room) => (room.status || "draft") === "published");
+    renderRooms();
+  }
+
+  async function loadMySessions(roomId) {
+    return NovelUI.api(`/api/v1/chat/rooms/${roomId}/my-sessions`);
+  }
+
+  function renderRooms() {
+    if (!rooms.length) {
+      roomGrid.innerHTML = `<div class="empty-panel">${manageMode ? "まだルームがありません。新規追加から作成してください。" : "まだライブチャットは公開されていません。"}</div>`;
       return;
     }
-    grid.innerHTML = list.map((item) => {
-      const selectedIds = normalizeSelectedCharacterIds(item.settings_json);
-      const selectedName = Array.isArray(item.characters) && item.characters.length
-        ? (selectedIds.length ? item.characters[0]?.name : `${item.characters.length} characters`)
-        : "character not set";
-      const selectedImageUrl = item.selected_image?.asset?.media_url || "";
+    roomGrid.innerHTML = rooms.map((room) => {
+      const characterName = room.character?.name || "キャラクター未設定";
+      const characterThumb = room.character?.thumbnail_asset?.media_url || room.character?.base_asset?.media_url || "";
+      const status = room.status || "draft";
       return `
-        <article class="project-card live-chat-session-card">
+        <article class="project-card live-chat-room-card" data-room-id="${room.id}">
           <div class="project-card-top">
-            <span class="badge text-bg-light">${NovelUI.escape(item.status || "active")}</span>
-            <span class="soft-code">${item.message_count || 0} messages</span>
+            <span class="badge text-bg-light">${manageMode ? NovelUI.escape(statusLabel(status)) : "ライブチャット"}</span>
+            <span class="soft-code">${manageMode ? `${room.my_session_count || 0} sessions` : `履歴 ${room.my_session_count || 0}件`}</span>
           </div>
-          <div class="live-chat-session-head">
-            <div class="live-chat-session-copy">
-              <h4>${NovelUI.escape(item.title || "Live Chat Session")}</h4>
-              <p class="live-chat-session-excerpt">${NovelUI.escape(truncateText(item.last_message_text))}</p>
+          <div class="live-chat-room-card-main">
+            <div class="live-chat-room-character-thumb">
+              ${characterThumb
+                ? `<img src="${NovelUI.escape(characterThumb)}" alt="${NovelUI.escape(characterName)}">`
+                : `<span>${NovelUI.escape((characterName || "?").slice(0, 1))}</span>`}
             </div>
-            <div class="live-chat-session-thumb-wrap">
-              ${selectedImageUrl
-                ? `<img class="live-chat-session-thumb" src="${NovelUI.escape(selectedImageUrl)}" alt="selected scene thumbnail">`
-                : '<div class="live-chat-session-thumb live-chat-session-thumb-placeholder">No Image</div>'}
-            </div>
-          </div>
-          <div class="small text-secondary">話す相手: ${NovelUI.escape(selectedName || "-")}</div>
-          <div class="d-flex justify-content-between align-items-center mt-3 gap-2">
-            <span class="soft-code">${NovelUI.escape(item.player_name || "player")}</span>
-            <div class="d-flex gap-2">
-              <a class="btn btn-sm btn-dark" href="/projects/${projectId}/live-chat/${item.id}">開く</a>
-              <button class="btn btn-sm btn-outline-danger" type="button" data-session-delete="${item.id}">削除</button>
+            <div class="live-chat-room-card-copy">
+              <h4>${NovelUI.escape(room.title || "ライブチャット")}</h4>
+              <p class="live-chat-session-excerpt">${NovelUI.escape(truncateText(room.description || room.conversation_objective))}</p>
+              <div class="small text-secondary">話す相手: ${NovelUI.escape(characterName)}</div>
             </div>
           </div>
+          ${manageMode ? renderManageActions(room) : renderStartForm(room)}
+          <div class="live-chat-room-session-list mt-3" id="roomSessions-${room.id}"></div>
         </article>
       `;
     }).join("");
   }
 
-  async function deleteSession(sessionId) {
-        if (!window.confirm("このライブチャットセッションを削除しますか？")) {
+  function renderManageActions(room) {
+    return `
+      <div class="d-flex gap-2 flex-wrap mt-3">
+        <a class="btn btn-sm btn-outline-dark" href="/projects/${projectId}/live-chat/rooms/${room.id}/edit">編集</a>
+        <button class="btn btn-sm btn-outline-dark" type="button" data-load-room-sessions="${room.id}">チャット履歴</button>
+        <button class="btn btn-sm btn-outline-danger" type="button" data-delete-room="${room.id}">削除</button>
+      </div>
+    `;
+  }
+
+  function renderStartForm(room) {
+    return `
+      <div class="live-chat-room-start mt-3">
+        <label class="form-label" for="playerName-${room.id}">プレイヤー名</label>
+        <div class="input-group">
+          <input class="form-control" id="playerName-${room.id}" data-player-name-for="${room.id}" placeholder="あなたの名前">
+          <button class="btn btn-dark" type="button" data-start-room="${room.id}">新しくチャット</button>
+        </div>
+      </div>
+      <div class="d-flex gap-2 flex-wrap mt-3">
+        <button class="btn btn-sm btn-outline-dark" type="button" data-load-room-sessions="${room.id}">過去のチャット</button>
+      </div>
+    `;
+  }
+
+  async function startRoom(roomId, button = null) {
+    const input = document.querySelector(`[data-player-name-for="${roomId}"]`);
+    const playerName = input?.value.trim() || "";
+    if (!playerName) {
+      NovelUI.toast("プレイヤー名を入力してください。", "warning");
+      input?.focus();
       return;
     }
+    const originalLabel = button?.textContent || "";
+    if (button) {
+      button.disabled = true;
+      button.textContent = "画像生成中...";
+    }
     try {
-      await NovelUI.api(`/api/v1/chat/sessions/${sessionId}`, { method: "DELETE", body: {} });
-        NovelUI.toast("ライブチャットセッションを削除しました。");
-      await loadSessions();
+      const created = await NovelUI.api(`/api/v1/chat/rooms/${roomId}/sessions`, {
+        method: "POST",
+        body: { player_name: playerName },
+      });
+      if (created.image_generation_error) {
+        NovelUI.toast(`会話は作成しましたが、初期画像生成に失敗しました: ${created.image_generation_error}`, "warning");
+      } else {
+        NovelUI.toast("会話セッションを開始し、初期画像を生成しました。");
+      }
+      window.location.href = `/projects/${projectId}/live-chat/${created.session.id}`;
     } catch (error) {
-      NovelUI.toast(error.message || "セッションの削除に失敗しました。", "danger");
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalLabel;
+      }
+      throw error;
     }
   }
 
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const title = form.title.value.trim();
-    const playerName = form.player_name.value.trim();
-    const selectedCharacterId = Number(characterSelect.value || "0");
+  async function renderRoomSessions(roomId) {
+    const container = document.getElementById(`roomSessions-${roomId}`);
+    if (!container) return;
+    const sessions = await loadMySessions(roomId);
+    if (!Array.isArray(sessions) || !sessions.length) {
+      container.innerHTML = '<div class="empty-panel">このルームの自分の会話はまだありません。</div>';
+      return;
+    }
+    container.innerHTML = sessions.map((item) => `
+      <a class="list-row text-decoration-none" href="/projects/${projectId}/live-chat/${item.id}">
+        <div>
+          <strong>${NovelUI.escape(item.title || "会話セッション")}</strong>
+          <div class="small text-secondary">${NovelUI.escape(item.player_name || "player")} / ${item.message_count || 0} messages</div>
+        </div>
+        <span class="soft-code">開く</span>
+      </a>
+    `).join("");
+  }
 
-    if (!title) {
-      NovelUI.toast("セッション名を入力してください。", "warning");
-      form.title.focus();
-      return;
-    }
-    if (!playerName) {
-      NovelUI.toast("プレイヤー名を入力してください。", "warning");
-      form.player_name.focus();
-      return;
-    }
-    if (!selectedCharacterId) {
-      NovelUI.toast("話す相手を選択してください。", "warning");
-      characterSelect.focus();
-      return;
-    }
+  async function deleteRoom(roomId) {
+    if (!window.confirm("このルームを削除しますか？既存の会話セッションは削除されません。")) return;
+    await NovelUI.api(`/api/v1/chat/rooms/${roomId}`, { method: "DELETE" });
+    NovelUI.toast("ルームを削除しました。");
+    await loadRooms();
+  }
 
-    try {
-      const created = await NovelUI.api("/api/v1/chat/sessions", {
-        method: "POST",
-        body: {
-          project_id: projectId,
-          title,
-          player_name: playerName,
-          settings_json: {
-            selected_character_ids: [selectedCharacterId],
-          },
-        },
-      });
-        NovelUI.toast("ライブチャットセッションを作成しました。");
-      window.location.href = `/projects/${projectId}/live-chat/${created.session.id}`;
-    } catch (error) {
-      NovelUI.toast(error.message || "セッション作成に失敗しました。", "danger");
+  document.getElementById("liveChatReloadButton")?.addEventListener("click", () => {
+    loadRooms().catch((error) => NovelUI.toast(error.message || "再読み込みに失敗しました。", "danger"));
+  });
+  roomGrid.addEventListener("click", (event) => {
+    const startButton = event.target.closest("[data-start-room]");
+    if (startButton) {
+      startRoom(Number(startButton.dataset.startRoom), startButton).catch((error) => NovelUI.toast(error.message || "会話開始に失敗しました。", "danger"));
+      return;
+    }
+    const sessionsButton = event.target.closest("[data-load-room-sessions]");
+    if (sessionsButton) {
+      renderRoomSessions(Number(sessionsButton.dataset.loadRoomSessions)).catch((error) => NovelUI.toast(error.message || "セッション一覧の取得に失敗しました。", "danger"));
+      return;
+    }
+    const deleteButton = event.target.closest("[data-delete-room]");
+    if (deleteButton) {
+      deleteRoom(Number(deleteButton.dataset.deleteRoom)).catch((error) => NovelUI.toast(error.message || "ルーム削除に失敗しました。", "danger"));
     }
   });
 
-  document.getElementById("liveChatReloadButton").addEventListener("click", () => {
-    Promise.all([loadCharacterOptions(), loadSessions()]).catch((error) => {
-      NovelUI.toast(error.message || "再読み込みに失敗しました。", "danger");
-    });
-  });
-
-  grid.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-session-delete]");
-    if (!button) {
-      return;
-    }
-    deleteSession(Number(button.dataset.sessionDelete));
-  });
-
-  Promise.all([loadCharacterOptions(), loadSessions()]).catch((error) => {
-      NovelUI.toast(error.message || "ライブチャット一覧の初期表示に失敗しました。", "danger");
+  loadRooms().catch((error) => {
+    NovelUI.toast(error.message || "ライブチャットルームの読み込みに失敗しました。", "danger");
   });
 })();
 </script>

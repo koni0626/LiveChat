@@ -6,6 +6,7 @@ from .chat_session import ChatSession
 from .character import Character
 from .ending_condition import EndingCondition
 from .glossary_term import GlossaryTerm
+from .live_chat_room import LiveChatRoom
 from .project import Project
 from .session_image import SessionImage
 from .session_gift_event import SessionGiftEvent
@@ -23,6 +24,7 @@ __all__ = [
     "Character",
     "EndingCondition",
     "GlossaryTerm",
+    "LiveChatRoom",
     "Project",
     "SessionImage",
     "SessionGiftEvent",

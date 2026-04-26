@@ -8,6 +8,16 @@ ROMANCE_KEYS = ("favorite_approach", "avoid_approach", "attraction_points", "bou
 
 
 def get_session_objective(context: dict) -> str | None:
+    room_snapshot = context.get("session", {}).get("room_snapshot_json") or {}
+    if isinstance(room_snapshot, dict):
+        value = str(room_snapshot.get("conversation_objective") or "").strip()
+        if value:
+            return value
+    room = context.get("room") or {}
+    if isinstance(room, dict):
+        value = str(room.get("conversation_objective") or "").strip()
+        if value:
+            return value
     session_settings = context.get("session", {}).get("settings_json") or {}
     if isinstance(session_settings, dict):
         value = str(

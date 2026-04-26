@@ -14,6 +14,7 @@ from .asset_service import AssetService
 from .character_service import CharacterService
 from .chat_message_service import ChatMessageService
 from .chat_session_service import ChatSessionService
+from .live_chat_room_service import LiveChatRoomService
 from .project_service import ProjectService
 from .session_gift_event_service import SessionGiftEventService
 from .session_image_service import SessionImageService
@@ -32,6 +33,7 @@ class LiveChatService:
         character_service: CharacterService | None = None,
         asset_service: AssetService | None = None,
         session_gift_event_service: SessionGiftEventService | None = None,
+        live_chat_room_service: LiveChatRoomService | None = None,
         world_service: WorldService | None = None,
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
@@ -44,6 +46,7 @@ class LiveChatService:
         self._character_service = character_service or CharacterService()
         self._asset_service = asset_service or AssetService()
         self._session_gift_event_service = session_gift_event_service or SessionGiftEventService()
+        self._live_chat_room_service = live_chat_room_service or LiveChatRoomService()
         self._world_service = world_service or WorldService()
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
@@ -121,6 +124,7 @@ class LiveChatService:
         return {
             "id": row.id,
             "project_id": row.project_id,
+            "room_id": getattr(row, "room_id", None),
             "owner_user_id": getattr(row, "owner_user_id", None),
             "title": row.title,
             "session_type": row.session_type,
@@ -129,6 +133,7 @@ class LiveChatService:
             "active_image_id": row.active_image_id,
             "player_name": row.player_name,
             "settings_json": self._load_json(row.settings_json),
+            "room_snapshot_json": self._load_json(getattr(row, "room_snapshot_json", None)),
             "created_at": row.created_at.isoformat() if getattr(row, "created_at", None) else None,
             "updated_at": row.updated_at.isoformat() if getattr(row, "updated_at", None) else None,
         }
@@ -215,6 +220,15 @@ class LiveChatService:
         }
 
     def _selected_character_ids_from_session(self, session) -> list[int]:
+        room_snapshot = self._load_json(getattr(session, "room_snapshot_json", None)) or {}
+        if isinstance(room_snapshot, dict):
+            try:
+                room_character_id = int(room_snapshot.get("character_id") or 0)
+            except (TypeError, ValueError):
+                room_character_id = 0
+            if room_character_id > 0:
+                return [room_character_id]
+
         settings_json = self._load_json(getattr(session, "settings_json", None)) or {}
         if not isinstance(settings_json, dict):
             return []
@@ -547,8 +561,13 @@ class LiveChatService:
         owner_user_id: int | None = None,
         include_private_details: bool = True,
         detail_owner_user_id: int | None = None,
+        room_id: int | None = None,
     ):
-        items = self._chat_session_service.list_sessions(project_id, owner_user_id=owner_user_id)
+        items = (
+            self._chat_session_service.list_sessions_by_room(room_id, owner_user_id=owner_user_id)
+            if room_id
+            else self._chat_session_service.list_sessions(project_id, owner_user_id=owner_user_id)
+        )
         serialized = []
         for item in items:
             can_include_details = include_private_details or (
@@ -583,6 +602,44 @@ class LiveChatService:
         if selected_character_ids:
             initial_state["active_character_ids"] = selected_character_ids
         self._session_state_service.upsert_state(session.id, {"state_json": initial_state})
+        return self.get_session_context(session.id)
+
+    def create_session_from_room(self, room_id: int, payload: dict | None = None, owner_user_id: int | None = None):
+        payload = dict(payload or {})
+        if not owner_user_id:
+            raise ValueError("owner_user_id is required")
+        room = self._live_chat_room_service.get_room(room_id)
+        if not room:
+            return None
+        player_name = str(payload.get("player_name") or "").strip()
+        if not player_name:
+            raise ValueError("player_name is required")
+        snapshot = self._live_chat_room_service.build_room_snapshot(room)
+        title = str(payload.get("title") or "").strip()
+        if not title:
+            title = f"{snapshot.get('character_name') or room.title}との会話"
+        session_payload = {
+            "room_id": room.id,
+            "title": title,
+            "player_name": player_name,
+            "settings_json": {
+                "selected_character_ids": [room.character_id],
+                "conversation_objective": room.conversation_objective,
+            },
+            "room_snapshot_json": snapshot,
+        }
+        session = self._chat_session_service.create_session(room.project_id, session_payload, owner_user_id=owner_user_id)
+        if not session:
+            return None
+        self._session_state_service.upsert_state(
+            session.id,
+            {
+                "state_json": {
+                    "active_character_ids": [room.character_id],
+                    "room_id": room.id,
+                }
+            },
+        )
         return self.get_session_context(session.id)
 
     def _preserve_locked_session_characters(self, session_id: int, payload: dict) -> dict:
@@ -632,6 +689,7 @@ class LiveChatService:
         if not session:
             return None
         project = self._project_service.get_project(session.project_id)
+        room = self._live_chat_room_service.get_room(session.room_id) if getattr(session, "room_id", None) else None
         state = self._session_state_service.get_state(session_id)
         messages = self._chat_message_service.list_messages(session_id)
         images = self._session_image_service.list_session_images(session_id)
@@ -656,6 +714,7 @@ class LiveChatService:
                 "messages": [],
                 "state": self._serialize_state(state),
                 "characters": characters,
+                "room": self._live_chat_room_service.serialize_room(room) if room else None,
             }
             self._create_opening_message(session, opening_context)
             messages = self._chat_message_service.list_messages(session_id)
@@ -672,6 +731,7 @@ class LiveChatService:
                 "tone": getattr(world, "tone", None) if world else None,
             },
             "session": self._serialize_session(session),
+            "room": self._live_chat_room_service.serialize_room(room) if room else None,
             "messages": [self._serialize_message(item) for item in messages],
             "state": self._serialize_state(state),
             "characters": characters,

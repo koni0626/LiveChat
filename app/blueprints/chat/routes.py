@@ -1,15 +1,17 @@
 import json
 
-from flask import Blueprint, request, session
+from flask import Blueprint, current_app, request, session
 
 from ...api import ForbiddenError, NotFoundError, UnauthorizedError, ValidationError, json_response
 from ...models import User
 from ...services.asset_service import AssetService
 from ...services.authorization_service import AuthorizationService
 from ...services.chat_session_service import ChatSessionService
+from ...services.live_chat_room_service import LiveChatRoomService
 from ...services.live_chat_service import LiveChatService
 from ...services.project_service import ProjectService
 from ...services.session_state_service import SessionStateService
+from ...services.user_setting_service import UserSettingService
 
 
 chat_bp = Blueprint("chat", __name__)
@@ -17,8 +19,10 @@ live_chat_service = LiveChatService()
 project_service = ProjectService()
 asset_service = AssetService()
 chat_session_service = ChatSessionService()
+live_chat_room_service = LiveChatRoomService()
 session_state_service = SessionStateService()
 authorization_service = AuthorizationService()
+user_setting_service = UserSettingService()
 
 
 def _current_user():
@@ -61,6 +65,126 @@ def _require_session(session_id: int, *, include_body: bool = True, for_manage: 
     if not allowed:
         raise NotFoundError() if include_body else ForbiddenError()
     return chat_session, project, user
+
+
+def _require_room(room_id: int, *, for_manage: bool = False, published_only: bool = False):
+    user = _current_user()
+    room = live_chat_room_service.get_room(room_id)
+    if not room:
+        raise NotFoundError()
+    project = project_service.get_project(room.project_id)
+    if not project:
+        raise NotFoundError()
+    if for_manage:
+        if not authorization_service.can_manage_project(user, project):
+            raise ForbiddenError()
+    else:
+        if not authorization_service.can_view_project(user, project):
+            raise NotFoundError()
+        if published_only and room.status != "published" and not authorization_service.can_manage_project(user, project):
+            raise NotFoundError()
+    return room, project, user
+
+
+@chat_bp.route("/projects/<int:project_id>/chat/rooms", methods=["GET"])
+def list_project_chat_rooms(project_id: int):
+    project, user = _require_project(project_id)
+    include_unpublished = authorization_service.can_manage_project(user, project)
+    rooms = live_chat_room_service.list_rooms(project_id, include_unpublished=include_unpublished)
+    return json_response(
+        live_chat_room_service.serialize_rooms(
+            rooms,
+            include_counts=True,
+            owner_user_id=user.id,
+        )
+    )
+
+
+@chat_bp.route("/projects/<int:project_id>/chat/rooms", methods=["POST"])
+def create_project_chat_room(project_id: int):
+    _, user = _require_project(project_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        room = live_chat_room_service.create_room(project_id, payload, created_by_user_id=user.id)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not room:
+        raise NotFoundError()
+    return json_response(live_chat_room_service.serialize_room(room, include_counts=True), status=201)
+
+
+@chat_bp.route("/projects/<int:project_id>/chat/available-rooms", methods=["GET"])
+def list_available_chat_rooms(project_id: int):
+    project, user = _require_project(project_id)
+    include_unpublished = authorization_service.can_manage_project(user, project)
+    rooms = live_chat_room_service.list_rooms(project_id, include_unpublished=include_unpublished)
+    return json_response(
+        live_chat_room_service.serialize_rooms(
+            rooms,
+            include_counts=True,
+            owner_user_id=user.id,
+        )
+    )
+
+
+@chat_bp.route("/chat/rooms/<int:room_id>", methods=["GET"])
+def get_chat_room(room_id: int):
+    room, _, user = _require_room(room_id)
+    return json_response(live_chat_room_service.serialize_room(room, include_counts=True, owner_user_id=user.id))
+
+
+@chat_bp.route("/chat/rooms/<int:room_id>", methods=["PATCH"])
+def update_chat_room(room_id: int):
+    _require_room(room_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        room = live_chat_room_service.update_room(room_id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not room:
+        raise NotFoundError()
+    return json_response(live_chat_room_service.serialize_room(room, include_counts=True))
+
+
+@chat_bp.route("/chat/rooms/<int:room_id>", methods=["DELETE"])
+def delete_chat_room(room_id: int):
+    _require_room(room_id, for_manage=True)
+    if not live_chat_room_service.delete_room(room_id):
+        raise NotFoundError()
+    return json_response({"room_id": room_id, "deleted": True})
+
+
+@chat_bp.route("/chat/rooms/<int:room_id>/my-sessions", methods=["GET"])
+def list_my_room_sessions(room_id: int):
+    room, _, user = _require_room(room_id, published_only=True)
+    return json_response(live_chat_service.list_sessions(room.project_id, owner_user_id=user.id, room_id=room.id))
+
+
+@chat_bp.route("/chat/rooms/<int:room_id>/sessions", methods=["POST"])
+def create_room_chat_session(room_id: int):
+    _require_room(room_id, published_only=True)
+    user = _current_user()
+    payload = request.get_json(silent=True) or {}
+    try:
+        created = live_chat_service.create_session_from_room(room_id, payload, owner_user_id=user.id)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not created:
+        raise NotFoundError()
+    try:
+        settings = user_setting_service.get_settings(user.id)
+        initial_image = live_chat_service.generate_image(
+            created["session"]["id"],
+            {
+                "quality": settings.get("default_quality") or "low",
+                "size": settings.get("default_size") or "1536x1024",
+            },
+        )
+        created["initial_image"] = initial_image
+    except Exception as exc:  # Keep the session usable even when the image API is temporarily unavailable.
+        current_app.logger.exception("initial live chat image generation failed")
+        created["image_generation_error"] = str(exc)
+    return json_response(created, status=201)
 
 
 @chat_bp.route("/chat/sessions", methods=["GET"])

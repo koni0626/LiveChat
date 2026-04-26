@@ -12,15 +12,6 @@
   const stateBoard = document.getElementById("liveChatStateBoard");
   const memoryBoard = document.getElementById("liveChatMemoryBoard");
   const selectedImagePanel = document.getElementById("liveChatSelectedImagePanel");
-  const sessionMetaForm = document.getElementById("liveChatSessionMetaForm");
-  const sessionCharacterSelect = document.getElementById("liveChatSessionCharacterSelect");
-  const objectiveInput = document.getElementById("liveChatSessionObjectiveInput");
-  const objectivePreview = document.getElementById("liveChatObjectivePreview");
-  const objectiveEditButton = document.getElementById("liveChatObjectiveEditButton");
-  const objectiveModalElement = document.getElementById("liveChatObjectiveModal");
-  const objectiveMarkdownInput = document.getElementById("liveChatObjectiveMarkdownInput");
-  const objectiveMarkdownPreview = document.getElementById("liveChatObjectiveMarkdownPreview");
-  const objectiveApplyButton = document.getElementById("liveChatObjectiveApplyButton");
   const composeForm = document.getElementById("liveChatComposeForm");
   const composeInput = document.getElementById("liveChatComposeInput");
   const composeShell = document.getElementById("liveChatComposeShell");
@@ -32,86 +23,6 @@
   let giftController = null;
   let composeVisible = true;
   let userDefaultImageSettings = {};
-  if (objectiveModalElement) {
-    document.body.appendChild(objectiveModalElement);
-  }
-  const objectiveModal = objectiveModalElement ? new bootstrap.Modal(objectiveModalElement) : null;
-
-  function escapeHtml(value) {
-    return NovelUI.escape(value ?? "");
-  }
-
-  function renderInlineMarkdown(value) {
-    return escapeHtml(value)
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/`(.+?)`/g, "<code>$1</code>");
-  }
-
-  function markdownToHtml(markdown) {
-    const lines = String(markdown || "").split(/\r?\n/);
-    const html = [];
-    let listOpen = false;
-
-    function closeList() {
-      if (listOpen) {
-        html.push("</ul>");
-        listOpen = false;
-      }
-    }
-
-    lines.forEach((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        closeList();
-        return;
-      }
-      if (trimmed.startsWith("## ")) {
-        closeList();
-        html.push(`<h5>${renderInlineMarkdown(trimmed.slice(3))}</h5>`);
-        return;
-      }
-      if (trimmed.startsWith("# ")) {
-        closeList();
-        html.push(`<h4>${renderInlineMarkdown(trimmed.slice(2))}</h4>`);
-        return;
-      }
-      if (trimmed.startsWith("> ")) {
-        closeList();
-        html.push(`<blockquote>${renderInlineMarkdown(trimmed.slice(2))}</blockquote>`);
-        return;
-      }
-      if (/^[-*]\s+/.test(trimmed)) {
-        if (!listOpen) {
-          html.push("<ul>");
-          listOpen = true;
-        }
-        html.push(`<li>${renderInlineMarkdown(trimmed.replace(/^[-*]\s+/, ""))}</li>`);
-        return;
-      }
-      closeList();
-      html.push(`<p>${renderInlineMarkdown(trimmed)}</p>`);
-    });
-
-    closeList();
-    return html.join("") || '<p class="text-secondary mb-0">まだ入力されていません。</p>';
-  }
-
-  function summarizeMarkdown(markdown) {
-    const text = String(markdown || "")
-      .replace(/^#{1,6}\s+/gm, "")
-      .replace(/^[-*]\s+/gm, "")
-      .replace(/^>\s+/gm, "")
-      .replace(/[*_`>#-]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!text) return "まだ入力されていません。";
-    return text.length > 180 ? `${text.slice(0, 180)}...` : text;
-  }
-
-  function renderObjectivePreview() {
-    if (!objectivePreview || !objectiveInput) return;
-    objectivePreview.textContent = summarizeMarkdown(objectiveInput.value);
-  }
 
   function getMessageListElement() {
     return document.getElementById("liveChatMessageList");
@@ -149,25 +60,6 @@
     currentContext = context;
     const title = context.session.title || "\u30e9\u30a4\u30d6\u30c1\u30e3\u30c3\u30c8";
     document.getElementById("liveChatTitle").textContent = title;
-    sessionMetaForm.title.value = context.session.title || "";
-    sessionMetaForm.player_name.value = context.session.player_name || "";
-    objectiveInput.value = context.session.settings_json?.conversation_objective || "";
-    renderObjectivePreview();
-
-    LiveChatApi.loadSessionCharacterOptions(Number(context?.project?.id || projectId || 0))
-      .then((list) => {
-        sessionCharacterSelect.innerHTML = [
-          '<option value="">\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u3092\u9078\u629e</option>',
-          ...list.map((item) => `<option value="${item.id}">${NovelUI.escape(item.name || "Unnamed")}</option>`),
-        ].join("");
-        const selectedIds = LiveChatView.normalizeSelectedCharacterIds(context.session.settings_json);
-        sessionCharacterSelect.value = selectedIds.length ? String(selectedIds[0]) : "";
-        sessionCharacterSelect.disabled = true;
-        sessionCharacterSelect.title = "\u4f5c\u6210\u6e08\u307f\u30bb\u30c3\u30b7\u30e7\u30f3\u306e\u8a71\u3059\u76f8\u624b\u306f\u5909\u66f4\u3067\u304d\u307e\u305b\u3093\u3002";
-      })
-      .catch((error) => {
-        NovelUI.toast(error.message || "\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u4e00\u89a7\u306e\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
-      });
 
     if (stateBoard) {
       stateBoard.textContent = LiveChatView.formatJson(context.state.state_json || {});
@@ -274,16 +166,6 @@
   });
   giftController.bind();
 
-  LiveChatActions.bindSessionMetaForm({
-    sessionMetaForm,
-    sessionCharacterSelect,
-    api: LiveChatApi,
-    getSessionId: () => sessionId,
-    getCurrentContext: () => currentContext,
-    applyContext,
-    generateSessionImage,
-  });
-
   LiveChatActions.bindImageActions({
     api: LiveChatApi,
     getSessionId: () => sessionId,
@@ -295,7 +177,7 @@
     generateSessionImage,
   });
 
-  document.getElementById("liveChatRefreshContextButton").addEventListener("click", () => {
+  document.getElementById("liveChatRefreshContextButton")?.addEventListener("click", () => {
     loadContext().catch((error) => {
       NovelUI.toast(error.message || "\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
     });
@@ -303,26 +185,6 @@
 
   toggleComposeButton?.addEventListener("click", () => {
     setComposeVisible(!composeVisible);
-  });
-
-  objectiveEditButton?.addEventListener("click", () => {
-    if (!objectiveModal || !objectiveMarkdownInput || !objectiveMarkdownPreview || !objectiveInput) return;
-    objectiveMarkdownInput.value = objectiveInput.value || "";
-    objectiveMarkdownPreview.innerHTML = markdownToHtml(objectiveMarkdownInput.value);
-    objectiveModal.show();
-    setTimeout(() => objectiveMarkdownInput.focus(), 180);
-  });
-
-  objectiveMarkdownInput?.addEventListener("input", () => {
-    if (!objectiveMarkdownPreview) return;
-    objectiveMarkdownPreview.innerHTML = markdownToHtml(objectiveMarkdownInput.value);
-  });
-
-  objectiveApplyButton?.addEventListener("click", () => {
-    if (!objectiveInput || !objectiveMarkdownInput) return;
-    objectiveInput.value = objectiveMarkdownInput.value || "";
-    renderObjectivePreview();
-    objectiveModal?.hide();
   });
 
   shell.initialize();
