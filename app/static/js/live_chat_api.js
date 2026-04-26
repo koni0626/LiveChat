@@ -1,9 +1,4 @@
 (function () {
-  async function loadSessionCharacterOptions(projectId) {
-    const data = await NovelUI.api(`/api/v1/projects/${projectId}/characters`);
-    return Array.isArray(data) ? data : [];
-  }
-
   async function loadContext(sessionId) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}`);
   }
@@ -15,13 +10,6 @@
   async function generateSessionImage(sessionId, body) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/images/generate`, {
       method: "POST",
-      body,
-    });
-  }
-
-  async function updateSession(sessionId, body) {
-    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}`, {
-      method: "PATCH",
       body,
     });
   }
@@ -87,11 +75,9 @@
   }
 
   window.LiveChatApi = {
-    loadSessionCharacterOptions,
     loadSettings,
     loadContext,
     generateSessionImage,
-    updateSession,
     postMessage,
     extractState,
     uploadImage,

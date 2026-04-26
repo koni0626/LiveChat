@@ -8,15 +8,18 @@ from ...models import User
 ui_bp = Blueprint("ui", __name__)
 
 
-def _project_nav(project_id: int | None):
+def _project_nav(project_id: int | None, current_user: User | None = None):
     if project_id is None:
         return []
-    return [
+    links = [
         {"label": "ホーム", "icon": "bi-grid-1x2", "href": url_for("ui.project_home_page", project_id=project_id)},
         {"label": "世界観", "icon": "bi-globe2", "href": url_for("ui.world_page", project_id=project_id)},
         {"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)},
-        {"label": "ライブチャット", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)},
     ]
+    if current_user and getattr(current_user, "role", "user") in {"superuser", "project_user"}:
+        links.append({"label": "ルーム作成", "icon": "bi-door-open", "href": url_for("ui.live_chat_rooms_page", project_id=project_id)})
+    links.append({"label": "ライブチャット", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)})
+    return links
 
 
 def _render(template_name: str, *, title: str, screen_id: str, project_id: int | None = None, **context):
@@ -25,12 +28,13 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
     global_nav_links = [
         {"label": "ダッシュボード", "icon": "bi-house-door", "href": url_for("ui.dashboard_page")},
         {"label": "プロジェクト", "icon": "bi-collection", "href": url_for("ui.project_list_page")},
-        {"label": "設定", "icon": "bi-sliders", "href": url_for("ui.settings_page")},
     ]
     if current_user and getattr(current_user, "role", "user") == "superuser":
-        global_nav_links.insert(
-            2,
-            {"label": "ユーザー管理", "icon": "bi-person-gear", "href": url_for("ui.admin_users_page")},
+        global_nav_links.extend(
+            [
+                {"label": "ユーザー管理", "icon": "bi-person-gear", "href": url_for("ui.admin_users_page")},
+                {"label": "設定", "icon": "bi-sliders", "href": url_for("ui.settings_page")},
+            ]
         )
     return render_template(
         template_name,
@@ -41,7 +45,7 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
         current_user_display_name=(getattr(current_user, "display_name", None) if current_user else None),
         current_user_email=(getattr(current_user, "email", None) if current_user else None),
         current_user_role=(getattr(current_user, "role", "user") if current_user else None),
-        project_nav_links=_project_nav(project_id),
+        project_nav_links=_project_nav(project_id, current_user),
         global_nav_links=global_nav_links,
         **context,
     )
@@ -111,7 +115,46 @@ def world_page(project_id: int):
 
 @ui_bp.route("/projects/<int:project_id>/live-chat", methods=["GET"])
 def live_chat_sessions_page(project_id: int):
-    return _render("ui/live_chat_sessions.html", title="ライブチャット", screen_id="live-chat-sessions", project_id=project_id)
+    return _render(
+        "ui/live_chat_sessions.html",
+        title="ライブチャット",
+        screen_id="live-chat-sessions",
+        project_id=project_id,
+        manage_mode=False,
+    )
+
+
+@ui_bp.route("/projects/<int:project_id>/live-chat/rooms", methods=["GET"])
+def live_chat_rooms_page(project_id: int):
+    return _render(
+        "ui/live_chat_sessions.html",
+        title="ルーム作成",
+        screen_id="live-chat-rooms",
+        project_id=project_id,
+        manage_mode=True,
+    )
+
+
+@ui_bp.route("/projects/<int:project_id>/live-chat/rooms/new", methods=["GET"])
+def live_chat_room_create_page(project_id: int):
+    return _render(
+        "ui/live_chat_room_edit.html",
+        title="ルーム新規追加",
+        screen_id="live-chat-room-edit",
+        project_id=project_id,
+        room_id=None,
+    )
+
+
+@ui_bp.route("/projects/<int:project_id>/live-chat/rooms/<int:room_id>/edit", methods=["GET"])
+def live_chat_room_edit_page(project_id: int, room_id: int):
+    return _render(
+        "ui/live_chat_room_edit.html",
+        title="ルーム編集",
+        screen_id="live-chat-room-edit",
+        project_id=project_id,
+        room_id=room_id,
+    )
 
 
 @ui_bp.route("/projects/<int:project_id>/live-chat/<int:session_id>", methods=["GET"])

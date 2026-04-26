@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-grid live-chat-room-edit-page" data-room-id="{{ room_id or '' }}">
+  {% if current_user_role not in ["superuser", "project_user"] %}
+  <div class="empty-panel">ルーム設定はプロジェクトユーザー以上の権限が必要です。</div>
+  {% else %}
+  <section class="toolbar-panel">
+    <div class="panel-head">
+      <div>
+        <h3>{{ "ルーム編集" if room_id else "ルーム新規追加" }}</h3>
+        <p class="section-copy mb-0">話すキャラクター、公開状態、キャラクター(AI)の目的を設定します。</p>
+      </div>
+      <a class="btn btn-sm btn-outline-dark" href="{{ url_for('ui.live_chat_rooms_page', project_id=project_id) }}">一覧へ戻る</a>
+    </div>
+    <form class="row g-3 align-items-start" id="liveChatRoomForm">
+      <div class="col-lg-4 col-md-6">
+        <label class="form-label" for="liveChatRoomTitleInput">ルーム名</label>
+        <input class="form-control" id="liveChatRoomTitleInput" name="title" required>
+      </div>
+      <div class="col-lg-4 col-md-6">
+        <label class="form-label" for="liveChatRoomCharacterSelect">話すキャラクター</label>
+        <select class="form-select" id="liveChatRoomCharacterSelect" name="character_id" required>
+          <option value="">キャラクターを選択</option>
+        </select>
+      </div>
+      <div class="col-lg-4 col-md-6">
+        <label class="form-label" for="liveChatRoomStatusSelect">公開状態</label>
+        <select class="form-select" id="liveChatRoomStatusSelect" name="status">
+          <option value="draft">下書き</option>
+          <option value="published">公開</option>
+          <option value="archived">アーカイブ</option>
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="liveChatRoomDescriptionInput">説明</label>
+        <input class="form-control" id="liveChatRoomDescriptionInput" name="description" placeholder="ユーザーに見せる簡単な説明">
+      </div>
+      <div class="col-12">
+        <textarea class="d-none" id="liveChatRoomObjectiveInput" name="conversation_objective"></textarea>
+        <article class="markdown-summary-card live-chat-room-objective-card">
+          <div class="markdown-summary-head">
+            <div>
+              <h4>キャラクター(AI)の目的</h4>
+              <p>このルームでAIキャラクターが何を目指して会話するかをMarkdownで入力します。</p>
+            </div>
+            <button class="btn btn-sm btn-outline-light" type="button" id="liveChatRoomObjectiveEditButton">
+              <i class="bi bi-pencil-square"></i>
+              <span>編集</span>
+            </button>
+          </div>
+          <div class="markdown-summary-body" id="liveChatRoomObjectivePreview">まだ入力されていません。</div>
+        </article>
+      </div>
+      <div class="col-12 d-flex gap-2 justify-content-end">
+        <a class="btn btn-outline-dark" href="{{ url_for('ui.live_chat_rooms_page', project_id=project_id) }}">キャンセル</a>
+        <button class="btn btn-sunrise" type="submit">{{ "ルームを更新" if room_id else "ルームを保存" }}</button>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+</section>
+
+{% if current_user_role in ["superuser", "project_user"] %}
+<div class="modal fade" id="liveChatRoomObjectiveModal" tabindex="-1" aria-labelledby="liveChatRoomObjectiveModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content markdown-modal">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title h5" id="liveChatRoomObjectiveModalLabel">キャラクター(AI)の目的を編集</h3>
+          <p class="mb-0 text-secondary">Markdownで、AIキャラクターが会話中に目指す目的や避けたい展開を書けます。</p>
+        </div>
+        <button class="btn-close btn-close-white" type="button" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="markdown-modal-grid">
+          <div class="markdown-field">
+            <label class="form-label" for="liveChatRoomObjectiveMarkdownInput">Markdown入力</label>
+            <textarea
+              class="form-control markdown-modal-input"
+              id="liveChatRoomObjectiveMarkdownInput"
+              rows="20"
+              placeholder="- プレイヤーがキャラクターに恋愛感情を持つようにする&#10;- プレイヤーが英文法について理解する"
+            ></textarea>
+          </div>
+          <div class="markdown-field">
+            <div class="form-label">プレビュー</div>
+            <div class="markdown-preview markdown-modal-preview" id="liveChatRoomObjectiveMarkdownPreview"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-light" type="button" data-bs-dismiss="modal">キャンセル</button>
+        <button class="btn btn-sunrise" type="button" id="liveChatRoomObjectiveApplyButton">反映する</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const projectId = Number({{ project_id }});
+  const roomId = Number(document.querySelector(".live-chat-room-edit-page")?.dataset.roomId || 0);
+  const roomForm = document.getElementById("liveChatRoomForm");
+  if (!roomForm) return;
+  const characterSelect = document.getElementById("liveChatRoomCharacterSelect");
+  const objectivePreview = document.getElementById("liveChatRoomObjectivePreview");
+  const objectiveEditButton = document.getElementById("liveChatRoomObjectiveEditButton");
+  const objectiveModalElement = document.getElementById("liveChatRoomObjectiveModal");
+  if (objectiveModalElement) document.body.appendChild(objectiveModalElement);
+  const objectiveModal = objectiveModalElement ? new bootstrap.Modal(objectiveModalElement) : null;
+  const objectiveMarkdownInput = document.getElementById("liveChatRoomObjectiveMarkdownInput");
+  const objectiveMarkdownPreview = document.getElementById("liveChatRoomObjectiveMarkdownPreview");
+  const objectiveApplyButton = document.getElementById("liveChatRoomObjectiveApplyButton");
+
+  function escapeHtml(value) {
+    return NovelUI.escape(value ?? "");
+  }
+
+  function renderInlineMarkdown(text) {
+    return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  }
+
+  function markdownToHtml(markdown) {
+    const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+    const html = [];
+    let inList = false;
+    function closeList() {
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+    }
+    for (const rawLine of lines) {
+      const trimmed = rawLine.trim();
+      if (!trimmed) {
+        closeList();
+        continue;
+      }
+      if (trimmed.startsWith("## ")) {
+        closeList();
+        html.push(`<h5>${renderInlineMarkdown(trimmed.slice(3))}</h5>`);
+      } else if (trimmed.startsWith("# ")) {
+        closeList();
+        html.push(`<h4>${renderInlineMarkdown(trimmed.slice(2))}</h4>`);
+      } else if (trimmed.startsWith("> ")) {
+        closeList();
+        html.push(`<blockquote>${renderInlineMarkdown(trimmed.slice(2))}</blockquote>`);
+      } else if (trimmed.startsWith("- ")) {
+        if (!inList) {
+          html.push("<ul>");
+          inList = true;
+        }
+        html.push(`<li>${renderInlineMarkdown(trimmed.slice(2))}</li>`);
+      } else {
+        closeList();
+        html.push(`<p>${renderInlineMarkdown(trimmed)}</p>`);
+      }
+    }
+    closeList();
+    return html.join("") || '<p class="text-muted mb-0">まだ入力されていません。</p>';
+  }
+
+  function plainPreview(value) {
+    const text = String(value || "").replace(/[#>*`_-]/g, "").replace(/\s+/g, " ").trim();
+    return text ? text.slice(0, 180) + (text.length > 180 ? "..." : "") : "まだ入力されていません。";
+  }
+
+  function renderObjectivePreview() {
+    objectivePreview.textContent = plainPreview(roomForm.conversation_objective.value);
+  }
+
+  function openObjectiveEditor() {
+    objectiveMarkdownInput.value = roomForm.conversation_objective.value || "";
+    objectiveMarkdownPreview.innerHTML = markdownToHtml(objectiveMarkdownInput.value);
+    objectiveModal.show();
+    setTimeout(() => objectiveMarkdownInput.focus(), 180);
+  }
+
+  function applyObjectiveEditor() {
+    roomForm.conversation_objective.value = objectiveMarkdownInput.value;
+    renderObjectivePreview();
+    objectiveModal.hide();
+  }
+
+  function fillRoom(room) {
+    roomForm.title.value = room.title || "";
+    roomForm.character_id.value = room.character_id || "";
+    roomForm.status.value = room.status || "draft";
+    roomForm.description.value = room.description || "";
+    roomForm.conversation_objective.value = room.conversation_objective || "";
+    renderObjectivePreview();
+  }
+
+  async function loadCharacters() {
+    const data = await NovelUI.api(`/api/v1/projects/${projectId}/characters`);
+    const characters = Array.isArray(data) ? data : [];
+    characterSelect.innerHTML = [
+      '<option value="">キャラクターを選択</option>',
+      ...characters.map((item) => `<option value="${item.id}">${NovelUI.escape(item.name || "Unnamed")}</option>`),
+    ].join("");
+  }
+
+  async function loadRoom() {
+    if (!roomId) return;
+    const room = await NovelUI.api(`/api/v1/chat/rooms/${roomId}`);
+    fillRoom(room);
+  }
+
+  async function saveRoom(event) {
+    event.preventDefault();
+    const body = {
+      title: roomForm.title.value.trim(),
+      character_id: Number(roomForm.character_id.value || 0),
+      status: roomForm.status.value,
+      description: roomForm.description.value.trim(),
+      conversation_objective: roomForm.conversation_objective.value.trim(),
+    };
+    if (!body.conversation_objective) {
+      NovelUI.toast("キャラクター(AI)の目的を入力してください。", "warning");
+      openObjectiveEditor();
+      return;
+    }
+    const path = roomId
+      ? `/api/v1/chat/rooms/${roomId}`
+      : `/api/v1/projects/${projectId}/chat/rooms`;
+    const method = roomId ? "PATCH" : "POST";
+    const saved = await NovelUI.api(path, { method, body });
+    NovelUI.toast(roomId ? "ルームを更新しました。" : "ルームを作成しました。");
+    window.location.href = `/projects/${projectId}/live-chat/rooms`;
+    return saved;
+  }
+
+  roomForm.addEventListener("submit", (event) => {
+    saveRoom(event).catch((error) => NovelUI.toast(error.message || "ルーム保存に失敗しました。", "danger"));
+  });
+  objectiveEditButton?.addEventListener("click", openObjectiveEditor);
+  objectiveApplyButton?.addEventListener("click", applyObjectiveEditor);
+  objectiveMarkdownInput?.addEventListener("input", () => {
+    objectiveMarkdownPreview.innerHTML = markdownToHtml(objectiveMarkdownInput.value);
+  });
+
+  renderObjectivePreview();
+  loadCharacters()
+    .then(loadRoom)
+    .catch((error) => NovelUI.toast(error.message || "ルーム設定の読み込みに失敗しました。", "danger"));
+})();
+</script>
+{% endblock %}

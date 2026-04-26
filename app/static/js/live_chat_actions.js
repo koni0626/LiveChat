@@ -1,36 +1,4 @@
 (function () {
-  function bindSessionMetaForm(options) {
-    const {
-      sessionMetaForm,
-      sessionCharacterSelect,
-      api,
-      getSessionId,
-      getCurrentContext,
-      applyContext,
-      generateSessionImage,
-    } = options;
-
-    sessionMetaForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      try {
-        const currentSettings = (getCurrentContext()?.session?.settings_json) || {};
-        const updated = await api.updateSession(getSessionId(), {
-          title: sessionMetaForm.title.value,
-          player_name: sessionMetaForm.player_name.value,
-          settings_json: {
-            ...currentSettings,
-            conversation_objective: sessionMetaForm.conversation_objective.value,
-          },
-        });
-        applyContext(updated);
-        await generateSessionImage(false, "generate");
-        NovelUI.toast("セッション設定を保存し、画像を生成しました。");
-      } catch (error) {
-        NovelUI.toast(error.message || "セッション設定の保存に失敗しました。", "danger");
-      }
-    });
-  }
-
   function bindImageActions(options) {
     const {
       api,
@@ -157,7 +125,6 @@
   }
 
   window.LiveChatActions = {
-    bindSessionMetaForm,
     bindImageActions,
   };
 })();
