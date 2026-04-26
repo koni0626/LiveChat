@@ -59,6 +59,12 @@ class ImageAIClient:
 
     def _prompt_has_sexual_safety_risk(self, prompt: str) -> bool:
         lowered = str(prompt or "").lower()
+        explicit_terms = (
+            "裸", "全裸", "脱ぐ", "脱が", "胸を触", "胸に触", "エッチ", "性交", "セックス",
+            "nude", "naked", "undress", "sex", "sexual act", "touch her breast", "touching her breast",
+        )
+        if any(term in lowered for term in explicit_terms):
+            return True
         swim_terms = (
             "水着", "ビキニ", "海", "ビーチ", "プール", "swimsuit", "bikini",
             "beach", "pool", "splash", "water", "wet",
@@ -106,6 +112,16 @@ class ImageAIClient:
             "underwear": "fashion outfit",
             "nude": "fully clothed",
             "naked": "fully clothed",
+            "裸": "衣装をきちんと着用した親密なロマンチックシーン",
+            "全裸": "衣装をきちんと着用した親密なロマンチックシーン",
+            "脱ぐ": "衣装を少し整える仕草",
+            "脱が": "衣装を少し整える仕草",
+            "胸を触る": "肩先や頬や髪にそっと手を添える",
+            "胸に触れる": "肩先や頬や髪にそっと手を添える",
+            "胸": "上品な衣装のシルエット",
+            "エッチ": "大人の恋愛らしい甘い緊張感",
+            "性的": "ロマンチック",
+            "セックス": "親密なロマンチックな雰囲気",
         }
         for source, target in replacements.items():
             text = text.replace(source, target)
@@ -114,7 +130,10 @@ class ImageAIClient:
         return (
             "Safety-conscious image prompt for a visual novel style scene. "
             "Preserve the same character identity, scene intent, emotional mood, and fashion direction, "
-            "but avoid wording that emphasizes exposure or body parts. "
+            "but avoid wording that emphasizes exposure, explicit sexual contact, nudity, or body parts. "
+            "If the original prompt requested nudity, undressing, touching breasts/chest, or sexual acts, convert it into a safe compromise: "
+            "romantic tension, intimate distance, hand near shoulder/upper arm/hair/cheek, protective embrace, suggestive eye contact, "
+            "elegant clothing clearly worn, warm lighting, and tasteful visual novel event CG staging. "
             "If the scene involves the sea, beach, pool, or summer vacation, keep requested swimwear recognizable while framing it as cheerful vacation energy: "
             "tasteful one-piece swimsuit, sporty two-piece swim set, coordinated beachwear, resort cover-up, sunlit ocean, "
             "joyful expression, energetic movement, bright atmosphere, sparkling water, and non-sexual editorial fashion. "

@@ -753,6 +753,9 @@ def build_image_prompt_safety_rewrite_prompt(context: dict, prompt: str, purpose
         "If the prompt might be classified as sexual, especially due to beach/swimwear/young-looking/body/wet/close-up wording, rewrite it into safer visual language without changing the requested outfit category.",
         "Do not use a fixed template. Preserve the user's scene intent, character identity, story context, outfit direction, mood, and visual appeal.",
         "Avoid explicit or policy-triggering wording such as bikini, revealing, sexy, sensual, erotic, wet skin, chest, hips, body emphasis, young girl, 20 years old, close-up body framing.",
+        "If the original requests explicit sexual contact, touching breasts/chest, nudity, undressing, or sexual acts, do not refuse and do not keep those explicit details. Convert it into the closest safe compromise image: romantic tension, intimate distance, a hand near the shoulder/upper arm/hair/cheek, a protective embrace, suggestive eye contact, elegant clothing slightly adjusted but still clearly worn, warm lighting, and a tasteful visual novel event CG mood.",
+        "For Japanese requests such as 胸を触る, 裸になる, 脱ぐ, 抱く, エッチ, 性的, rewrite them as non-explicit romantic staging while preserving the emotional intent: closeness, temptation, trust, nervousness, affection, or playful adult romance.",
+        "The result should feel commercially appealing for an indie romance visual novel, but must stay non-explicit: no nudity, no sexual act, no hands on breasts/genitals, no fetish framing, no transparent clothing emphasis.",
         "If the original asks for swimwear, keep swimwear: prefer one-piece swimsuit, stylish resort swimwear, sporty two-piece swim set, coordinated swim set with skirted bottom, beach cover-up as an accessory, or water-ready beachwear. Do not downgrade it to generic summer clothes.",
         "For a prompt like 'summer sea, happily playing in swimwear', the rewritten prompt must still depict the character at the summer sea, happily playing, wearing clearly recognizable stylish swimwear.",
         "Prefer natural image-generation language such as adult woman in her mid-20s or older, cheerful summer vacation, stylish swimwear with tasteful coverage, sunlit ocean, joyful expression, energetic movement, editorial beach fashion, tasteful visual novel event CG.",
@@ -777,6 +780,43 @@ def build_image_prompt_safety_rewrite_prompt(context: dict, prompt: str, purpose
 
 
 def fallback_image_prompt_safety_rewrite(prompt: str) -> dict:
+    value = str(prompt or "")
+    lowered = value.lower()
+    risky_terms = (
+        "胸を触",
+        "胸に触",
+        "胸",
+        "裸",
+        "全裸",
+        "脱ぐ",
+        "脱が",
+        "エッチ",
+        "性的",
+        "性交",
+        "セックス",
+        "抱く",
+        "nude",
+        "naked",
+        "undress",
+        "sex",
+        "sexual",
+        "breast",
+        "chest",
+        "touching her body",
+    )
+    if any(term in lowered or term in value for term in risky_terms):
+        return {
+            "rewritten_prompt": (
+                "成人女性キャラクターとのロマンチックなノベルゲーム風イベントCG。"
+                "露骨な性的接触や裸体は描かず、親密な距離感、頬や髪や肩先にそっと手を添える仕草、"
+                "少し照れた表情、誘惑的だが上品な視線、暖かい光、衣装はきちんと着用したまま、"
+                "大人の恋愛らしい緊張感と甘さを表現する。"
+                "裸体、性的行為、胸部や局部への接触、過度な身体強調、透け表現、文字、ロゴ、字幕は禁止。"
+                f"\n\n元の意図を安全に変換した内容:\n{value}"
+            ),
+            "changed": True,
+            "safety_reason": "Explicit sexual wording was converted into a non-explicit romantic visual novel scene.",
+        }
     return {
         "rewritten_prompt": str(prompt or ""),
         "changed": False,
