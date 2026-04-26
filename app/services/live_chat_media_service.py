@@ -231,6 +231,7 @@ class LiveChatMediaService:
             purpose=str(payload.get("image_type") or "live_scene"),
         )
         prompt = safety_rewrite.get("rewritten_prompt") or prompt
+        prompt = prompt_support.apply_visual_style(prompt, context)
         prompt = prompt_support.forbid_text_in_image(prompt)
         visual_state = prompt_support.build_visual_state(context, state, prompt=prompt)
         state_json["visual_state"] = visual_state
@@ -492,6 +493,8 @@ class LiveChatMediaService:
         prompt = (
             "同一キャラクターの衣装参照画像を生成してください。\n"
             "参照画像と同じ人物として、顔、髪型、体型、雰囲気、キャラクター性を保つ。\n"
+            "参照画像の画風を最優先で維持し、線、塗り、色味、光、肌や髪の質感、レンダリング方向を変えない。\n"
+            "衣装を変えても、別作品の絵柄や別モデルの質感に寄せず、同じ作家・同じシリーズの衣装差分に見えるようにする。\n"
             "変更するのは主に衣装と小物のみ。\n"
             f"画像生成向けに整理した衣装指示:\n{rewritten_instruction}\n"
             f"安全な表現方針:\n{safety_note}\n"

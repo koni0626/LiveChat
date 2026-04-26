@@ -48,9 +48,15 @@ def collect_visual_style(context: dict, state_json: dict | None = None) -> str:
 def apply_visual_style(prompt: str, context: dict) -> str:
     value = str(prompt or "").strip()
     style = collect_visual_style(context)
+    reference_rule = (
+        "参照画像・基準画像がある場合は、その画像の画風を最優先で維持する。"
+        "線の太さ、塗り、色味、光の質感、肌や髪のレンダリング、顔立ち、キャラクターデザインの密度、"
+        "3D/2D/実写寄りなどの表現方向を変えない。"
+        "新しい場面や衣装を描く場合も、別作品の絵柄に寄せず、参照画像と同じ作家・同じシリーズの続きに見えるようにする。"
+    )
     if not style:
-        return value
-    return f"{value}\n\n画風・スタイル指定: {style}\nこの画風を優先し、以後のシーンでも線、塗り、色味、質感を一貫させる。"
+        return f"{value}\n\n{reference_rule}"
+    return f"{value}\n\n画風・スタイル指定: {style}\n{reference_rule}\nこの画風を優先し、以後のシーンでも線、塗り、色味、質感を一貫させる。"
 
 
 def forbid_text_in_image(prompt: str) -> str:
