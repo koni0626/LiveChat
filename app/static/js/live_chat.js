@@ -221,7 +221,7 @@
           auto_reply: true,
         });
         if (result?.new_letter) {
-          NovelUI.toast("\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304b\u3089\u304a\u624b\u7d19\u304c\u5c4a\u304d\u307e\u3057\u305f\u3002");
+          NovelUI.toast("\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304b\u3089\u30e1\u30fc\u30eb\u304c\u5c4a\u304d\u307e\u3057\u305f\u3002");
           NovelUI.refreshLetterBadge?.();
         }
         if (result?.input_intent?.intent !== "dialogue" && result?.generated_image) {

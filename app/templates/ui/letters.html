@@ -4,8 +4,8 @@
   <section class="panel-card letter-hero">
     <div>
       <div class="eyebrow">Mailbox</div>
-      <h2>キャラクターから届いたお手紙</h2>
-      <p>ライブチャットの余韻から、AIキャラクターが「今なら届けたい」と判断した手紙がここに届きます。</p>
+      <h2>キャラクターから届いたメール</h2>
+      <p>ライブチャットの余韻から、AIキャラクターが「今なら届けたい」と判断したメッセージがここに届きます。</p>
     </div>
     <button class="btn btn-outline-light btn-sm" type="button" id="letterRefreshButton">
       <i class="bi bi-arrow-clockwise"></i>
@@ -27,14 +27,14 @@
     <div class="modal-content letter-modal">
       <div class="modal-header">
         <div>
-          <div class="eyebrow">Letter</div>
-          <h5 class="modal-title" id="letterModalTitle">お手紙</h5>
+          <div class="eyebrow">Mail</div>
+          <h5 class="modal-title" id="letterModalTitle">メール</h5>
         </div>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
       </div>
       <div class="modal-body">
         <div class="letter-modal-image-wrap d-none" id="letterModalImageWrap">
-          <img alt="お手紙の添付画像" id="letterModalImage">
+          <img alt="メールの添付画像" id="letterModalImage">
         </div>
         <div class="letter-paper">
           <div class="letter-paper-from" id="letterModalFrom"></div>
@@ -63,6 +63,7 @@
   const countLabel = document.getElementById("letterCountLabel");
   const refreshButton = document.getElementById("letterRefreshButton");
   const modalElement = document.getElementById("letterModal");
+  document.body.appendChild(modalElement);
   const modal = new bootstrap.Modal(modalElement);
   const modalTitle = document.getElementById("letterModalTitle");
   const modalFrom = document.getElementById("letterModalFrom");
@@ -82,8 +83,8 @@
       <div class="empty-panel letter-empty">
         <i class="bi bi-envelope-open"></i>
         <div>
-          <strong>まだお手紙は届いていません。</strong>
-          <p>ライブチャットで印象的な会話が進むと、キャラクターからここに手紙が届きます。</p>
+          <strong>まだメールは届いていません。</strong>
+          <p>ライブチャットで印象的な会話が進むと、キャラクターからここにメールが届きます。</p>
         </div>
       </div>
     `;
@@ -110,7 +111,7 @@
               ${isUnread ? `<span class="letter-unread-badge">NEW</span>` : ""}
             </div>
             <h4>${NovelUI.escape(letter.subject || "あなたへ")}</h4>
-            <p>${NovelUI.escape(letter.summary || letter.trigger_reason || "キャラクターから手紙が届いています。")}</p>
+            <p>${NovelUI.escape(letter.summary || letter.trigger_reason || "キャラクターからメールが届いています。")}</p>
           </div>
         </article>
       `;
@@ -147,14 +148,14 @@
     const card = event.target.closest("[data-letter-id]");
     if (!card) return;
     openLetter(Number(card.dataset.letterId)).catch((error) => {
-      NovelUI.toast(error.message || "お手紙を開けませんでした。", "danger");
+      NovelUI.toast(error.message || "メールを開けませんでした。", "danger");
     });
   });
 
   archiveButton.addEventListener("click", async () => {
     if (!currentLetterId) return;
     await NovelUI.api(`/api/v1/letters/${currentLetterId}`, { method: "DELETE" });
-    NovelUI.toast("お手紙を削除しました。");
+    NovelUI.toast("メールを削除しました。");
     modal.hide();
     currentLetterId = null;
     await loadLetters();
@@ -163,12 +164,12 @@
 
   refreshButton.addEventListener("click", () => {
     loadLetters().catch((error) => {
-      NovelUI.toast(error.message || "お手紙の読み込みに失敗しました。", "danger");
+      NovelUI.toast(error.message || "メールの読み込みに失敗しました。", "danger");
     });
   });
 
   loadLetters().catch((error) => {
-    NovelUI.toast(error.message || "お手紙の読み込みに失敗しました。", "danger");
+    NovelUI.toast(error.message || "メールの読み込みに失敗しました。", "danger");
   });
 })();
 </script>

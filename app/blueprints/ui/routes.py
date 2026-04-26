@@ -26,7 +26,7 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
     user_id = session.get("user_id")
     current_user = User.query.get(user_id) if user_id else None
     global_nav_links = [
-        {"label": "\u304a\u624b\u7d19", "icon": "bi-envelope-heart", "href": url_for("ui.letters_page")},
+        {"label": "メール", "icon": "bi-envelope-heart", "href": url_for("ui.letters_page")},
         {"label": "ダッシュボード", "icon": "bi-house-door", "href": url_for("ui.dashboard_page")},
         {"label": "プロジェクト", "icon": "bi-collection", "href": url_for("ui.project_list_page")},
     ]
@@ -74,7 +74,7 @@ def project_list_page():
 
 @ui_bp.route("/letters", methods=["GET"])
 def letters_page():
-    return _render("ui/letters.html", title="お手紙", screen_id="letters")
+    return _render("ui/letters.html", title="メール", screen_id="letters")
 
 
 @ui_bp.route("/projects/new", methods=["GET"])

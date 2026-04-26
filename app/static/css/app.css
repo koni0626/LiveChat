@@ -3546,6 +3546,14 @@ body[data-screen="live-chat"] .live-chat-thumb-reference {
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.54);
 }
 
+#letterModal {
+  z-index: 1085;
+}
+
+body[data-screen="letters"] .modal-backdrop {
+  z-index: 1080;
+}
+
 .letter-modal .modal-header,
 .letter-modal .modal-footer {
   border-color: rgba(84, 177, 255, 0.16);

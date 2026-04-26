@@ -80,7 +80,7 @@
       try {
         const result = await api.uploadGift(getSessionId(), body);
         if (result?.data?.new_letter || result?.new_letter) {
-          NovelUI.toast("キャラクターからお手紙が届きました。");
+          NovelUI.toast("キャラクターからメールが届きました。");
           NovelUI.refreshLetterBadge?.();
         }
         clearSelectedGiftFile();
