@@ -175,6 +175,8 @@ class LetterService:
 
         decision = self._decide_should_send_letter(context, character, trigger_type)
         if not decision.get("should_send_letter"):
+            decision = self._fallback_letter_decision(context, character, trigger_type)
+        if not decision.get("should_send_letter"):
             return None
         content = self._generate_letter_content(context, character, decision)
         if not content.get("body"):
@@ -204,6 +206,23 @@ class LetterService:
             }
         )
         return self.serialize_letter(letter)
+
+    def _fallback_letter_decision(self, context: dict, character: dict, trigger_type: str):
+        messages = context.get("messages") or []
+        if len(messages) < 12:
+            return {"should_send_letter": False}
+        state_json = ((context.get("state") or {}).get("state_json") or {})
+        evaluation = state_json.get("conversation_evaluation") or {}
+        score = int(evaluation.get("score") or 0)
+        if trigger_type == "scene_transition" or score >= 45:
+            return {
+                "should_send_letter": True,
+                "reason": "会話が一定以上続き、関係の変化や余韻をメールで返せる節目になっているため。",
+                "emotional_hook": "会話の続きを期待させる余韻",
+                "image_direction": f"{character.get('name') or 'キャラクター'}が会話の余韻を抱えて、少し柔らかい表情でこちらを思い出している場面",
+                "fallback": True,
+            }
+        return {"should_send_letter": False}
 
     def _resolve_sender_character(self, context: dict):
         characters = context.get("characters") or []
@@ -239,7 +258,7 @@ class LetterService:
         prompt = f"""
 あなたは恋愛ノベル系ライブチャットの演出AIです。
 会話ログを読み、今このユーザーにキャラクターから「メール」を届けるべきか判定してください。
-頻繁に出しすぎず、プレイヤーが感情的に少し報われる、余韻がある、関係が進んだ、贈り物や印象的なやり取りがあった、という時だけ true にしてください。
+頻繁に出しすぎない前提で、プレイヤーが感情的に少し報われる、余韻がある、関係が進んだ、贈り物や印象的なやり取りがあった、また会いたくなる引きが作れる、という兆候があれば積極的に true にしてください。
 
 出力はJSONのみ:
 {{

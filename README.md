@@ -37,6 +37,7 @@ TEXT_AI_MODEL=gpt-5.4-mini
 IMAGE_AI_MODEL=gpt-image-2
 DATABASE_URL=sqlite:///instance/app.db
 STORAGE_ROOT=storage
+LETTER_COOLDOWN_MINUTES=360
 ```
 
 ```powershell
@@ -89,6 +90,12 @@ Gunicorn timeout is set through environment variables because image generation a
 GUNICORN_WORKERS=2
 GUNICORN_TIMEOUT=300
 GUNICORN_GRACEFUL_TIMEOUT=30
+```
+
+For local testing, you can shorten the in-app letter cooldown in `.env`:
+
+```text
+LETTER_COOLDOWN_MINUTES=1
 ```
 
 ## Flask Migration

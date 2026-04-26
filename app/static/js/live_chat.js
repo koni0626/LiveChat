@@ -174,19 +174,23 @@
           throw new Error("\u8d08\u308a\u7269\u753b\u50cf\u306e\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002");
         }
       } else {
-        shell.setImageLoading(true, "auto");
         const result = await LiveChatApi.postMessage(sessionId, {
           message_text: rawMessage || "\u8a71\u3092\u9032\u3081\u3066",
           auto_reply: true,
+          size: imageForm?.size?.value || "1536x1024",
+          quality: imageForm?.quality?.value || "low",
+          skip_auto_image: true,
         });
         if (result?.new_letter) {
           NovelUI.toast("\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304b\u3089\u30e1\u30fc\u30eb\u304c\u5c4a\u304d\u307e\u3057\u305f\u3002");
           NovelUI.refreshLetterBadge?.();
         }
-        if (result?.input_intent?.intent !== "dialogue" && result?.generated_image) {
+        await loadContext();
+        if (result?.auto_image_candidate) {
+          shell.setReplyLoading(false, currentContext);
+          await generateSessionImage(false, "auto", { image_type: "auto_scene" });
           NovelUI.toast("\u5834\u9762\u6307\u793a\u3092\u53cd\u6620\u3057\u3066\u753b\u50cf\u3092\u751f\u6210\u3057\u307e\u3057\u305f\u3002");
         }
-        await loadContext();
       }
       composeForm.message_text.value = "";
       NovelUI.toast("\u30e1\u30c3\u30bb\u30fc\u30b8\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f\u3002");
@@ -194,7 +198,6 @@
       NovelUI.toast(error.message || "\u30e1\u30c3\u30bb\u30fc\u30b8\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
     } finally {
       shell.setReplyLoading(false, currentContext);
-      shell.setImageLoading(false, "auto");
     }
   });
 

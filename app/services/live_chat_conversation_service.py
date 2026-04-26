@@ -205,6 +205,81 @@ class LiveChatConversationService:
             },
         )
 
+    def _state_json_from_context(self, context: dict | None) -> dict:
+        state = (context or {}).get("state") or {}
+        state_json = state.get("state_json") or {}
+        return state_json if isinstance(state_json, dict) else {}
+
+    def _scene_value_changed(self, before: dict, after: dict, key: str) -> bool:
+        before_value = str(before.get(key) or "").strip()
+        after_value = str(after.get(key) or "").strip()
+        return bool(after_value and after_value != before_value)
+
+    def _recent_character_transition_offer_exists(self, context: dict) -> bool:
+        transition_keywords = (
+            "行こう",
+            "向かおう",
+            "連れて",
+            "見せて",
+            "見に行",
+            "歩こう",
+            "出よう",
+            "移動",
+            "案内",
+            "海",
+            "山",
+            "店",
+            "外",
+            "部屋",
+        )
+        for message in reversed((context.get("messages") or [])[-4:]):
+            if message.get("sender_type") != "character":
+                continue
+            text = str(message.get("message_text") or "")
+            if any(keyword in text for keyword in transition_keywords):
+                return True
+        return False
+
+    def _is_transition_acceptance(self, user_message_text: str) -> bool:
+        text = str(user_message_text or "").strip().lower()
+        if not text:
+            return False
+        positive_keywords = (
+            "はい",
+            "うん",
+            "いいよ",
+            "お願い",
+            "おねがい",
+            "分かった",
+            "わかった",
+            "行こう",
+            "行く",
+            "連れて",
+            "見せて",
+            "進めて",
+            "ok",
+            "okay",
+            "yes",
+            "sure",
+        )
+        return any(keyword in text for keyword in positive_keywords)
+
+    def _should_auto_generate_scene_image(self, before_context: dict, after_context: dict, user_message_text: str) -> bool:
+        if not self._recent_character_transition_offer_exists(before_context):
+            return False
+        if not self._is_transition_acceptance(user_message_text):
+            return False
+        before = self._state_json_from_context(before_context)
+        after = self._state_json_from_context(after_context)
+        progression = after.get("scene_progression") or {}
+        if progression.get("transition_occurred"):
+            return True
+        if self._scene_value_changed(before, after, "location"):
+            return True
+        if self._scene_value_changed(before, after, "background"):
+            return True
+        return False
+
     def _extract_state_payload(self, session, context: dict):
         state = self._session_state_service.extract_state(
             session=session,
@@ -297,7 +372,8 @@ class LiveChatConversationService:
             return self.post_directed_scene_message(session, session_id, user_message, input_intent)
 
         created = [self._serialize_message(user_message)]
-        context = self._context_provider(session_id)
+        context_before_progression = self._context_provider(session_id)
+        context = context_before_progression
         self.update_scene_progression(session_id, context, user_message.message_text)
         context = self._context_provider(session_id)
         self.update_conversation_director(session_id, context, user_message.message_text)
@@ -319,6 +395,31 @@ class LiveChatConversationService:
         updated_context = self._context_provider(session_id)
         self.update_line_visual_note(session_id, updated_context)
         updated_context = self._context_provider(session_id)
+        generated_image = None
+        image_generation_error = None
+        auto_image_candidate = (
+            self._media_service
+            and self._should_auto_generate_scene_image(
+                context_before_progression,
+                updated_context,
+                user_message.message_text,
+            )
+        )
+        skip_auto_image = str(payload.get("skip_auto_image") or "").lower() in {"1", "true", "yes", "on"}
+        if auto_image_candidate and not skip_auto_image:
+            try:
+                generated_image = self._media_service.generate_image(
+                    session_id,
+                    {
+                        "image_type": "auto_scene",
+                        "size": payload.get("size") or "1536x1024",
+                        "quality": payload.get("quality") or "low",
+                    },
+                )
+                updated_context = self._context_provider(session_id)
+            except Exception as exc:
+                image_generation_error = str(exc)
+                generated_image = None
         self.update_session_memory(session_id, updated_context)
         updated_context = self._context_provider(session_id)
         self.update_conversation_evaluation(session_id, updated_context)
@@ -337,6 +438,10 @@ class LiveChatConversationService:
             "messages": created,
             "state": state,
             "session": updated_context["session"],
+            "input_intent": input_intent,
+            "generated_image": generated_image,
+            "image_generation_error": image_generation_error,
+            "auto_image_candidate": bool(auto_image_candidate),
             "new_letter": new_letter,
         }
 
