@@ -237,15 +237,15 @@ class LetterService:
         room = context.get("room") or {}
         prompt = f"""
 あなたは恋愛ノベル系ライブチャットの演出AIです。
-会話ログを読み、今このユーザーにキャラクターから「お手紙」を届けるべきか判定してください。
+会話ログを読み、今このユーザーにキャラクターから「メール」を届けるべきか判定してください。
 頻繁に出しすぎず、プレイヤーが感情的に少し報われる、余韻がある、関係が進んだ、贈り物や印象的なやり取りがあった、という時だけ true にしてください。
 
 出力はJSONのみ:
 {{
   "should_send_letter": true/false,
   "reason": "短い日本語",
-  "emotional_hook": "手紙で刺すべき感情",
-  "image_direction": "手紙に添えるイベント画像の方向性"
+  "emotional_hook": "メールで刺すべき感情",
+  "image_direction": "メールに添えるイベント画像の方向性"
 }}
 
 キャラクター: {character.get("name")}
@@ -273,8 +273,8 @@ class LetterService:
         room = context.get("room") or {}
         player_name = session.get("player_name") or "あなた"
         prompt = f"""
-キャラクターからプレイヤーへ届く、短いお手紙を書いてください。
-メールではなく、少し特別なDM/手紙のような文体にしてください。
+キャラクターからプレイヤーへ届く、短いメールを書いてください。
+業務連絡のようなメールではなく、少し特別なDM/手紙のような文体にしてください。
 会話ログの内容を踏まえ、プレイヤーが「また会いに行きたい」と感じるようにします。
 ただし重すぎる告白にしないでください。キャラクターの口調・一人称・呼び方を優先してください。
 
@@ -296,7 +296,7 @@ class LetterService:
 セリフサンプル: {character.get("speech_sample") or ""}
 NGルール: {character.get("ng_rules") or ""}
 ルームの目的: {room.get("conversation_objective") or ""}
-手紙を出す理由: {decision.get("reason") or ""}
+メールを出す理由: {decision.get("reason") or ""}
 刺す感情: {decision.get("emotional_hook") or ""}
 
 会話ログ:
@@ -318,7 +318,7 @@ NGルール: {character.get("ng_rules") or ""}
         prompt = (
             "ノベルゲームのイベントCG。画像内には文字を一切入れない。セリフ、字幕、吹き出し、"
             "看板の読める文字、UI、ロゴ、透かし、擬音文字は入れない。"
-            "プレイヤー本人は画面に出さない。キャラクターが手紙を書いた後の余韻が伝わる、"
+            "プレイヤー本人は画面に出さない。キャラクターがメールを書いた後の余韻が伝わる、"
             "感情的で映える一枚。"
             f"キャラクター: {character.get('name')}。"
             f"外見: {character.get('appearance_summary') or ''}。"

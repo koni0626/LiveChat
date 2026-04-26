@@ -5,8 +5,6 @@ __all__ = [
     "projects",
     "worlds",
     "characters",
-    "ending_conditions",
-    "glossary",
     "assets",
     "jobs",
 ]
