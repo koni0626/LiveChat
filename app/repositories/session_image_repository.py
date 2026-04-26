@@ -78,6 +78,34 @@ class SessionImageRepository:
             .first()
         )
 
+    def delete_costume(self, session_id: int, session_image_id: int):
+        row = (
+            SessionImage.query.filter(
+                SessionImage.id == session_image_id,
+                SessionImage.session_id == session_id,
+                SessionImage.image_type.in_(self.COSTUME_TYPES),
+            ).first()
+        )
+        if not row:
+            return None
+        was_selected = bool(row.is_selected)
+        db.session.delete(row)
+        db.session.flush()
+        replacement = None
+        if was_selected:
+            replacement = (
+                SessionImage.query.filter(
+                    SessionImage.session_id == session_id,
+                    SessionImage.image_type.in_(self.COSTUME_TYPES),
+                )
+                .order_by(SessionImage.id.desc())
+                .first()
+            )
+            if replacement:
+                replacement.is_selected = 1
+        db.session.commit()
+        return {"deleted_id": session_image_id, "selected_id": replacement.id if replacement else None}
+
     def set_reference(self, session_id: int, session_image_id: int, is_reference: bool):
         row = (
             SessionImage.query.filter(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
 
 from flask import current_app
 
@@ -906,6 +907,83 @@ class LiveChatService:
             },
         )
 
+    def _update_scene_choices(self, session_id: int, context: dict, assistant_message):
+        if not assistant_message:
+            return None
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        choices_result = text_support.generate_scene_choices(
+            self._text_ai_client,
+            context,
+            assistant_message.speaker_name,
+            assistant_message.message_text,
+        )
+        if choices_result.get("should_show_choices") and choices_result.get("choices"):
+            state_json["scene_choices"] = {
+                "source_message_id": assistant_message.id,
+                "created_at": datetime.utcnow().isoformat(),
+                "choices": choices_result["choices"][:2],
+            }
+        else:
+            state_json.pop("scene_choices", None)
+        return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
+
+    def _clear_scene_choices(self, session_id: int):
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        state_json.pop("scene_choices", None)
+        return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
+
+    def _build_choice_image_prompt(self, context: dict, choice: dict) -> str:
+        state_json = (context.get("state") or {}).get("state_json") or {}
+        recent_lines = []
+        for message in (context.get("messages") or [])[-6:]:
+            speaker = message.get("speaker_name") or message.get("sender_type") or ""
+            text = message.get("message_text") or ""
+            if text:
+                recent_lines.append(f"{speaker}: {text}")
+        character_names = "、".join(character.get("name") or "" for character in context.get("characters") or [])
+        prompt = (
+            f"ユーザーが選択肢「{choice.get('label') or ''}」を選んだ。\n"
+            f"場面指示: {choice.get('scene_instruction') or choice.get('label') or ''}\n"
+            f"画像ヒント: {choice.get('image_prompt_hint') or ''}\n"
+            f"現在の場所: {state_json.get('location') or ''}\n"
+            f"現在の背景: {state_json.get('background') or ''}\n"
+            f"登場キャラクター: {character_names}\n"
+            "直近の会話:\n"
+            + "\n".join(recent_lines)
+            + "\nプレイヤー1人称視点。プレイヤーは画像に描かない。"
+            "キャラクターだけを魅力的に表示し、選択した場面に移動したことが一目で分かる背景にする。"
+            "選択中の衣装画像と同じ顔、髪型、体型、衣装を維持する。"
+            "ノベルゲームのイベントCGとしてドラマチックにする。"
+        )
+        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        return prompt_support.forbid_text_in_image(prompt)
+
+    def _build_costume_context_text(self, context: dict) -> str:
+        state_json = (context.get("state") or {}).get("state_json") or {}
+        displayed_image = state_json.get("displayed_image_observation") or {}
+        scene_progression = state_json.get("scene_progression") or {}
+        conversation_lines = []
+        for message in (context.get("messages") or [])[-10:]:
+            speaker = message.get("speaker_name") or message.get("sender_type") or ""
+            text = str(message.get("message_text") or "").strip()
+            if text:
+                conversation_lines.append(f"{speaker}: {text[:220]}")
+        parts = [
+            f"現在の場所: {state_json.get('location') or scene_progression.get('location') or ''}",
+            f"現在の背景: {state_json.get('background') or scene_progression.get('background') or ''}",
+            f"現在の場面要約: {state_json.get('focus_summary') or scene_progression.get('focus_summary') or ''}",
+            f"表示中画像の観測: {displayed_image.get('short_summary') or ''}",
+            "直近の会話:",
+            "\n".join(conversation_lines),
+        ]
+        return "\n".join(part for part in parts if str(part or "").strip())
+
+    def _normalize_costume_instruction(self, instruction: str) -> str:
+        return str(instruction or "").strip()
+
     def _apply_directed_scene(self, session_id: int, context: dict, user_message_text: str, intent: dict):
         state_row = self._session_state_service.get_state(session_id)
         state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
@@ -1026,6 +1104,7 @@ class LiveChatService:
         self._update_conversation_director(session_id, context, user_message.message_text)
         context = self.get_session_context(session_id)
         auto_reply = str(payload.get("auto_reply", "true")).lower() not in {"0", "false", "no", "off"}
+        assistant_message = None
         if auto_reply:
             reply = text_support.generate_reply(self._text_ai_client, context, user_message.message_text)
             assistant_message = self._chat_message_service.create_message(
@@ -1051,6 +1130,9 @@ class LiveChatService:
             characters=updated_context["characters"],
         )
         updated_context = self.get_session_context(session_id)
+        if assistant_message:
+            self._update_scene_choices(session_id, updated_context, assistant_message)
+            updated_context = self.get_session_context(session_id)
         new_letter = self._letter_service.try_generate_for_context(
             session,
             updated_context,
@@ -1092,8 +1174,18 @@ class LiveChatService:
         prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
         prompt = prompt_support.apply_visual_style(prompt, context)
         prompt = prompt_support.forbid_text_in_image(prompt)
+        safety_rewrite = text_support.rewrite_image_prompt_for_safety(
+            self._text_ai_client,
+            context,
+            prompt,
+            purpose=str(payload.get("image_type") or "live_scene"),
+        )
+        prompt = safety_rewrite.get("rewritten_prompt") or prompt
+        prompt = prompt_support.forbid_text_in_image(prompt)
         visual_state = prompt_support.build_visual_state(context, state, prompt=prompt)
         state_json["visual_state"] = visual_state
+        if safety_rewrite.get("changed"):
+            state_json["image_prompt_safety_rewrite"] = safety_rewrite
 
         active_characters = image_support.resolve_active_characters(context, state_json, conversation_prompt)
         reference_paths, reference_asset_ids = self._collect_session_reference_assets(session_id, active_characters, limit=1)
@@ -1223,6 +1315,104 @@ class LiveChatService:
                 )
         return self._serialize_session_image(session_image)
 
+    def execute_scene_choice(self, session_id: int, choice_id: str, payload: dict | None = None):
+        payload = dict(payload or {})
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return None
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        scene_choices = state_json.get("scene_choices") or {}
+        choices = scene_choices.get("choices") or []
+        choice = next((item for item in choices if str(item.get("id")) == str(choice_id)), None)
+        if not choice:
+            return None
+
+        context = self.get_session_context(session_id)
+        prompt = self._build_choice_image_prompt(context, choice)
+        scene_update = {
+            "scene_phase": "choice_transition",
+            "location": choice.get("label"),
+            "background": choice.get("image_prompt_hint"),
+            "focus_summary": choice.get("scene_instruction") or choice.get("label"),
+            "next_topic": choice.get("reply_hint") or "react to the selected scene",
+            "transition_occurred": True,
+            "character_reaction_hint": choice.get("reply_hint") or "",
+            "image_focus": prompt,
+            "selected_choice": choice,
+        }
+        state_json["input_intent"] = {
+            "intent": "visual_request",
+            "reason": "scene choice selected by user",
+            "should_generate_image": True,
+        }
+        state_json["scene_progression"] = scene_update
+        state_json["directed_scene"] = scene_update
+        state_json["visual_prompt_text"] = prompt
+        self._session_state_service.upsert_state(
+            session_id,
+            {
+                "state_json": state_json,
+                "narration_note": scene_update["focus_summary"],
+                "visual_prompt_text": prompt,
+            },
+        )
+
+        user_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "narration",
+                "speaker_name": "選択",
+                "message_text": choice.get("label") or "場面を選択",
+                "message_role": "choice",
+                "state_snapshot_json": {"scene_choice": choice},
+            },
+        )
+        generated_image = self.generate_image(
+            session_id,
+            {
+                "image_type": "directed_scene",
+                "prompt_text": prompt,
+                "use_existing_prompt": True,
+                "size": payload.get("size") or "1536x1024",
+                "quality": payload.get("quality") or "low",
+            },
+        )
+        self._clear_scene_choices(session_id)
+        updated_context = self.get_session_context(session_id)
+        reply = text_support.generate_narration_reaction(
+            self._text_ai_client,
+            updated_context,
+            choice.get("label") or "",
+            scene_update,
+        )
+        assistant_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "character",
+                "speaker_name": reply["speaker_name"],
+                "message_text": reply["message_text"],
+                "message_role": "assistant",
+                "state_snapshot_json": {
+                    "scene_choice": choice,
+                    "directed_scene": scene_update,
+                },
+            },
+        )
+        updated_context = self.get_session_context(session_id)
+        self._update_line_visual_note(session_id, updated_context)
+        updated_context = self.get_session_context(session_id)
+        self._update_session_memory(session_id, updated_context)
+        updated_context = self.get_session_context(session_id)
+        self._update_conversation_evaluation(session_id, updated_context)
+        updated_context = self.get_session_context(session_id)
+        return {
+            "selected_choice": choice,
+            "generated_image": generated_image,
+            "messages": [self._serialize_message(user_message), self._serialize_message(assistant_message)],
+            "context": updated_context,
+        }
+
     def list_costumes(self, session_id: int):
         self._ensure_initial_costume(session_id)
         return [self._serialize_session_image(item) for item in self._session_image_service.list_costumes(session_id)]
@@ -1234,12 +1424,50 @@ class LiveChatService:
         selected = self._session_image_service.select_session_image(session_image_id)
         return self._serialize_session_image(selected)
 
+    def register_uploaded_costume(self, session_id: int, asset_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return None
+        session_image = self._session_image_service.create_session_image(
+            session_id,
+            {
+                "asset_id": asset_id,
+                "image_type": "costume_reference",
+                "prompt_text": payload.get("prompt_text"),
+                "state_json": {
+                    "source": "costume_upload",
+                    "note": payload.get("note") or "",
+                },
+                "quality": "uploaded",
+                "size": "uploaded",
+                "is_selected": 0,
+            },
+        )
+        selected = self._session_image_service.select_session_image(session_image.id)
+        return self._serialize_session_image(selected)
+
+    def delete_costume(self, session_id: int, session_image_id: int):
+        row = self._session_image_service.get_session_image(session_image_id)
+        if not row or row.session_id != session_id or row.image_type != "costume_reference":
+            return None
+        result = self._session_image_service.delete_costume(session_id, session_image_id)
+        if not result:
+            return None
+        selected = self._session_image_service.get_selected_costume(session_id)
+        return {
+            "session_id": session_id,
+            "deleted_id": result.get("deleted_id"),
+            "selected_costume": self._serialize_session_image(selected),
+            "costumes": self.list_costumes(session_id),
+        }
+
     def generate_costume(self, session_id: int, payload: dict | None = None):
         payload = dict(payload or {})
         session = self._chat_session_service.get_session(session_id)
         if not session:
             return None
-        instruction = str(payload.get("prompt_text") or "").strip()
+        instruction = self._normalize_costume_instruction(payload.get("prompt_text") or "")
         if not instruction:
             raise ValueError("prompt_text is required")
         context = self.get_session_context(session_id)
@@ -1262,17 +1490,41 @@ class LiveChatService:
         if not reference_paths:
             raise ValueError("costume reference image is required")
         art_style = character.get("art_style") or ""
+        costume_context = self._build_costume_context_text(context)
+        rewrite = text_support.rewrite_costume_instruction(
+            self._text_ai_client,
+            context,
+            character,
+            instruction,
+            costume_context,
+        )
+        rewritten_instruction = rewrite.get("rewritten_instruction") or instruction
+        safety_note = rewrite.get("safety_note") or ""
+        negative_note = rewrite.get("negative_note") or ""
         prompt = (
-            "同一キャラクターの衣装参照画像を生成してください。"
-            "参照画像と同じ人物として、顔、髪型、体型、雰囲気、キャラクター性を保つ。"
-            "変更するのは主に衣装と小物のみ。"
-            f"衣装変更指示: {instruction}。"
-            f"キャラクター名: {character.get('name') or ''}。"
-            f"画風: {art_style}。"
-            "キャラクター単体、全身または膝上、シンプル背景、衣装が分かる構図。"
-            "ライブチャット用の参照画像なので、複雑な背景やイベントCG構図にしない。"
+            "同一キャラクターの衣装参照画像を生成してください。\n"
+            "参照画像と同じ人物として、顔、髪型、体型、雰囲気、キャラクター性を保つ。\n"
+            "変更するのは主に衣装と小物のみ。\n"
+            f"画像生成向けに整理した衣装指示:\n{rewritten_instruction}\n"
+            f"安全な表現方針:\n{safety_note}\n"
+            f"避ける表現:\n{negative_note}\n"
+            f"キャラクター名: {character.get('name') or ''}\n"
+            f"画風・スタイル指定: {art_style}\n"
+            f"会話と現在場面の文脈:\n{costume_context}\n"
+            "衣装は直近の会話や現在場面に自然に合うものにする。"
+            "ノベルゲームのキャラクター衣装差分として、華やかさ、かわいさ、大人っぽさ、適度な色気をファッション表現で出す。\n"
+            "例えば海やビーチに行く流れなら、作業着ではなく、場面に合う魅力的なビーチファッションやリゾート服として解釈する。\n"
+            "色気は衣装のシルエット、色、素材感、アクセサリー、表情、品のあるポーズで表現する。\n"
+            "裸体、性的行為、局部や胸部の過度な強調、透け表現の強調、幼く見える表現は禁止。\n"
+            "キャラクター単体、全身または膝上、シンプル背景、衣装が分かる構図。\n"
+            "ライブチャット用の参照画像なので、複雑な背景やイベントCG構図にはしない。\n"
         )
         prompt = prompt_support.forbid_text_in_image(prompt)
+        safety_rewrite = {
+            "rewritten_prompt": prompt,
+            "changed": False,
+            "safety_reason": "costume prompt already passed through costume-specific AI rewrite",
+        }
         result = self._image_ai_client.generate_image(
             prompt,
             size=payload.get("size") or "1024x1536",
@@ -1302,6 +1554,10 @@ class LiveChatService:
                     {
                         "source": "costume_room",
                         "instruction": instruction,
+                        "rewritten_instruction": rewritten_instruction,
+                        "safety_note": safety_note,
+                        "negative_note": negative_note,
+                        "image_prompt_safety_rewrite": safety_rewrite,
                         "reference_asset_ids": reference_asset_ids,
                         "revised_prompt": result.get("revised_prompt"),
                     }
@@ -1317,6 +1573,10 @@ class LiveChatService:
                 "state_json": {
                     "source": "costume_room",
                     "instruction": instruction,
+                    "rewritten_instruction": rewritten_instruction,
+                    "safety_note": safety_note,
+                    "negative_note": negative_note,
+                    "image_prompt_safety_rewrite": safety_rewrite,
                     "character_id": character.get("id"),
                     "reference_asset_ids": reference_asset_ids,
                 },

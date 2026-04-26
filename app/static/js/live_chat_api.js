@@ -21,10 +21,36 @@
     });
   }
 
+  async function uploadCostume(sessionId, formData) {
+    const response = await fetch(`/api/v1/chat/sessions/${sessionId}/costumes/upload`, {
+      method: "POST",
+      credentials: "same-origin",
+      body: formData,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.data?.message || payload?.message || `HTTP ${response.status}`);
+    }
+    return payload;
+  }
+
   async function selectCostume(sessionId, imageId) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/costumes/${imageId}/select`, {
       method: "POST",
       body: {},
+    });
+  }
+
+  async function deleteCostume(sessionId, imageId) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/costumes/${imageId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async function executeSceneChoice(sessionId, choiceId, body = {}) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/choices/${encodeURIComponent(choiceId)}/execute`, {
+      method: "POST",
+      body,
     });
   }
 
@@ -93,12 +119,15 @@
     loadContext,
     generateSessionImage,
     generateCostume,
+    uploadCostume,
     postMessage,
     extractState,
     uploadImage,
     uploadGift,
     selectImage,
     selectCostume,
+    deleteCostume,
+    executeSceneChoice,
     setReferenceImage,
     deleteMessage,
   };

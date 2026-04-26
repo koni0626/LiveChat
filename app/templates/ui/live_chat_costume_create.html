@@ -53,6 +53,27 @@
         </div>
         <button class="btn btn-sunrise" type="submit" id="costumeCreateSubmitButton">画像を生成</button>
       </form>
+
+      <hr class="costume-create-divider">
+
+      <form class="vstack gap-3" id="costumeUploadForm">
+        <div>
+          <label class="form-label" for="costumeUploadInput">衣装画像をアップロード</label>
+          <label class="costume-upload-drop" id="costumeUploadDrop" for="costumeUploadInput">
+            <input class="visually-hidden" id="costumeUploadInput" name="file" type="file" accept="image/*">
+            <span class="costume-upload-icon">+</span>
+            <span>
+              <strong>画像を選択、またはドラッグ&ドロップ</strong>
+              <small>アップロードした画像は衣装候補として登録され、すぐ基準画像になります。</small>
+            </span>
+          </label>
+          <div class="costume-upload-preview is-hidden" id="costumeUploadPreview">
+            <img id="costumeUploadPreviewImage" alt="upload preview">
+            <span id="costumeUploadPreviewName"></span>
+          </div>
+        </div>
+        <button class="btn btn-outline-light" type="submit" id="costumeUploadSubmitButton">衣装として登録</button>
+      </form>
     </section>
 
     <section class="panel-card costume-create-preview-card">

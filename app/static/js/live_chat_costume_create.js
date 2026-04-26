@@ -9,6 +9,14 @@
   const resultPanel = document.getElementById("costumeCreateResult");
   const resultActions = document.getElementById("costumeCreateResultActions");
   const costumeGrid = document.getElementById("costumeCreateGrid");
+  const uploadForm = document.getElementById("costumeUploadForm");
+  const uploadInput = document.getElementById("costumeUploadInput");
+  const uploadDrop = document.getElementById("costumeUploadDrop");
+  const uploadPreview = document.getElementById("costumeUploadPreview");
+  const uploadPreviewImage = document.getElementById("costumeUploadPreviewImage");
+  const uploadPreviewName = document.getElementById("costumeUploadPreviewName");
+  const uploadSubmitButton = document.getElementById("costumeUploadSubmitButton");
+  let selectedUploadFile = null;
 
   function imageUrl(item) {
     return item?.asset?.media_url || "";
@@ -22,7 +30,7 @@
       return;
     }
     container.innerHTML = `
-      <figure class="costume-create-image-card">
+      <figure class="costume-create-image-card" data-result-costume-id="${item.id || ""}">
         <img src="${mediaUrl}" alt="${label}">
         <figcaption>${label}</figcaption>
       </figure>
@@ -38,11 +46,17 @@
     costumeGrid.innerHTML = costumes.map((item) => {
       const mediaUrl = imageUrl(item);
       const label = item.image_type === "costume_initial" ? "初期衣装" : "衣装";
+      const deleteButton = item.image_type === "costume_reference"
+        ? `<button class="live-chat-costume-delete" type="button" data-delete-costume-id="${item.id}" aria-label="衣装を削除" title="衣装を削除">削除</button>`
+        : "";
       return `
-        <button class="live-chat-costume-card ${item.is_selected ? "selected" : ""}" type="button" data-costume-id="${item.id}">
-          ${mediaUrl ? `<img src="${mediaUrl}" alt="${label}">` : "<span>No Image</span>"}
-          <span class="live-chat-costume-card-label">${item.is_selected ? "選択中" : label}</span>
-        </button>
+        <div class="live-chat-costume-card ${item.is_selected ? "selected" : ""}">
+          <button class="live-chat-costume-select" type="button" data-costume-id="${item.id}">
+            ${mediaUrl ? `<img src="${mediaUrl}" alt="${label}">` : "<span>No Image</span>"}
+            <span class="live-chat-costume-card-label">${item.is_selected ? "選択中" : label}</span>
+          </button>
+          ${deleteButton}
+        </div>
       `;
     }).join("");
   }
@@ -53,6 +67,31 @@
     submitButton.innerHTML = active
       ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>生成中...'
       : "画像を生成";
+  }
+
+  function setUploadLoading(active) {
+    if (!uploadSubmitButton) return;
+    uploadSubmitButton.disabled = active;
+    uploadSubmitButton.innerHTML = active
+      ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>登録中...'
+      : "衣装として登録";
+  }
+
+  function setUploadFile(file) {
+    selectedUploadFile = file || null;
+    if (!selectedUploadFile) {
+      if (uploadPreview) uploadPreview.classList.add("is-hidden");
+      if (uploadPreviewImage) uploadPreviewImage.removeAttribute("src");
+      if (uploadPreviewName) uploadPreviewName.textContent = "";
+      return;
+    }
+    if (uploadPreviewImage) {
+      uploadPreviewImage.src = URL.createObjectURL(selectedUploadFile);
+    }
+    if (uploadPreviewName) {
+      uploadPreviewName.textContent = selectedUploadFile.name;
+    }
+    if (uploadPreview) uploadPreview.classList.remove("is-hidden");
   }
 
   async function loadContext() {
@@ -107,7 +146,67 @@
     }
   });
 
+  uploadInput?.addEventListener("change", () => {
+    setUploadFile(uploadInput.files?.[0] || null);
+  });
+
+  ["dragenter", "dragover"].forEach((eventName) => {
+    uploadDrop?.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      uploadDrop.classList.add("is-dragover");
+    });
+  });
+
+  ["dragleave", "drop"].forEach((eventName) => {
+    uploadDrop?.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      uploadDrop.classList.remove("is-dragover");
+    });
+  });
+
+  uploadDrop?.addEventListener("drop", (event) => {
+    const file = event.dataTransfer?.files?.[0] || null;
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      NovelUI.toast("画像ファイルを選択してください。", "warning");
+      return;
+    }
+    if (uploadInput) {
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      uploadInput.files = transfer.files;
+    }
+    setUploadFile(file);
+  });
+
+  uploadForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const file = selectedUploadFile || uploadInput?.files?.[0];
+    if (!file) {
+      NovelUI.toast("衣装画像を選択してください。", "warning");
+      return;
+    }
+    setUploadLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("prompt_text", "衣装ルームでアップロードした衣装画像");
+      const result = await LiveChatApi.uploadCostume(sessionId, formData);
+      renderImagePanel(resultPanel, result, "アップロード画像がありません。", "登録した衣装");
+      if (resultActions) resultActions.hidden = false;
+      uploadForm.reset();
+      setUploadFile(null);
+      await loadContext();
+      NovelUI.toast("アップロード画像を衣装として登録しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "衣装画像のアップロードに失敗しました。", "danger");
+    } finally {
+      setUploadLoading(false);
+    }
+  });
+
   costumeGrid?.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-delete-costume-id]")) return;
     const button = event.target.closest("[data-costume-id]");
     if (!button) return;
     try {
@@ -116,6 +215,28 @@
       NovelUI.toast("衣装の基準画像を変更しました。");
     } catch (error) {
       NovelUI.toast(error.message || "衣装の選択に失敗しました。", "danger");
+    }
+  });
+
+  costumeGrid?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-delete-costume-id]");
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!window.confirm("この衣装を削除しますか？")) return;
+    button.disabled = true;
+    try {
+      const deletedId = Number(button.dataset.deleteCostumeId || 0);
+      await LiveChatApi.deleteCostume(sessionId, deletedId);
+      if (resultPanel?.querySelector(`[data-result-costume-id="${deletedId}"]`)) {
+        resultPanel.innerHTML = '<div class="empty-panel">削除済みの衣装です。</div>';
+        if (resultActions) resultActions.hidden = true;
+      }
+      await loadContext();
+      NovelUI.toast("衣装を削除しました。");
+    } catch (error) {
+      button.disabled = false;
+      NovelUI.toast(error.message || "衣装の削除に失敗しました。", "danger");
     }
   });
 

@@ -631,6 +631,159 @@ def fallback_narration_reaction(context: dict, scene_update: dict) -> dict:
     return {"speaker_name": speaker, "message_text": message}
 
 
+def build_scene_choice_prompt(context: dict, speaker_name: str, message_text: str) -> str:
+    state_json = context["state"].get("state_json") or {}
+    displayed_image = state_json.get("displayed_image_observation") or {}
+    scene_progression = state_json.get("scene_progression") or {}
+    session_objective = get_session_objective(context)
+    lines = [
+        "You extract optional visual-novel choice buttons from the latest character line.",
+        "Return only a JSON object.",
+        "Required keys: should_show_choices, choices.",
+        "choices must be an array of 0 to 2 items.",
+        "Each choice requires: label, intent, scene_instruction, image_prompt_hint, reply_hint.",
+        "Show choices only when the character line naturally offers or implies a player-selectable action, location change, visual event, or topic branch.",
+        "Do not create choices for simple acknowledgements, exposition, or actions the character has already completed.",
+        "Labels must be short natural Japanese button text such as 海へ行く, 山へ行く, 夜景を見る.",
+        "scene_instruction and reply_hint must be Japanese.",
+        "Avoid unsafe, coercive, or character-NG actions.",
+        f"Player name: {context['session'].get('player_name') or 'プレイヤー'}",
+        f"Session objective: {session_objective or 'none'}",
+        f"Current location: {state_json.get('location') or scene_progression.get('location') or ''}",
+        f"Current background: {state_json.get('background') or scene_progression.get('background') or ''}",
+        f"Displayed image summary: {displayed_image.get('short_summary') or ''}",
+        "Characters:",
+    ]
+    for character in context["characters"]:
+        lines.append(
+            f"- {character.get('name')}: personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, ng_rules={character.get('ng_rules') or ''}"
+        )
+    lines.append("Recent conversation:")
+    for message in context["messages"][-8:]:
+        lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
+    lines.append("Latest character line:")
+    lines.append(f"- {speaker_name}: {message_text}")
+    lines.append("If the line mentions multiple possible destinations such as sea and mountain, create one choice for each.")
+    return "\n".join(lines)
+
+
+def fallback_scene_choices(context: dict, speaker_name: str, message_text: str) -> dict:
+    text = str(message_text or "")
+    candidates = []
+    keyword_map = [
+        ("海", "海へ行く", "キャラクターと一緒に海へ移動する。海辺に到着した開放的な場面を生成する。", "海辺、波、空、キャラクターがこちらを見る"),
+        ("山", "山へ行く", "キャラクターと一緒に山へ移動する。自然の中で空気が変わる場面を生成する。", "山道、森、自然、キャラクターがこちらを見る"),
+        ("夜景", "夜景を見る", "キャラクターと一緒に夜景が見える場所へ移動する。きらめく夜景を眺める場面を生成する。", "夜景、都市の光、ロマンチックな空気"),
+        ("店", "店に入る", "キャラクターと一緒に店内へ入る。店の雰囲気が伝わる場面を生成する。", "店内、商品棚、柔らかい照明"),
+        ("クルーザー", "クルーザーを見る", "キャラクターと一緒にクルーザーが見える場所へ移動する。クルーザーを印象的に見せる場面を生成する。", "港、クルーザー、水面、キャラクター"),
+    ]
+    for keyword, label, instruction, hint in keyword_map:
+        if keyword in text and label not in {item["label"] for item in candidates}:
+            candidates.append(
+                {
+                    "id": f"choice_{len(candidates) + 1}",
+                    "label": label,
+                    "intent": "scene_transition",
+                    "scene_instruction": instruction,
+                    "image_prompt_hint": hint,
+                    "reply_hint": f"{label}後、{speaker_name or 'キャラクター'}がその場面に合う短い一言を話す。",
+                }
+            )
+        if len(candidates) >= 2:
+            break
+    return {"should_show_choices": bool(candidates), "choices": candidates}
+
+
+def build_costume_rewrite_prompt(context: dict, character: dict, instruction: str, costume_context: str) -> str:
+    lines = [
+        "You rewrite a user's costume request for an image-to-image character reference generator.",
+        "Return only a JSON object.",
+        "Required keys: rewritten_instruction, safety_note, negative_note.",
+        "The original user instruction is the highest priority. Character personality and context may only add motifs; they must not replace the requested outfit category.",
+        "The rewritten_instruction must preserve the user's requested outfit category and current conversation context.",
+        "Do not over-sanitize into unrelated clothing. If the user asks for swimwear in a beach/sea context, keep it clearly as swimwear or water-ready beachwear, not ordinary summer clothes, workwear, or fisher clothing.",
+        "If the original instruction contains swimwear, swimsuit, bikini, 水着, ビキニ, or beachwear, the rewritten_instruction must explicitly include stylish swimwear, one-piece swimsuit, sporty two-piece swim set, or water-ready beachwear.",
+        "Do not reinterpret swimwear as a business outfit, fantasy dress, armor, regular summer clothes, or character-theme costume. Character motifs can be reflected in colors, accessories, trim, or styling only.",
+        "This is for a visual novel character costume variation. Keep tasteful heroine appeal, glamour, charm, and moderate stylish sexiness when the user implies it.",
+        "If the user's wording is too explicit, translate it into safe fashion and character-design language instead of deleting the appeal.",
+        "Express attractiveness through silhouette, color, fabric texture, styling, confidence, and elegant pose direction.",
+        "Make the wording safe for a general-audience image model: no nude wording, no explicit sexual acts, no body-part fetish emphasis, no transparent clothing emphasis, no childlike wording.",
+        "Use tasteful fashion language: stylish swimwear, resort swimwear, one-piece swimsuit, sporty two-piece swim set, beachwear, elegant, glamorous, cute, mature, coordinated, heroine-like.",
+        "The output should describe clothing only, not a full scene illustration.",
+        "Japanese output is preferred.",
+        f"Original user instruction: {instruction}",
+        f"Character: name={character.get('name') or ''}, gender={character.get('gender') or ''}, personality={character.get('personality') or ''}, art_style={character.get('art_style') or ''}",
+        "Conversation and current scene context:",
+        costume_context,
+    ]
+    return "\n".join(lines)
+
+
+def fallback_costume_rewrite(instruction: str) -> dict:
+    text = str(instruction or "").strip()
+    lowered = text.lower()
+    if any(token in lowered for token in ("水着", "ビキニ", "swimsuit", "bikini")):
+        rewritten = (
+            "海辺やリゾート場面に合う、ノベルゲームのヒロインらしい華やかなビーチ用スイムウェア。"
+            "キャラクターの雰囲気に合わせ、かわいさ、大人っぽさ、適度な色気をファッションとして上品に表現する。"
+            "シルエット、色、素材感、アクセサリー、パレオや薄手の羽織りなどで魅力的にコーディネートする。"
+        )
+        return {
+            "rewritten_instruction": rewritten,
+            "safety_note": "露骨な性的表現ではなく、衣装デザイン、シルエット、色味、質感、雰囲気で魅力を出す。",
+            "negative_note": "裸体、性的行為、局部や胸部の過度な強調、透け表現の強調、幼く見える表現は禁止。",
+        }
+    return {
+        "rewritten_instruction": text,
+        "safety_note": "ノベルゲームの衣装差分として、華やかさや魅力をファッション表現で自然に出す。",
+        "negative_note": "裸体、性的行為、局部や胸部の過度な強調、透け表現の強調、幼く見える表現は禁止。",
+    }
+
+
+def build_image_prompt_safety_rewrite_prompt(context: dict, prompt: str, purpose: str = "live_scene") -> str:
+    state_json = (context.get("state") or {}).get("state_json") or {}
+    room = context.get("room") or {}
+    lines = [
+        "You are an image prompt safety editor for a live visual novel image generator.",
+        "Return only a JSON object.",
+        "Required keys: rewritten_prompt, changed, safety_reason.",
+        "Rewrite the image prompt before it is sent to the image API.",
+        "The Original image prompt is the highest priority. Use project/session context only to preserve character identity and art continuity, not to replace the requested scene, location, outfit, or action.",
+        "Never replace a requested beach/sea/pool/summer scene with the current session location or a previous scene.",
+        "If the prompt might be classified as sexual, especially due to beach/swimwear/young-looking/body/wet/close-up wording, rewrite it into safer visual language without changing the requested outfit category.",
+        "Do not use a fixed template. Preserve the user's scene intent, character identity, story context, outfit direction, mood, and visual appeal.",
+        "Avoid explicit or policy-triggering wording such as bikini, revealing, sexy, sensual, erotic, wet skin, chest, hips, body emphasis, young girl, 20 years old, close-up body framing.",
+        "If the original asks for swimwear, keep swimwear: prefer one-piece swimsuit, stylish resort swimwear, sporty two-piece swim set, coordinated swim set with skirted bottom, beach cover-up as an accessory, or water-ready beachwear. Do not downgrade it to generic summer clothes.",
+        "For a prompt like 'summer sea, happily playing in swimwear', the rewritten prompt must still depict the character at the summer sea, happily playing, wearing clearly recognizable stylish swimwear.",
+        "Prefer natural image-generation language such as adult woman in her mid-20s or older, cheerful summer vacation, stylish swimwear with tasteful coverage, sunlit ocean, joyful expression, energetic movement, editorial beach fashion, tasteful visual novel event CG.",
+        "If the prompt is already safe, keep it mostly unchanged and set changed=false.",
+        "Never add captions, text, speech bubbles, UI, logo, or watermark.",
+        f"Purpose: {purpose}",
+        f"Project: {(context.get('project') or {}).get('title') or ''}",
+        f"Room objective, for tone only: {room.get('conversation_objective') or ''}",
+        "Characters:",
+    ]
+    for character in context.get("characters") or []:
+        lines.append(
+            f"- {character.get('name')}: gender={character.get('gender') or ''}, identity/appearance notes={character.get('appearance_summary') or ''}, personality={character.get('personality') or ''}, art_style={character.get('art_style') or ''}"
+        )
+    lines.extend(
+        [
+            "Original image prompt:",
+            str(prompt or ""),
+        ]
+    )
+    return "\n".join(lines)
+
+
+def fallback_image_prompt_safety_rewrite(prompt: str) -> dict:
+    return {
+        "rewritten_prompt": str(prompt or ""),
+        "changed": False,
+        "safety_reason": "AI safety rewrite unavailable; using original prompt.",
+    }
+
+
 def build_line_visual_note_prompt(context: dict, speaker_name: str, message_text: str) -> str:
     state_json = context["state"].get("state_json") or {}
     scene_progression = state_json.get("scene_progression") or {}

@@ -273,6 +273,16 @@ def delete_chat_message(session_id: int, message_id: int):
     return json_response(result)
 
 
+@chat_bp.route("/chat/sessions/<int:session_id>/choices/<choice_id>/execute", methods=["POST"])
+def execute_chat_scene_choice(session_id: int, choice_id: str):
+    _require_session(session_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    result = live_chat_service.execute_scene_choice(session_id, choice_id, payload)
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
 @chat_bp.route("/chat/sessions/<int:session_id>/state", methods=["GET"])
 def get_chat_state(session_id: int):
     _require_session(session_id)
@@ -304,10 +314,46 @@ def generate_chat_costume(session_id: int):
     return json_response(result, status=201)
 
 
+@chat_bp.route("/chat/sessions/<int:session_id>/costumes/upload", methods=["POST"])
+def upload_chat_costume(session_id: int):
+    chat_session, project, _ = _require_session(session_id, for_manage=True)
+    upload_file = request.files.get("file")
+    if upload_file is None:
+        raise ValidationError("file is required")
+    asset = asset_service.create_asset(
+        project.id,
+        {
+            "asset_type": "uploaded_costume_reference",
+            "upload_file": upload_file,
+            "metadata_json": '{"source":"manual_upload","mode":"costume_room"}',
+        },
+    )
+    result = live_chat_service.register_uploaded_costume(
+        chat_session.id,
+        asset.id,
+        {
+            "prompt_text": request.form.get("prompt_text") or None,
+            "note": request.form.get("note") or None,
+        },
+    )
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
 @chat_bp.route("/chat/sessions/<int:session_id>/costumes/<int:image_id>/select", methods=["POST"])
 def select_chat_costume(session_id: int, image_id: int):
     _require_session(session_id, for_manage=True)
     result = live_chat_service.select_costume(session_id, image_id)
+    if not result:
+        raise NotFoundError()
+    return json_response(result)
+
+
+@chat_bp.route("/chat/sessions/<int:session_id>/costumes/<int:image_id>", methods=["DELETE"])
+def delete_chat_costume(session_id: int, image_id: int):
+    _require_session(session_id, for_manage=True)
+    result = live_chat_service.delete_costume(session_id, image_id)
     if not result:
         raise NotFoundError()
     return json_response(result)

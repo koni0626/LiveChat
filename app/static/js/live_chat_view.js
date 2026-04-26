@@ -207,18 +207,42 @@
     const pages = novelPageState.pages || [];
     const pageIndex = Math.max(0, Math.min(novelPageState.pageIndex || 0, Math.max(0, pages.length - 1)));
     const nextState = { ...novelPageState, pageIndex };
-    novelTextElement.textContent = pages[pageIndex] || "";
+    const choices = Array.isArray(nextState.choices) ? nextState.choices : [];
+    const isChoicePage = choices.length > 0 && pageIndex === pages.length - 1 && nextState.choicePage === true;
+    const showChoices = choices.length > 0 && pageIndex === pages.length - 1;
+    novelTextElement.textContent = isChoicePage ? "" : (pages[pageIndex] || "");
+    if (novelElements.novelChoiceList) {
+      novelElements.novelChoiceList.hidden = !showChoices;
+      novelElements.novelChoiceList.innerHTML = showChoices
+        ? `
+          <div class="live-chat-novel-choice-copy">次の行動を選んでください</div>
+          <div class="live-chat-novel-choice-buttons">
+            ${choices.map((choice) => `
+              <button class="live-chat-choice-button live-chat-novel-choice-button" type="button" data-scene-choice-id="${NovelUI.escape(choice.id)}">
+                ${NovelUI.escape(choice.label)}
+              </button>
+            `).join("")}
+          </div>
+        `
+        : "";
+    }
+    const showPager = pages.length > 1;
     if (cueElement) {
-      cueElement.hidden = pages.length <= 1;
-      cueElement.textContent = pages.length > 1
+      cueElement.hidden = !showPager;
+      cueElement.textContent = showPager
         ? `${pageIndex + 1} / ${pages.length}`
         : "";
     }
+    if (novelElements.novelPager) {
+      novelElements.novelPager.hidden = !showPager;
+    }
     if (novelElements.novelPrevButton) {
-      novelElements.novelPrevButton.disabled = pages.length <= 1 || pageIndex <= 0;
+      novelElements.novelPrevButton.disabled = !showPager || pageIndex <= 0;
+      novelElements.novelPrevButton.hidden = !showPager;
     }
     if (novelElements.novelNextButton) {
-      novelElements.novelNextButton.disabled = pages.length <= 1 || pageIndex >= pages.length - 1;
+      novelElements.novelNextButton.disabled = !showPager || pageIndex >= pages.length - 1;
+      novelElements.novelNextButton.hidden = !showPager;
     }
     return nextState;
   }
@@ -231,7 +255,7 @@
       novelElements,
     } = options;
     const item = getLatestDisplayMessage(messages);
-    const { novelSpeaker, novelText, novelContinue, novelBox, novelPrevButton, novelNextButton } = novelElements;
+    const { novelSpeaker, novelText, novelChoiceList, novelContinue, novelBox, novelPrevButton, novelNextButton } = novelElements;
     if (!novelSpeaker || !novelText) {
       return novelPageState;
     }
@@ -246,16 +270,30 @@
         </span>
       `;
       if (novelContinue) novelContinue.hidden = true;
+      if (novelElements.novelPager) novelElements.novelPager.hidden = true;
+      if (novelChoiceList) {
+        novelChoiceList.hidden = true;
+        novelChoiceList.innerHTML = "";
+      }
       if (novelPrevButton) novelPrevButton.disabled = true;
+      if (novelPrevButton) novelPrevButton.hidden = true;
       if (novelNextButton) novelNextButton.disabled = true;
+      if (novelNextButton) novelNextButton.hidden = true;
       return { messageId: null, pages: [], pageIndex: 0 };
     }
     if (!item) {
       novelSpeaker.textContent = "";
       novelText.textContent = "\u307e\u3060\u30bb\u30ea\u30d5\u304c\u3042\u308a\u307e\u305b\u3093\u3002";
       if (novelContinue) novelContinue.hidden = true;
+      if (novelElements.novelPager) novelElements.novelPager.hidden = true;
+      if (novelChoiceList) {
+        novelChoiceList.hidden = true;
+        novelChoiceList.innerHTML = "";
+      }
       if (novelPrevButton) novelPrevButton.disabled = true;
+      if (novelPrevButton) novelPrevButton.hidden = true;
       if (novelNextButton) novelNextButton.disabled = true;
+      if (novelNextButton) novelNextButton.hidden = true;
       return { messageId: null, pages: [], pageIndex: 0 };
     }
     novelSpeaker.textContent = item.speaker_name || "";
@@ -264,12 +302,20 @@
       novelText,
       novelSpeaker,
     });
-    const isSameMessage = novelPageState.messageId === item.id;
+    const choiceState = currentContext?.state?.state_json?.scene_choices || {};
+    const choices = Array.isArray(choiceState.choices) ? choiceState.choices : [];
+    const choiceSignature = choices.map((choice) => `${choice.id}:${choice.label}`).join("|");
+    const choiceNeedsOwnPage = choices.length > 0 && pages.length > 1;
+    const displayPages = choiceNeedsOwnPage ? [...pages, ""] : pages;
+    const isSameMessage = novelPageState.messageId === item.id && novelPageState.choiceSignature === choiceSignature;
     return renderNovelPage(
       {
         messageId: item.id,
-        pages,
-        pageIndex: isSameMessage ? Math.min(novelPageState.pageIndex, Math.max(0, pages.length - 1)) : 0,
+        pages: displayPages,
+        choices,
+        choicePage: choiceNeedsOwnPage,
+        choiceSignature,
+        pageIndex: isSameMessage ? Math.min(novelPageState.pageIndex, Math.max(0, displayPages.length - 1)) : 0,
       },
       novelText,
       novelContinue,
@@ -370,9 +416,10 @@
       <div class="live-chat-novel-box ${textboxVisible ? "" : "is-hidden"}" id="liveChatNovelBox">
         <div class="live-chat-novel-speaker" id="liveChatNovelSpeaker">${NovelUI.escape(novelSpeakerText || "")}</div>
         <div class="live-chat-novel-text" id="liveChatNovelText">${NovelUI.escape(novelTextValue || "")}</div>
+        <div class="live-chat-novel-choice-list" id="liveChatNovelChoiceList" hidden></div>
         <div class="live-chat-novel-footer">
           <div class="live-chat-novel-continue" id="liveChatNovelContinue" hidden></div>
-          <div class="live-chat-novel-pager" aria-label="\u30bb\u30ea\u30d5\u30da\u30fc\u30b8\u9001\u308a">
+          <div class="live-chat-novel-pager" id="liveChatNovelPager" aria-label="\u30bb\u30ea\u30d5\u30da\u30fc\u30b8\u9001\u308a" hidden>
             <button class="live-chat-novel-page-button" type="button" id="liveChatNovelPrevButton">Prev</button>
             <button class="live-chat-novel-page-button" type="button" id="liveChatNovelNextButton">Next</button>
           </div>

@@ -1,5 +1,6 @@
 import mimetypes
 import os
+import re
 from typing import Any, Optional
 
 import requests
@@ -47,6 +48,85 @@ class ImageAIClient:
         if not value:
             raise ValueError("prompt is required")
         return value
+
+    def _is_sexual_safety_rejection(self, error: Exception) -> bool:
+        message = str(error or "").lower()
+        return "safety" in message and (
+            "sexual" in message
+            or "safety_violations=[sexual]" in message
+            or "safety_violations" in message
+        )
+
+    def _prompt_has_sexual_safety_risk(self, prompt: str) -> bool:
+        lowered = str(prompt or "").lower()
+        swim_terms = (
+            "水着", "ビキニ", "海", "ビーチ", "プール", "swimsuit", "bikini",
+            "beach", "pool", "splash", "water", "wet",
+        )
+        risk_terms = (
+            "セクシー", "エロ", "性的", "誘惑", "挑発", "露出", "濡れ", "胸", "胸元",
+            "谷間", "腰", "ヒップ", "太もも", "肌", "20歳前後", "若い", "少女",
+            "sexy", "sensual", "erotic", "seductive", "revealing", "young", "girl",
+            "20 years old", "body", "chest", "hips", "wet skin", "close-up", "full body",
+        )
+        return any(term in lowered for term in swim_terms) and any(term in lowered for term in risk_terms)
+
+    def _rewrite_prompt_for_image_safety(self, prompt: str, *, force: bool = False) -> str:
+        if not force and not self._prompt_has_sexual_safety_risk(prompt):
+            return prompt
+        text = str(prompt or "")
+        replacements = {
+            "セクシー": "華やかで大人っぽい",
+            "エロ": "ロマンティック",
+            "性的": "ロマンティック",
+            "誘惑的": "魅力的",
+            "挑発的": "自信のある",
+            "露出": "衣装のシルエット",
+            "濡れた肌": "水しぶきと夏の日差し",
+            "濡れ肌": "水しぶきと夏の日差し",
+            "濡れ": "水辺の雰囲気",
+            "胸元": "上品なネックライン",
+            "胸": "衣装のシルエット",
+            "谷間": "上品なネックライン",
+            "太もも": "脚のライン",
+            "強調": "自然に表現",
+            "裸": "肌を見せすぎない衣装",
+            "下着": "インナー風ではない衣装",
+            "ランジェリー": "ドレス風の衣装",
+            "水着": "上品で華やかなワンピース型スイムウェアまたはスポーティなツーピースのスイムセット",
+            "ビキニ": "リゾート向けのスポーティなツーピースのスイムセット",
+            "swimsuit": "tasteful one-piece swimsuit or sporty two-piece swim set",
+            "bikini": "sporty two-piece swim set with tasteful styling",
+            "sexy": "glamorous and elegant",
+            "erotic": "romantic and elegant",
+            "seductive": "charming and confident",
+            "revealing": "well-styled",
+            "cleavage": "elegant neckline",
+            "lingerie": "dress-like fashion outfit",
+            "underwear": "fashion outfit",
+            "nude": "fully clothed",
+            "naked": "fully clothed",
+        }
+        for source, target in replacements.items():
+            text = text.replace(source, target)
+        text = re.sub(r"20\s*歳\s*前後", "mid-20s adult woman", text)
+        text = re.sub(r"20\s*years?\s*old", "mid-20s adult woman", text, flags=re.IGNORECASE)
+        return (
+            "Safety-conscious image prompt for a visual novel style scene. "
+            "Preserve the same character identity, scene intent, emotional mood, and fashion direction, "
+            "but avoid wording that emphasizes exposure or body parts. "
+            "If the scene involves the sea, beach, pool, or summer vacation, keep requested swimwear recognizable while framing it as cheerful vacation energy: "
+            "tasteful one-piece swimsuit, sporty two-piece swim set, coordinated beachwear, resort cover-up, sunlit ocean, "
+            "joyful expression, energetic movement, bright atmosphere, sparkling water, and non-sexual editorial fashion. "
+            "The character must be clearly an adult woman in her mid-20s or older, confident and wholesome, not young-looking. "
+            "Do not use bikini/revealing/sexy/sensual/wet-skin/chest/hips/body-emphasis/close-up wording. "
+            "Avoid nudity, explicit sexual content, fetish framing, transparent clothing emphasis, suggestive camera angles, "
+            "captions, speech bubbles, text, logos, and watermarks.\n\n"
+            f"Rewritten scene and costume direction:\n{text}"
+        )
+
+    def _rewrite_prompt_for_safety_retry(self, prompt: str) -> str:
+        return self._rewrite_prompt_for_image_safety(prompt, force=True)
 
     def _normalize_choice(
         self,
@@ -288,7 +368,9 @@ class ImageAIClient:
         input_image_paths: Optional[list[str]] = None,
         input_fidelity: Optional[str] = None,
     ) -> dict[str, Any]:
-        normalized_prompt = self._normalize_prompt(prompt)
+        original_prompt = self._normalize_prompt(prompt)
+        normalized_prompt = original_prompt
+        safety_preflight = False
         resolved_model = self._resolve_model(model)
         normalized_input_paths = [path for path in (input_image_paths or []) if path]
 
@@ -302,7 +384,25 @@ class ImageAIClient:
                 background=background,
                 input_fidelity=input_fidelity,
             )
-            response_json = self._call_openai_image_edits_api(data, normalized_input_paths)
+            safety_retry = False
+            prompt_before_retry = normalized_prompt
+            try:
+                response_json = self._call_openai_image_edits_api(data, normalized_input_paths)
+            except RuntimeError as exc:
+                if not self._is_sexual_safety_rejection(exc):
+                    raise
+                safety_retry = True
+                normalized_prompt = self._rewrite_prompt_for_safety_retry(prompt_before_retry)
+                data = self._build_edit_request_data(
+                    normalized_prompt,
+                    size=size,
+                    model=resolved_model,
+                    quality=quality,
+                    output_format=output_format,
+                    background=background,
+                    input_fidelity=input_fidelity,
+                )
+                response_json = self._call_openai_image_edits_api(data, normalized_input_paths)
             result = self._normalize_response(
                 response_json, prompt=normalized_prompt, model=resolved_model, response_format="b64_json"
             )
@@ -312,6 +412,12 @@ class ImageAIClient:
             result["quality"] = data.get("quality")
             result["output_format"] = data.get("output_format")
             result["background"] = data.get("background")
+            result["safety_preflight"] = safety_preflight
+            result["safety_retry"] = safety_retry
+            if safety_preflight:
+                result["original_prompt_before_safety_preflight"] = original_prompt
+            if safety_retry:
+                result["prompt_before_safety_retry"] = prompt_before_retry
             return result
 
         payload = self._build_request_payload(
@@ -323,7 +429,25 @@ class ImageAIClient:
             output_format=output_format,
             background=background,
         )
-        response_json = self._call_openai_images_api(payload)
+        safety_retry = False
+        prompt_before_retry = normalized_prompt
+        try:
+            response_json = self._call_openai_images_api(payload)
+        except RuntimeError as exc:
+            if not self._is_sexual_safety_rejection(exc):
+                raise
+            safety_retry = True
+            normalized_prompt = self._rewrite_prompt_for_safety_retry(prompt_before_retry)
+            payload = self._build_request_payload(
+                normalized_prompt,
+                negative_prompt=negative_prompt,
+                size=size,
+                model=resolved_model,
+                quality=quality,
+                output_format=output_format,
+                background=background,
+            )
+            response_json = self._call_openai_images_api(payload)
         result = self._normalize_response(
             response_json, prompt=normalized_prompt, model=resolved_model, response_format="b64_json"
         )
@@ -333,4 +457,10 @@ class ImageAIClient:
         result["quality"] = payload.get("quality")
         result["output_format"] = payload.get("output_format")
         result["background"] = payload.get("background")
+        result["safety_preflight"] = safety_preflight
+        result["safety_retry"] = safety_retry
+        if safety_preflight:
+            result["original_prompt_before_safety_preflight"] = original_prompt
+        if safety_retry:
+            result["prompt_before_safety_retry"] = prompt_before_retry
         return result

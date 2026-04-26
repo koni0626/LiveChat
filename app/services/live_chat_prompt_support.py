@@ -68,6 +68,30 @@ def fallback_narration_reaction(context: dict, scene_update: dict) -> dict:
     return text_prompt_support.fallback_narration_reaction(context, scene_update)
 
 
+def build_scene_choice_prompt(context: dict, speaker_name: str, message_text: str) -> str:
+    return text_prompt_support.build_scene_choice_prompt(context, speaker_name, message_text)
+
+
+def fallback_scene_choices(context: dict, speaker_name: str, message_text: str) -> dict:
+    return text_prompt_support.fallback_scene_choices(context, speaker_name, message_text)
+
+
+def build_costume_rewrite_prompt(context: dict, character: dict, instruction: str, costume_context: str) -> str:
+    return text_prompt_support.build_costume_rewrite_prompt(context, character, instruction, costume_context)
+
+
+def fallback_costume_rewrite(instruction: str) -> dict:
+    return text_prompt_support.fallback_costume_rewrite(instruction)
+
+
+def build_image_prompt_safety_rewrite_prompt(context: dict, prompt: str, purpose: str = "live_scene") -> str:
+    return text_prompt_support.build_image_prompt_safety_rewrite_prompt(context, prompt, purpose)
+
+
+def fallback_image_prompt_safety_rewrite(prompt: str) -> dict:
+    return text_prompt_support.fallback_image_prompt_safety_rewrite(prompt)
+
+
 def build_line_visual_note_prompt(context: dict, speaker_name: str, message_text: str) -> str:
     return text_prompt_support.build_line_visual_note_prompt(context, speaker_name, message_text)
 

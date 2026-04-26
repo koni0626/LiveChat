@@ -25,6 +25,12 @@ class TextAIClient:
     def _resolve_vision_model(self, model: Optional[str] = None) -> str:
         return model or os.getenv("TEXT_AI_VISION_MODEL") or os.getenv("TEXT_AI_MODEL") or "gpt-4.1-mini"
 
+    def _max_tokens_parameter_name(self, model: str) -> str:
+        normalized = (model or "").lower()
+        if normalized.startswith("gpt-5"):
+            return "max_completion_tokens"
+        return "max_tokens"
+
     def _resolve_timeout(self) -> int:
         return int(os.getenv("TEXT_AI_TIMEOUT_SECONDS", "120"))
 
@@ -109,7 +115,7 @@ class TextAIClient:
         if response_format is not None:
             payload["response_format"] = response_format
         if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
+            payload[self._max_tokens_parameter_name(resolved_model)] = max_tokens
 
         response_json = self._call_openai_chat(payload)
         text = self._extract_text(response_json)

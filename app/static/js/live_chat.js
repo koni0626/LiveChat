@@ -22,6 +22,7 @@
   const costumeGrid = document.getElementById("liveChatCostumeGrid");
   const costumePreview = document.getElementById("liveChatCostumePreview");
   const generateCostumeButton = document.getElementById("liveChatGenerateCostumeButton");
+  const sceneChoicePanel = document.getElementById("liveChatSceneChoicePanel");
 
   let currentContext = null;
   let giftController = null;
@@ -37,7 +38,9 @@
       novelBox: document.getElementById("liveChatNovelBox"),
       novelSpeaker: document.getElementById("liveChatNovelSpeaker"),
       novelText: document.getElementById("liveChatNovelText"),
+      novelChoiceList: document.getElementById("liveChatNovelChoiceList"),
       novelContinue: document.getElementById("liveChatNovelContinue"),
+      novelPager: document.getElementById("liveChatNovelPager"),
       novelPrevButton: document.getElementById("liveChatNovelPrevButton"),
       novelNextButton: document.getElementById("liveChatNovelNextButton"),
     };
@@ -77,6 +80,7 @@
     shell.renderSelectedImage(context.selected_image, context);
     shell.renderImageGrid(context.images || []);
     renderCostumeRoom(context);
+    renderSceneChoices(context);
   }
 
   async function loadContext() {
@@ -164,10 +168,12 @@
       const mediaUrl = item.asset?.media_url;
       const label = item.image_type === "costume_initial" ? "初期衣装" : "衣装";
       return `
-        <button class="live-chat-costume-card ${item.is_selected ? "selected" : ""}" type="button" data-costume-id="${item.id}">
-          ${mediaUrl ? `<img src="${mediaUrl}" alt="${label}">` : "<span>No Image</span>"}
-          <span class="live-chat-costume-card-label">${item.is_selected ? "選択中" : label}</span>
-        </button>
+        <div class="live-chat-costume-card ${item.is_selected ? "selected" : ""}">
+          <button class="live-chat-costume-select" type="button" data-costume-id="${item.id}">
+            ${mediaUrl ? `<img src="${mediaUrl}" alt="${label}">` : "<span>No Image</span>"}
+            <span class="live-chat-costume-card-label">${item.is_selected ? "選択中" : label}</span>
+          </button>
+        </div>
       `;
     }).join("");
   }
@@ -178,6 +184,25 @@
     generateCostumeButton.innerHTML = active
       ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>衣装生成中...'
       : "衣装を生成";
+  }
+
+  function renderSceneChoices(context) {
+    if (!sceneChoicePanel) return;
+    sceneChoicePanel.classList.add("is-hidden");
+    sceneChoicePanel.innerHTML = "";
+  }
+
+  function setSceneChoiceLoading(active, activeButton = null) {
+    document.querySelectorAll("[data-scene-choice-id]").forEach((button) => {
+      button.disabled = active;
+      if (active && button === activeButton) {
+        button.dataset.originalText = button.textContent;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>場面を作成中...';
+      } else if (!active && button.dataset.originalText) {
+        button.textContent = button.dataset.originalText;
+        delete button.dataset.originalText;
+      }
+    });
   }
 
   composeForm.addEventListener("submit", async (event) => {
@@ -275,6 +300,7 @@
   });
 
   const handleCostumeSelect = async (event) => {
+    if (event.target.closest("[data-delete-costume-id]")) return;
     const button = event.target.closest("[data-costume-id]");
     if (!button) return;
     try {
@@ -288,6 +314,26 @@
 
   costumeGrid?.addEventListener("click", handleCostumeSelect);
   costumePreview?.addEventListener("click", handleCostumeSelect);
+
+  document.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-scene-choice-id]");
+    if (!button) return;
+    setSceneChoiceLoading(true, button);
+    try {
+      const result = await LiveChatApi.executeSceneChoice(sessionId, button.dataset.sceneChoiceId);
+      if (result?.context) {
+        applyContext(result.context);
+      } else {
+        await loadContext();
+      }
+      NovelUI.toast("選択した場面を生成しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "選択肢の実行に失敗しました。", "danger");
+      await loadContext().catch(() => {});
+    } finally {
+      setSceneChoiceLoading(false);
+    }
+  });
 
   shell.initialize();
   setComposeVisible(true);

@@ -12,9 +12,10 @@
         <div class="live-chat-novel-box" id="liveChatNovelBox">
           <div class="live-chat-novel-speaker" id="liveChatNovelSpeaker"></div>
           <div class="live-chat-novel-text" id="liveChatNovelText"></div>
+          <div class="live-chat-novel-choice-list" id="liveChatNovelChoiceList" hidden></div>
           <div class="live-chat-novel-footer">
             <div class="live-chat-novel-continue" id="liveChatNovelContinue"></div>
-            <div class="live-chat-novel-pager" aria-label="セリフページ送り">
+            <div class="live-chat-novel-pager" id="liveChatNovelPager" aria-label="セリフページ送り">
               <button class="live-chat-novel-page-button" type="button" id="liveChatNovelPrevButton">Prev</button>
               <button class="live-chat-novel-page-button" type="button" id="liveChatNovelNextButton">Next</button>
             </div>
@@ -27,6 +28,8 @@
       <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatGenerateImageButton">画像を生成</button>
       <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleTextboxButton">テキストボックス非表示</button>
     </div>
+
+    <div class="live-chat-choice-panel is-hidden" id="liveChatSceneChoicePanel"></div>
 
     <section class="live-chat-log-card" id="liveChatLogCard">
       <div class="live-chat-log-head">
