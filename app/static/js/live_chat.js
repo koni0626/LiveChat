@@ -123,6 +123,8 @@
       novelSpeaker: document.getElementById("liveChatNovelSpeaker"),
       novelText: document.getElementById("liveChatNovelText"),
       novelContinue: document.getElementById("liveChatNovelContinue"),
+      novelPrevButton: document.getElementById("liveChatNovelPrevButton"),
+      novelNextButton: document.getElementById("liveChatNovelNextButton"),
     };
   }
 

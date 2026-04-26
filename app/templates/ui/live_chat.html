@@ -47,9 +47,6 @@
   <section class="panel-card live-chat-main">
     <div class="panel-head">
       <h3 id="liveChatTitle">ライブチャット</h3>
-      <div class="d-flex gap-2 flex-wrap">
-        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleMessagesButton">ログを開く</button>
-      </div>
     </div>
 
     <div class="live-chat-stage">
@@ -58,15 +55,14 @@
         <div class="live-chat-novel-box" id="liveChatNovelBox">
           <div class="live-chat-novel-speaker" id="liveChatNovelSpeaker"></div>
           <div class="live-chat-novel-text" id="liveChatNovelText"></div>
-          <div class="live-chat-novel-continue" id="liveChatNovelContinue"></div>
-        </div>
-        <aside class="live-chat-message-wrap is-hidden" id="liveChatMessageWrap">
-          <div class="live-chat-message-loading" id="liveChatReplyLoading" hidden>
-            <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-            <span>会話ログを整理しています...</span>
+          <div class="live-chat-novel-footer">
+            <div class="live-chat-novel-continue" id="liveChatNovelContinue"></div>
+            <div class="live-chat-novel-pager" aria-label="セリフページ送り">
+              <button class="live-chat-novel-page-button" type="button" id="liveChatNovelPrevButton">Prev</button>
+              <button class="live-chat-novel-page-button" type="button" id="liveChatNovelNextButton">Next</button>
+            </div>
           </div>
-          <div class="live-chat-message-panel" id="liveChatMessageList"></div>
-        </aside>
+        </div>
       </div>
     </div>
 
@@ -74,6 +70,38 @@
       <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatGenerateImageButton">画像を生成</button>
       <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleTextboxButton">テキストボックス非表示</button>
     </div>
+
+    <section class="live-chat-log-card" id="liveChatLogCard">
+      <div class="live-chat-log-head">
+        <div>
+          <h4>会話ログ</h4>
+          <p>検索した場合は、最初にヒットしたログ以降を表示します。</p>
+        </div>
+        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleMessagesButton" aria-expanded="false">ログを開く</button>
+      </div>
+      <div class="live-chat-log-body is-hidden" id="liveChatLogBody">
+        <div class="live-chat-log-toolbar">
+          <div>
+            <label class="form-label" for="liveChatLogSearchInput">ログ検索</label>
+            <input class="form-control" id="liveChatLogSearchInput" type="search" placeholder="話者名や本文で検索">
+          </div>
+          <div>
+            <label class="form-label" for="liveChatLogSortSelect">表示順</label>
+            <select class="form-select" id="liveChatLogSortSelect">
+              <option value="desc" selected>最新から表示</option>
+              <option value="asc">古い順に表示</option>
+            </select>
+          </div>
+        </div>
+        <aside class="live-chat-message-wrap" id="liveChatMessageWrap">
+          <div class="live-chat-message-loading" id="liveChatReplyLoading" hidden>
+            <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+            <span>会話ログを整理しています...</span>
+          </div>
+          <div class="live-chat-message-panel" id="liveChatMessageList"></div>
+        </aside>
+      </div>
+    </section>
 
     <form class="live-chat-compose" id="liveChatComposeForm">
       <div class="live-chat-compose-head">

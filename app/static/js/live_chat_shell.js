@@ -20,6 +20,8 @@
 
     const state = {
       messagesVisible: false,
+      messageSortOrder: "desc",
+      messageSearchQuery: "",
       progressDetailsVisible: false,
       textboxVisible: true,
       imageLoading: false,
@@ -76,15 +78,15 @@
 
     function setMessagesVisible(visible) {
       state.messagesVisible = visible;
-      const panel = document.getElementById("liveChatMessageWrap");
+      const panel = document.getElementById("liveChatLogBody");
       if (panel) {
         panel.classList.toggle("is-hidden", !visible);
       }
       if (toggleMessagesButton) {
         toggleMessagesButton.textContent = visible ? "\u30ed\u30b0\u3092\u9589\u3058\u308b" : "\u30ed\u30b0\u3092\u958b\u304f";
+        toggleMessagesButton.setAttribute("aria-expanded", visible ? "true" : "false");
       }
       if (state.currentContext) {
-        renderSelectedImage(state.selectedImage, state.currentContext);
         renderMessages(state.currentContext.messages || [], state.currentContext);
       }
     }
@@ -128,15 +130,16 @@
         textboxVisible: state.textboxVisible,
         imageLoading: state.imageLoading,
         replyLoading: state.replyLoading,
-        messagesVisible: state.messagesVisible,
         novelSpeakerText: novelElements.novelSpeaker?.textContent || "",
         novelTextValue: novelElements.novelText?.textContent || "",
-        currentMessageMarkup: getMessageListElement()?.innerHTML || "",
       });
     }
 
     function renderMessages(messages, currentContext) {
-      view.renderMessages(messages, getMessageListElement());
+      view.renderMessages(messages, getMessageListElement(), {
+        sortOrder: state.messageSortOrder,
+        searchQuery: state.messageSearchQuery,
+      });
       renderNovel(messages, currentContext);
     }
 
@@ -173,7 +176,24 @@
       state.novelPageState = view.renderNovelPage(
         state.novelPageState,
         novelElements.novelText,
-        novelElements.novelContinue
+        novelElements.novelContinue,
+        novelElements
+      );
+      return true;
+    }
+
+    function retreatNovelPage() {
+      const pages = state.novelPageState.pages || [];
+      if (!state.textboxVisible || !pages.length || state.novelPageState.pageIndex <= 0) {
+        return false;
+      }
+      const novelElements = getNovelElements();
+      state.novelPageState.pageIndex -= 1;
+      state.novelPageState = view.renderNovelPage(
+        state.novelPageState,
+        novelElements.novelText,
+        novelElements.novelContinue,
+        novelElements
       );
       return true;
     }
@@ -195,6 +215,14 @@
       });
 
       document.addEventListener("click", (event) => {
+        if (event.target.closest("#liveChatNovelPrevButton")) {
+          retreatNovelPage();
+          return;
+        }
+        if (event.target.closest("#liveChatNovelNextButton")) {
+          advanceNovelPage();
+          return;
+        }
         const novelBox = event.target.closest("#liveChatNovelBox");
         if (!novelBox) return;
         if (event.target.closest("button, a, input, textarea, select, label")) return;
@@ -219,6 +247,18 @@
     function bindToggleButtons() {
       toggleMessagesButton?.addEventListener("click", () => {
         setMessagesVisible(!state.messagesVisible);
+      });
+      document.getElementById("liveChatLogSortSelect")?.addEventListener("change", (event) => {
+        state.messageSortOrder = event.target.value === "asc" ? "asc" : "desc";
+        if (state.currentContext) {
+          renderMessages(state.currentContext.messages || [], state.currentContext);
+        }
+      });
+      document.getElementById("liveChatLogSearchInput")?.addEventListener("input", (event) => {
+        state.messageSearchQuery = event.target.value || "";
+        if (state.currentContext) {
+          renderMessages(state.currentContext.messages || [], state.currentContext);
+        }
       });
       toggleTextboxButton?.addEventListener("click", () => {
         setTextboxVisible(!state.textboxVisible);

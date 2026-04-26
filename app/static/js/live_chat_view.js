@@ -125,7 +125,7 @@
     const paddingTop = parseFloat(boxStyle.paddingTop || "0");
     const paddingBottom = parseFloat(boxStyle.paddingBottom || "0");
     const gap = parseFloat(boxStyle.gap || "0");
-    const cueHeight = 26;
+    const cueHeight = 36;
     const availableHeight = Math.max(
       48,
       novelBox.clientHeight - paddingTop - paddingBottom - novelSpeaker.offsetHeight - gap - cueHeight
@@ -202,14 +202,23 @@
     selectedImagePanel.style.setProperty("--rendered-stage-height", `${Math.round(height)}px`);
   }
 
-  function renderNovelPage(novelPageState, novelTextElement, cueElement) {
+  function renderNovelPage(novelPageState, novelTextElement, cueElement, novelElements = {}) {
     if (!novelTextElement) return novelPageState;
     const pages = novelPageState.pages || [];
     const pageIndex = Math.max(0, Math.min(novelPageState.pageIndex || 0, Math.max(0, pages.length - 1)));
     const nextState = { ...novelPageState, pageIndex };
     novelTextElement.textContent = pages[pageIndex] || "";
     if (cueElement) {
-      cueElement.hidden = !(pages.length > 1 && pageIndex < pages.length - 1);
+      cueElement.hidden = pages.length <= 1;
+      cueElement.textContent = pages.length > 1
+        ? `${pageIndex + 1} / ${pages.length}`
+        : "";
+    }
+    if (novelElements.novelPrevButton) {
+      novelElements.novelPrevButton.disabled = pages.length <= 1 || pageIndex <= 0;
+    }
+    if (novelElements.novelNextButton) {
+      novelElements.novelNextButton.disabled = pages.length <= 1 || pageIndex >= pages.length - 1;
     }
     return nextState;
   }
@@ -222,7 +231,7 @@
       novelElements,
     } = options;
     const item = getLatestDisplayMessage(messages);
-    const { novelSpeaker, novelText, novelContinue, novelBox } = novelElements;
+    const { novelSpeaker, novelText, novelContinue, novelBox, novelPrevButton, novelNextButton } = novelElements;
     if (!novelSpeaker || !novelText) {
       return novelPageState;
     }
@@ -237,12 +246,16 @@
         </span>
       `;
       if (novelContinue) novelContinue.hidden = true;
+      if (novelPrevButton) novelPrevButton.disabled = true;
+      if (novelNextButton) novelNextButton.disabled = true;
       return { messageId: null, pages: [], pageIndex: 0 };
     }
     if (!item) {
       novelSpeaker.textContent = "";
       novelText.textContent = "\u307e\u3060\u30bb\u30ea\u30d5\u304c\u3042\u308a\u307e\u305b\u3093\u3002";
       if (novelContinue) novelContinue.hidden = true;
+      if (novelPrevButton) novelPrevButton.disabled = true;
+      if (novelNextButton) novelNextButton.disabled = true;
       return { messageId: null, pages: [], pageIndex: 0 };
     }
     novelSpeaker.textContent = item.speaker_name || "";
@@ -259,17 +272,45 @@
         pageIndex: isSameMessage ? Math.min(novelPageState.pageIndex, Math.max(0, pages.length - 1)) : 0,
       },
       novelText,
-      novelContinue
+      novelContinue,
+      novelElements
     );
   }
 
-  function renderMessages(messages, messageListElement) {
+  function normalizeMessageSortValue(item) {
+    const createdAt = Date.parse(item?.created_at || "");
+    if (Number.isFinite(createdAt)) return createdAt;
+    return Number(item?.id || 0);
+  }
+
+  function prepareDisplayMessages(messages, options = {}) {
+    const source = (Array.isArray(messages) ? [...messages] : [])
+      .sort((a, b) => normalizeMessageSortValue(a) - normalizeMessageSortValue(b));
+    const query = String(options.searchQuery || "").trim().toLowerCase();
+    let filtered = source;
+    if (query) {
+      const hitIndex = source.findIndex((item) => {
+        const text = `${item?.speaker_name || ""}\n${item?.message_text || ""}`.toLowerCase();
+        return text.includes(query);
+      });
+      filtered = hitIndex >= 0 ? source.slice(hitIndex) : [];
+    }
+    const direction = options.sortOrder === "asc" ? 1 : -1;
+    return filtered.sort((a, b) => (normalizeMessageSortValue(a) - normalizeMessageSortValue(b)) * direction);
+  }
+
+  function renderMessages(messages, messageListElement, options = {}) {
     if (!messageListElement) return;
+    const displayMessages = prepareDisplayMessages(messages, options);
     if (!messages.length) {
-      messageListElement.innerHTML = '<div class="empty-panel">\u307e\u3060\u4f1a\u8a71\u30ed\u30b0\u304c\u3042\u308a\u307e\u305b\u3093\u3002</div>';
+      messageListElement.innerHTML = '<div class="empty-panel">まだ会話ログがありません。</div>';
       return;
     }
-    messageListElement.innerHTML = messages.map((item) => {
+    if (!displayMessages.length) {
+      messageListElement.innerHTML = '<div class="empty-panel">検索に一致するログがありません。</div>';
+      return;
+    }
+    messageListElement.innerHTML = displayMessages.map((item) => {
       const gift = item.state_snapshot_json?.gift;
       const giftMarkup = gift?.asset?.media_url ? `
         <div class="live-chat-gift-card">
@@ -291,7 +332,7 @@
         </article>
       `;
     }).join("");
-    messageListElement.scrollTop = messageListElement.scrollHeight;
+    messageListElement.scrollTop = 0;
   }
 
   function renderSelectedImage(selectedImage, options) {
@@ -303,11 +344,8 @@
       progressDetailsVisible,
       textboxVisible,
       imageLoading,
-      replyLoading,
-      messagesVisible,
       novelSpeakerText,
       novelTextValue,
-      currentMessageMarkup,
     } = options;
     applyStageDimensions(selectedImage, selectedImagePanel);
     const mediaUrl = selectedImage?.asset?.media_url;
@@ -332,18 +370,14 @@
       <div class="live-chat-novel-box ${textboxVisible ? "" : "is-hidden"}" id="liveChatNovelBox">
         <div class="live-chat-novel-speaker" id="liveChatNovelSpeaker">${NovelUI.escape(novelSpeakerText || "")}</div>
         <div class="live-chat-novel-text" id="liveChatNovelText">${NovelUI.escape(novelTextValue || "")}</div>
-        <div class="live-chat-novel-continue" id="liveChatNovelContinue" hidden>Enter\u304b\u30af\u30ea\u30c3\u30af\u3067\u7d9a\u304d\u3092\u8aad\u3080</div>
-      </div>
-    `;
-    const loadingHidden = replyLoading ? "" : "hidden";
-    const messageMarkup = `
-      <aside class="live-chat-message-wrap ${messagesVisible ? "" : "is-hidden"}" id="liveChatMessageWrap">
-        <div class="live-chat-message-loading" id="liveChatReplyLoading" ${loadingHidden}>
-          <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-          <span>\u4f1a\u8a71\u30ed\u30b0\u3092\u6574\u7406\u3057\u3066\u3044\u307e\u3059...</span>
+        <div class="live-chat-novel-footer">
+          <div class="live-chat-novel-continue" id="liveChatNovelContinue" hidden></div>
+          <div class="live-chat-novel-pager" aria-label="\u30bb\u30ea\u30d5\u30da\u30fc\u30b8\u9001\u308a">
+            <button class="live-chat-novel-page-button" type="button" id="liveChatNovelPrevButton">Prev</button>
+            <button class="live-chat-novel-page-button" type="button" id="liveChatNovelNextButton">Next</button>
+          </div>
         </div>
-        <div class="live-chat-message-panel" id="liveChatMessageList">${currentMessageMarkup}</div>
-      </aside>
+      </div>
     `;
     const stageBody = !mediaUrl
       ? `<div class="empty-panel">\u307e\u3060\u753b\u50cf\u304c\u3042\u308a\u307e\u305b\u3093\u3002</div>`
@@ -353,7 +387,6 @@
       <div class="live-chat-stage-frame ${imageLoading ? "is-loading" : ""}">
         ${stageBody}
         ${novelMarkup}
-        ${messageMarkup}
       </div>
     `;
   }

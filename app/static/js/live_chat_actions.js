@@ -132,7 +132,7 @@
       }
     });
 
-    selectedImagePanel.addEventListener("click", async (event) => {
+    const handleMessageDelete = async (event) => {
       const button = event.target.closest("[data-delete-message-id]");
       if (!button) return;
       const messageId = Number(button.dataset.deleteMessageId);
@@ -144,7 +144,10 @@
       } catch (error) {
         NovelUI.toast(error.message || "ログの削除に失敗しました。", "danger");
       }
-    });
+    };
+
+    selectedImagePanel.addEventListener("click", handleMessageDelete);
+    document.getElementById("liveChatMessageList")?.addEventListener("click", handleMessageDelete);
 
     document.getElementById("liveChatReloadImagesButton").addEventListener("click", () => {
       loadContext().catch((error) => {

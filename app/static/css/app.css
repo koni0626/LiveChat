@@ -930,6 +930,50 @@ body::before {
   margin-bottom: 0.25rem;
 }
 
+.live-chat-log-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 1.2rem;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.live-chat-log-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.live-chat-log-head h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.live-chat-log-head p {
+  margin: 0.25rem 0 0;
+  color: rgba(18, 28, 50, 0.62);
+  font-size: 0.85rem;
+}
+
+.live-chat-log-body {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.live-chat-log-body.is-hidden {
+  display: none;
+}
+
+.live-chat-log-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 14rem);
+  gap: 0.75rem;
+  align-items: end;
+}
+
 .live-chat-image-panel {
   --stage-width: 1024;
   --stage-height: 1536;
@@ -993,6 +1037,14 @@ body::before {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
+.live-chat-novel-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .live-chat-typing {
   display: inline-flex;
   align-items: center;
@@ -1018,13 +1070,44 @@ body::before {
 }
 
 .live-chat-novel-continue {
-  margin-top: auto;
-  align-self: flex-end;
   font-size: 0.78rem;
   font-weight: 700;
   color: rgba(255, 244, 218, 0.92);
   letter-spacing: 0.04em;
   animation: liveChatNovelContinueBlink 1s ease-in-out infinite alternate;
+}
+
+.live-chat-novel-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
+.live-chat-novel-page-button {
+  min-width: 4.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 250, 240, 0.94);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  padding: 0.42rem 0.7rem;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease, opacity 0.16s ease;
+}
+
+.live-chat-novel-page-button:hover:not(:disabled),
+.live-chat-novel-page-button:focus-visible:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.46);
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.live-chat-novel-page-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
 }
 
 .live-chat-novel-text-measure {
@@ -1218,16 +1301,12 @@ body.live-chat-lightbox-open {
 }
 
 .live-chat-message-wrap {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  bottom: 12rem;
-  width: min(360px, 42vw);
+  position: relative;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   min-width: 0;
-  z-index: 3;
 }
 
 .live-chat-eval-badge.is-hidden,
@@ -1239,6 +1318,17 @@ body.live-chat-lightbox-open {
   .live-chat-eval-badge {
     width: 100%;
     max-width: 100%;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .live-chat-log-head,
+  .live-chat-log-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .live-chat-log-head {
+    display: grid;
   }
 }
 
@@ -2335,6 +2425,35 @@ body[data-screen="live-chat"] .live-chat-stage-actions .btn:focus {
   background: linear-gradient(180deg, rgba(11, 27, 48, 0.94), rgba(8, 19, 35, 0.9));
   color: #f8feff;
   box-shadow: 0 0 0 0.16rem rgba(0, 245, 212, 0.12);
+}
+
+body[data-screen="live-chat"] .live-chat-log-card {
+  border-color: rgba(84, 177, 255, 0.18);
+  background:
+    radial-gradient(circle at top left, rgba(0, 245, 212, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(8, 17, 31, 0.92), rgba(6, 13, 25, 0.86));
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.32),
+    inset 0 0 20px rgba(98, 192, 255, 0.04);
+}
+
+body[data-screen="live-chat"] .live-chat-log-head h4 {
+  color: #f2fbff;
+}
+
+body[data-screen="live-chat"] .live-chat-log-head p {
+  color: rgba(180, 221, 255, 0.72);
+}
+
+body[data-screen="live-chat"] .live-chat-log-toolbar .form-control,
+body[data-screen="live-chat"] .live-chat-log-toolbar .form-select {
+  border-color: rgba(84, 177, 255, 0.2);
+  background-color: rgba(4, 11, 22, 0.72);
+  color: #e9f7ff;
+}
+
+body[data-screen="live-chat"] .live-chat-log-toolbar .form-control::placeholder {
+  color: rgba(180, 221, 255, 0.48);
 }
 
 body[data-screen="live-chat"] .live-chat-eval-badge {
