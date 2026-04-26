@@ -21,8 +21,15 @@ class LetterRepository:
             Letter.deleted_at.is_(None),
         ).count()
 
-    def list_recent_for_guard(self, *, recipient_user_id: int, sender_character_id: int, room_id: int | None, hours: int):
-        since = datetime.utcnow() - timedelta(hours=hours)
+    def list_recent_for_guard(
+        self,
+        *,
+        recipient_user_id: int,
+        sender_character_id: int,
+        room_id: int | None,
+        minutes: int,
+    ):
+        since = datetime.utcnow() - timedelta(minutes=minutes)
         query = Letter.query.filter(
             Letter.recipient_user_id == recipient_user_id,
             Letter.sender_character_id == sender_character_id,

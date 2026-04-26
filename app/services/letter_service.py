@@ -163,11 +163,12 @@ class LetterService:
         if len(messages) < 6:
             return None
         room_id = getattr(session, "room_id", None)
+        cooldown_minutes = int(current_app.config.get("LETTER_COOLDOWN_MINUTES", 30))
         recent = self._repo.list_recent_for_guard(
             recipient_user_id=session.owner_user_id,
             sender_character_id=character["id"],
             room_id=room_id,
-            hours=6,
+            minutes=cooldown_minutes,
         )
         if recent:
             return None
