@@ -148,7 +148,7 @@
 
     document.getElementById("liveChatReloadImagesButton").addEventListener("click", () => {
       loadContext().catch((error) => {
-        NovelUI.toast(error.message || "画像一覧の再読込に失敗しました。", "danger");
+        NovelUI.toast(error.message || "画像一覧の再読み込みに失敗しました。", "danger");
       });
     });
   }

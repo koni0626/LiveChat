@@ -71,6 +71,7 @@ def _serialize_character(character):
         "project_id": character.project_id,
         "name": character.name,
         "nickname": character.nickname,
+        "gender": character.gender,
         "age_impression": character.age_impression,
         "first_person": character.first_person,
         "second_person": character.second_person,
@@ -115,6 +116,7 @@ def list_characters(project_id: int):
             for character in characters
             if keyword in (character.name or "").lower()
             or keyword in (character.nickname or "").lower()
+            or keyword in (character.gender or "").lower()
             or keyword in (character.speech_style or "").lower()
             or keyword in (character.appearance_summary or "").lower()
         ]
@@ -134,6 +136,19 @@ def create_character(project_id: int):
     except (KeyError, ValueError) as exc:
         return json_response({"message": str(exc)}, status=400)
     return json_response(_serialize_character(character), status=201)
+
+
+@characters_bp.route("/projects/<int:project_id>/characters/draft", methods=["POST"])
+def generate_character_draft(project_id: int):
+    require_project_manage(project_id)
+    payload = request.get_json(silent=True) or {}
+    try:
+        draft = character_service.generate_character_draft(project_id, payload)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    return json_response({"project_id": project_id, "draft": draft})
 
 
 @characters_bp.route("/characters/<int:character_id>", methods=["GET"])

@@ -148,6 +148,7 @@ class CharacterRepository:
             project_id=project_id,
             name=payload["name"],
             nickname=payload.get("nickname"),
+            gender=payload.get("gender"),
             age_impression=payload.get("age_impression"),
             first_person=payload.get("first_person"),
             second_person=payload.get("second_person"),
@@ -173,6 +174,7 @@ class CharacterRepository:
         for field in (
             "name",
             "nickname",
+            "gender",
             "age_impression",
             "first_person",
             "second_person",

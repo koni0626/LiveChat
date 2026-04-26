@@ -22,15 +22,21 @@
         </select>
         <div class="form-text">作成済みセッションの話す相手は変更できません。</div>
       </div>
-      <div class="col-lg-6 col-12">
-        <label class="form-label" for="liveChatSessionObjectiveInput">会話の目的</label>
-        <textarea
-          class="form-control"
-          id="liveChatSessionObjectiveInput"
-          name="conversation_objective"
-          rows="2"
-          placeholder="例: プレイヤーがあなたに興味を持つようにする / 二人の距離を少しずつ縮める"
-        ></textarea>
+      <div class="col-12">
+        <textarea class="d-none" id="liveChatSessionObjectiveInput" name="conversation_objective"></textarea>
+        <article class="markdown-summary-card live-chat-objective-card">
+          <div class="markdown-summary-head">
+            <div>
+              <h4>会話の目的</h4>
+              <p>キャラクターが会話で目指す方向性をMarkdownで入力します。</p>
+            </div>
+            <button class="btn btn-sm btn-outline-light" type="button" id="liveChatObjectiveEditButton">
+              <i class="bi bi-pencil-square"></i>
+              <span>編集</span>
+            </button>
+          </div>
+          <div class="markdown-summary-body" id="liveChatObjectivePreview">まだ入力されていません。</div>
+        </article>
       </div>
       <div class="col-12 d-grid justify-content-md-end">
         <button class="btn btn-sunrise" type="submit">設定を保存</button>
@@ -160,6 +166,41 @@
     <div class="live-chat-image-grid" id="liveChatImageGrid"></div>
   </aside>
 </section>
+
+<div class="modal fade" id="liveChatObjectiveModal" tabindex="-1" aria-labelledby="liveChatObjectiveModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content markdown-modal">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title h5" id="liveChatObjectiveModalLabel">会話の目的を編集</h3>
+          <p class="mb-0 text-secondary">Markdownで、キャラクターが会話中に目指す目的や避けたい展開を書けます。</p>
+        </div>
+        <button class="btn-close btn-close-white" type="button" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="markdown-modal-grid">
+          <div>
+            <label class="form-label" for="liveChatObjectiveMarkdownInput">Markdown入力</label>
+            <textarea
+              class="form-control markdown-modal-input"
+              id="liveChatObjectiveMarkdownInput"
+              rows="20"
+              placeholder="- プレイヤーがキャラクターに興味を持つようにする&#10;- 強引に案内役にならず、キャラクターらしい雑談から距離を詰める&#10;- 苦手な話題は無理に続けない"
+            ></textarea>
+          </div>
+          <div>
+            <div class="form-label">プレビュー</div>
+            <div class="markdown-preview markdown-modal-preview" id="liveChatObjectiveMarkdownPreview"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-light" type="button" data-bs-dismiss="modal">キャンセル</button>
+        <button class="btn btn-sunrise" type="button" id="liveChatObjectiveApplyButton">反映する</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/live_chat_view.js') }}"></script>

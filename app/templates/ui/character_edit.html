@@ -20,6 +20,10 @@
           <input class="form-control" name="nickname" placeholder="例: ラプ、ノア、姫様">
         </div>
         <div class="col-md-4">
+          <label class="form-label">性別</label>
+          <input class="form-control" name="gender" placeholder="例: 女性、男性、中性的、無性、未設定">
+        </div>
+        <div class="col-md-4">
           <label class="form-label">年齢感</label>
           <input class="form-control" name="age_impression" placeholder="例: 20代前半、大人っぽい少女">
         </div>
@@ -474,7 +478,25 @@
   });
 
   document.getElementById("characterAiAssist").addEventListener("click", () => {
-    NovelUI.toast("AI補完は次の実装タスクで接続します。", "warning");
+    const button = document.getElementById("characterAiAssist");
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>AI仮入力中...';
+    NovelUI.api(`/api/v1/projects/${projectId}/characters/draft`, {
+      method: "POST",
+      body: { current_character: characterPayload() },
+    }).then((payload) => {
+      if (!payload?.draft) {
+        throw new Error("AI仮入力の応答が不正です。");
+      }
+      NovelUI.fillForm(form, payload.draft);
+      renderMarkdownCards();
+      NovelUI.toast("世界観をもとにキャラクターを仮入力しました。");
+    }).catch((error) => {
+      NovelUI.toast(error.message || "キャラクターのAI仮入力に失敗しました。", "danger");
+    }).finally(() => {
+      button.disabled = false;
+      button.innerHTML = "AI補完";
+    });
   });
 
   loadCharacter().catch((error) => {

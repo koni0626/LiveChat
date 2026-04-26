@@ -73,6 +73,19 @@ def put_world(project_id: int):
     return json_response(_serialize_world(world, project_id))
 
 
+@worlds_bp.route("/projects/<int:project_id>/world/draft", methods=["POST"])
+def generate_world_draft(project_id: int):
+    require_project_manage(project_id)
+    from ...services.world_service import WorldService
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        draft = WorldService().generate_world_draft(project_id, payload)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    return json_response({"project_id": project_id, "draft": draft})
+
+
 @worlds_bp.route("/projects/<int:project_id>/world-context", methods=["GET"])
 def get_world_context(project_id: int):
     require_project_view(project_id)

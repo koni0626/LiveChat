@@ -14,6 +14,13 @@
   const selectedImagePanel = document.getElementById("liveChatSelectedImagePanel");
   const sessionMetaForm = document.getElementById("liveChatSessionMetaForm");
   const sessionCharacterSelect = document.getElementById("liveChatSessionCharacterSelect");
+  const objectiveInput = document.getElementById("liveChatSessionObjectiveInput");
+  const objectivePreview = document.getElementById("liveChatObjectivePreview");
+  const objectiveEditButton = document.getElementById("liveChatObjectiveEditButton");
+  const objectiveModalElement = document.getElementById("liveChatObjectiveModal");
+  const objectiveMarkdownInput = document.getElementById("liveChatObjectiveMarkdownInput");
+  const objectiveMarkdownPreview = document.getElementById("liveChatObjectiveMarkdownPreview");
+  const objectiveApplyButton = document.getElementById("liveChatObjectiveApplyButton");
   const composeForm = document.getElementById("liveChatComposeForm");
   const composeInput = document.getElementById("liveChatComposeInput");
   const composeShell = document.getElementById("liveChatComposeShell");
@@ -25,6 +32,86 @@
   let giftController = null;
   let composeVisible = true;
   let userDefaultImageSettings = {};
+  if (objectiveModalElement) {
+    document.body.appendChild(objectiveModalElement);
+  }
+  const objectiveModal = objectiveModalElement ? new bootstrap.Modal(objectiveModalElement) : null;
+
+  function escapeHtml(value) {
+    return NovelUI.escape(value ?? "");
+  }
+
+  function renderInlineMarkdown(value) {
+    return escapeHtml(value)
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/`(.+?)`/g, "<code>$1</code>");
+  }
+
+  function markdownToHtml(markdown) {
+    const lines = String(markdown || "").split(/\r?\n/);
+    const html = [];
+    let listOpen = false;
+
+    function closeList() {
+      if (listOpen) {
+        html.push("</ul>");
+        listOpen = false;
+      }
+    }
+
+    lines.forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        closeList();
+        return;
+      }
+      if (trimmed.startsWith("## ")) {
+        closeList();
+        html.push(`<h5>${renderInlineMarkdown(trimmed.slice(3))}</h5>`);
+        return;
+      }
+      if (trimmed.startsWith("# ")) {
+        closeList();
+        html.push(`<h4>${renderInlineMarkdown(trimmed.slice(2))}</h4>`);
+        return;
+      }
+      if (trimmed.startsWith("> ")) {
+        closeList();
+        html.push(`<blockquote>${renderInlineMarkdown(trimmed.slice(2))}</blockquote>`);
+        return;
+      }
+      if (/^[-*]\s+/.test(trimmed)) {
+        if (!listOpen) {
+          html.push("<ul>");
+          listOpen = true;
+        }
+        html.push(`<li>${renderInlineMarkdown(trimmed.replace(/^[-*]\s+/, ""))}</li>`);
+        return;
+      }
+      closeList();
+      html.push(`<p>${renderInlineMarkdown(trimmed)}</p>`);
+    });
+
+    closeList();
+    return html.join("") || '<p class="text-secondary mb-0">まだ入力されていません。</p>';
+  }
+
+  function summarizeMarkdown(markdown) {
+    const text = String(markdown || "")
+      .replace(/^#{1,6}\s+/gm, "")
+      .replace(/^[-*]\s+/gm, "")
+      .replace(/^>\s+/gm, "")
+      .replace(/[*_`>#-]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!text) return "まだ入力されていません。";
+    return text.length > 180 ? `${text.slice(0, 180)}...` : text;
+  }
+
+  function renderObjectivePreview() {
+    if (!objectivePreview || !objectiveInput) return;
+    objectivePreview.textContent = summarizeMarkdown(objectiveInput.value);
+  }
 
   function getMessageListElement() {
     return document.getElementById("liveChatMessageList");
@@ -62,7 +149,8 @@
     document.getElementById("liveChatTitle").textContent = title;
     sessionMetaForm.title.value = context.session.title || "";
     sessionMetaForm.player_name.value = context.session.player_name || "";
-    sessionMetaForm.conversation_objective.value = context.session.settings_json?.conversation_objective || "";
+    objectiveInput.value = context.session.settings_json?.conversation_objective || "";
+    renderObjectivePreview();
 
     LiveChatApi.loadSessionCharacterOptions(Number(context?.project?.id || projectId || 0))
       .then((list) => {
@@ -213,6 +301,26 @@
 
   toggleComposeButton?.addEventListener("click", () => {
     setComposeVisible(!composeVisible);
+  });
+
+  objectiveEditButton?.addEventListener("click", () => {
+    if (!objectiveModal || !objectiveMarkdownInput || !objectiveMarkdownPreview || !objectiveInput) return;
+    objectiveMarkdownInput.value = objectiveInput.value || "";
+    objectiveMarkdownPreview.innerHTML = markdownToHtml(objectiveMarkdownInput.value);
+    objectiveModal.show();
+    setTimeout(() => objectiveMarkdownInput.focus(), 180);
+  });
+
+  objectiveMarkdownInput?.addEventListener("input", () => {
+    if (!objectiveMarkdownPreview) return;
+    objectiveMarkdownPreview.innerHTML = markdownToHtml(objectiveMarkdownInput.value);
+  });
+
+  objectiveApplyButton?.addEventListener("click", () => {
+    if (!objectiveInput || !objectiveMarkdownInput) return;
+    objectiveInput.value = objectiveMarkdownInput.value || "";
+    renderObjectivePreview();
+    objectiveModal?.hide();
   });
 
   shell.initialize();

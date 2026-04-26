@@ -9,6 +9,7 @@ class Character(db.Model, TimestampMixin, SoftDeleteMixin):
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     nickname = db.Column(db.String(100))
+    gender = db.Column(db.String(100))
     age_impression = db.Column(db.String(100))
     first_person = db.Column(db.String(100))
     second_person = db.Column(db.String(100))

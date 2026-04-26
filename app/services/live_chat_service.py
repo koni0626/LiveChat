@@ -103,6 +103,7 @@ class LiveChatService:
             "id": character.id,
             "name": character.name,
             "nickname": character.nickname,
+            "gender": character.gender,
             "first_person": character.first_person,
             "second_person": character.second_person,
             "personality": character.personality,
@@ -357,16 +358,6 @@ class LiveChatService:
         relationship_state[character.get("name")] = character_state
         state_json["relationship_state"] = relationship_state
         return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
-
-    def _append_character_memorable_event(self, character_id: int, character: dict, recognized_label: str, evaluation: dict):
-        profile = dict(character.get("memory_profile") or {})
-        events = list(profile.get("memorable_events") or [])
-        event_text = f"Player gifted {recognized_label} ({evaluation.get('mood')})"
-        lowered = {str(item or "").strip().lower() for item in events}
-        if event_text.lower() not in lowered:
-            events.append(event_text)
-        profile["memorable_events"] = events[-20:]
-        self._character_service.update_character(character_id, {"memory_profile": profile})
 
     def _fallback_gift_visual_direction(self, character: dict, recognized_label: str, recognized_tags: list[str], evaluation: dict) -> dict:
         combined = " ".join([recognized_label, *(recognized_tags or [])]).lower()
@@ -724,93 +715,11 @@ class LiveChatService:
             state_json["background"] = note["background"]
         return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
 
-    def _sync_character_memory_from_session(self, context: dict, session_memory: dict | None):
-        session_memory = dict(session_memory or {})
-        memory_map = session_memory.get("character_memories") or {}
-        if not isinstance(memory_map, dict):
-            return
-        for character in context.get("characters") or []:
-            character_memory = memory_map.get(character.get("name")) or {}
-            if not isinstance(character_memory, dict):
-                continue
-            current_profile = dict(character.get("memory_profile") or {})
-            current_romance = dict(current_profile.get("romance_preferences") or {})
-            merged_profile = {
-                "likes": [],
-                "dislikes": [],
-                "hobbies": [],
-                "taboos": [],
-                "memorable_events": [],
-                "romance_preferences": {
-                    "favorite_approach": [],
-                    "avoid_approach": [],
-                    "attraction_points": [],
-                    "boundaries": [],
-                },
-            }
-
-            def merge_values(*sources):
-                merged = []
-                seen = set()
-                for source in sources:
-                    for item in source or []:
-                        text = str(item or "").strip()
-                        if not text:
-                            continue
-                        lowered = text.lower()
-                        if lowered in seen:
-                            continue
-                        seen.add(lowered)
-                        merged.append(text[:160])
-                return merged
-
-            merged_profile["likes"] = merge_values(
-                current_profile.get("likes") or character.get("favorite_items") or [],
-                character_memory.get("likes") or character_memory.get("favorite_items") or [],
-            )
-            merged_profile["dislikes"] = merge_values(current_profile.get("dislikes") or [], character_memory.get("dislikes") or [])
-            merged_profile["hobbies"] = merge_values(current_profile.get("hobbies") or [], character_memory.get("hobbies") or [])
-            merged_profile["taboos"] = merge_values(current_profile.get("taboos") or [], character_memory.get("taboos") or [])
-            merged_profile["memorable_events"] = merge_values(
-                current_profile.get("memorable_events") or [],
-                character_memory.get("memorable_events") or [],
-            )
-            merged_profile["romance_preferences"] = {
-                "favorite_approach": merge_values(
-                    current_romance.get("favorite_approach") or [],
-                    (character_memory.get("romance_preferences") or {}).get("favorite_approach") or [],
-                ),
-                "avoid_approach": merge_values(
-                    current_romance.get("avoid_approach") or [],
-                    (character_memory.get("romance_preferences") or {}).get("avoid_approach") or [],
-                ),
-                "attraction_points": merge_values(
-                    current_romance.get("attraction_points") or [],
-                    (character_memory.get("romance_preferences") or {}).get("attraction_points") or [],
-                ),
-                "boundaries": merge_values(
-                    current_romance.get("boundaries") or [],
-                    (character_memory.get("romance_preferences") or {}).get("boundaries") or [],
-                ),
-            }
-            existing_note = str(character.get("memory_notes") or "").strip()
-            note_parts = [part for part in [existing_note, *list(character_memory.get("notes") or [])] if str(part or "").strip()]
-            merged_note = " / ".join(dict.fromkeys(str(part).strip()[:160] for part in note_parts if str(part).strip()))
-            payload = {}
-            if merged_profile != current_profile:
-                payload["memory_profile"] = merged_profile
-                payload["favorite_items"] = merged_profile["likes"]
-            if merged_note and merged_note != existing_note:
-                payload["memory_notes"] = merged_note
-            if payload:
-                self._character_service.update_character(character["id"], payload)
-
     def _update_session_memory(self, session_id: int, context: dict):
         state_row = self._session_state_service.get_state(session_id)
         state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
         session_memory = prompt_support.build_session_memory(context["messages"], state_json)
         state_json["session_memory"] = session_memory
-        self._sync_character_memory_from_session(context, session_memory)
         return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
 
     def _update_conversation_evaluation(self, session_id: int, context: dict):
@@ -1103,7 +1012,6 @@ class LiveChatService:
             },
         )
         self._update_gift_state_memory(session_id, character, recognized_label, recognized_tags, evaluation)
-        self._append_character_memorable_event(character.get("id"), character, recognized_label, evaluation)
         generated_image = None
         try:
             generated_image = self._generate_gift_visual_image(
