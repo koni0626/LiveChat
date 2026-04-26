@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+<section
+  class="costume-create-shell"
+  data-session-id="{{ session_id }}"
+  data-project-id="{{ project_id }}"
+  data-chat-url="{{ url_for('ui.live_chat_page', project_id=project_id, session_id=session_id) }}"
+>
+  <div class="costume-create-header">
+    <div>
+      <p class="eyebrow">Costume Room</p>
+      <h2>衣装を生成</h2>
+      <p>現在選択中の衣装画像を基準に、キャラクターの衣装差分を作成します。</p>
+    </div>
+    <a class="btn btn-outline-light" href="{{ url_for('ui.live_chat_page', project_id=project_id, session_id=session_id) }}">
+      ライブチャットへ戻る
+    </a>
+  </div>
+
+  <div class="costume-create-grid">
+    <section class="panel-card costume-create-form-card">
+      <div class="panel-head">
+        <h3>生成指示</h3>
+      </div>
+      <form class="vstack gap-3" id="costumeCreateForm">
+        <div>
+          <label class="form-label" for="costumeCreatePromptInput">プロンプト</label>
+          <textarea
+            class="form-control"
+            id="costumeCreatePromptInput"
+            name="prompt_text"
+            rows="8"
+            placeholder="例：白いワンピースに着替える。顔、髪型、体型は変えない。清楚で少し照れた雰囲気。背景はシンプル。"
+          ></textarea>
+        </div>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label" for="costumeCreateSizeSelect">サイズ</label>
+            <select class="form-select" id="costumeCreateSizeSelect" name="size">
+              <option value="1024x1536" selected>1024x1536</option>
+              <option value="1024x1024">1024x1024</option>
+              <option value="1536x1024">1536x1024</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="costumeCreateQualitySelect">品質</label>
+            <select class="form-select" id="costumeCreateQualitySelect" name="quality">
+              <option value="medium" selected>medium</option>
+              <option value="low">low</option>
+              <option value="high">high</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-sunrise" type="submit" id="costumeCreateSubmitButton">画像を生成</button>
+      </form>
+    </section>
+
+    <section class="panel-card costume-create-preview-card">
+      <div class="panel-head">
+        <h3>生成結果</h3>
+      </div>
+      <div class="costume-create-current" id="costumeCreateCurrentReference">
+        <div class="empty-panel">現在の基準画像を読み込み中です。</div>
+      </div>
+      <div class="costume-create-result" id="costumeCreateResult">
+        <div class="empty-panel">プロンプトを入力して画像を生成してください。</div>
+      </div>
+      <div class="costume-create-result-actions" id="costumeCreateResultActions" hidden>
+        <a class="btn btn-outline-light" href="{{ url_for('ui.live_chat_page', project_id=project_id, session_id=session_id) }}">この衣装でライブチャットへ戻る</a>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel-card costume-create-history-card">
+    <div class="panel-head">
+      <h3>衣装候補</h3>
+    </div>
+    <div class="live-chat-costume-grid" id="costumeCreateGrid"></div>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/live_chat_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/live_chat_costume_create.js') }}"></script>
+{% endblock %}

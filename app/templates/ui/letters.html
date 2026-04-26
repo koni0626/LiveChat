@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-grid letter-page">
+  <section class="panel-card letter-hero">
+    <div>
+      <div class="eyebrow">Mailbox</div>
+      <h2>キャラクターから届いたお手紙</h2>
+      <p>ライブチャットの余韻から、AIキャラクターが「今なら届けたい」と判断した手紙がここに届きます。</p>
+    </div>
+    <button class="btn btn-outline-light btn-sm" type="button" id="letterRefreshButton">
+      <i class="bi bi-arrow-clockwise"></i>
+      更新
+    </button>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head">
+      <h3>メールボックス</h3>
+      <span class="soft-code" id="letterCountLabel">0 letters</span>
+    </div>
+    <div class="letter-grid" id="letterList"></div>
+  </section>
+</section>
+
+<div class="modal fade" id="letterModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content letter-modal">
+      <div class="modal-header">
+        <div>
+          <div class="eyebrow">Letter</div>
+          <h5 class="modal-title" id="letterModalTitle">お手紙</h5>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="letter-modal-image-wrap d-none" id="letterModalImageWrap">
+          <img alt="お手紙の添付画像" id="letterModalImage">
+        </div>
+        <div class="letter-paper">
+          <div class="letter-paper-from" id="letterModalFrom"></div>
+          <div class="letter-paper-body" id="letterModalBody"></div>
+        </div>
+      </div>
+      <div class="modal-footer justify-content-between">
+        <button class="btn btn-outline-danger btn-sm" type="button" id="letterArchiveButton">
+          <i class="bi bi-trash3"></i>
+          削除
+        </button>
+        <a class="btn btn-sunrise btn-sm" id="letterReturnLink" href="#">
+          ルームへ行く
+          <i class="bi bi-arrow-right"></i>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const listHost = document.getElementById("letterList");
+  const countLabel = document.getElementById("letterCountLabel");
+  const refreshButton = document.getElementById("letterRefreshButton");
+  const modalElement = document.getElementById("letterModal");
+  const modal = new bootstrap.Modal(modalElement);
+  const modalTitle = document.getElementById("letterModalTitle");
+  const modalFrom = document.getElementById("letterModalFrom");
+  const modalBody = document.getElementById("letterModalBody");
+  const modalImageWrap = document.getElementById("letterModalImageWrap");
+  const modalImage = document.getElementById("letterModalImage");
+  const returnLink = document.getElementById("letterReturnLink");
+  const archiveButton = document.getElementById("letterArchiveButton");
+  let currentLetterId = null;
+
+  function letterImage(letter) {
+    return letter.image_asset?.media_url || letter.sender_character?.thumbnail_asset?.media_url || letter.sender_character?.base_asset?.media_url || "";
+  }
+
+  function renderEmpty() {
+    listHost.innerHTML = `
+      <div class="empty-panel letter-empty">
+        <i class="bi bi-envelope-open"></i>
+        <div>
+          <strong>まだお手紙は届いていません。</strong>
+          <p>ライブチャットで印象的な会話が進むと、キャラクターからここに手紙が届きます。</p>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderLetters(letters) {
+    countLabel.textContent = `${letters.length} letters`;
+    if (!letters.length) {
+      renderEmpty();
+      return;
+    }
+    listHost.innerHTML = letters.map((letter) => {
+      const imageUrl = letterImage(letter);
+      const senderName = letter.sender_character?.name || "Character";
+      const isUnread = letter.status === "unread";
+      return `
+        <article class="letter-card ${isUnread ? "is-unread" : ""}" data-letter-id="${letter.id}">
+          <div class="letter-card-thumb">
+            ${imageUrl ? `<img src="${NovelUI.escape(imageUrl)}" alt="">` : `<i class="bi bi-envelope-heart"></i>`}
+          </div>
+          <div class="letter-card-copy">
+            <div class="letter-card-meta">
+              <span>${NovelUI.escape(senderName)}</span>
+              ${isUnread ? `<span class="letter-unread-badge">NEW</span>` : ""}
+            </div>
+            <h4>${NovelUI.escape(letter.subject || "あなたへ")}</h4>
+            <p>${NovelUI.escape(letter.summary || letter.trigger_reason || "キャラクターから手紙が届いています。")}</p>
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  async function loadLetters() {
+    const letters = await NovelUI.api("/api/v1/letters");
+    renderLetters(Array.isArray(letters) ? letters : []);
+  }
+
+  async function openLetter(letterId) {
+    currentLetterId = letterId;
+    const letter = await NovelUI.api(`/api/v1/letters/${letterId}`);
+    await NovelUI.api(`/api/v1/letters/${letterId}/read`, { method: "POST", body: {} });
+    const imageUrl = letterImage(letter);
+    modalTitle.textContent = letter.subject || "あなたへ";
+    modalFrom.textContent = `${letter.sender_character?.name || "Character"} から`;
+    modalBody.textContent = letter.body || "";
+    returnLink.href = letter.return_url || "#";
+    if (imageUrl) {
+      modalImage.src = imageUrl;
+      modalImageWrap.classList.remove("d-none");
+    } else {
+      modalImage.removeAttribute("src");
+      modalImageWrap.classList.add("d-none");
+    }
+    modal.show();
+    await loadLetters();
+    NovelUI.refreshLetterBadge?.();
+  }
+
+  listHost.addEventListener("click", (event) => {
+    const card = event.target.closest("[data-letter-id]");
+    if (!card) return;
+    openLetter(Number(card.dataset.letterId)).catch((error) => {
+      NovelUI.toast(error.message || "お手紙を開けませんでした。", "danger");
+    });
+  });
+
+  archiveButton.addEventListener("click", async () => {
+    if (!currentLetterId) return;
+    await NovelUI.api(`/api/v1/letters/${currentLetterId}`, { method: "DELETE" });
+    NovelUI.toast("お手紙を削除しました。");
+    modal.hide();
+    currentLetterId = null;
+    await loadLetters();
+    NovelUI.refreshLetterBadge?.();
+  });
+
+  refreshButton.addEventListener("click", () => {
+    loadLetters().catch((error) => {
+      NovelUI.toast(error.message || "お手紙の読み込みに失敗しました。", "danger");
+    });
+  });
+
+  loadLetters().catch((error) => {
+    NovelUI.toast(error.message || "お手紙の読み込みに失敗しました。", "danger");
+  });
+})();
+</script>
+{% endblock %}
