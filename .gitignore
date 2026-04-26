@@ -12,16 +12,25 @@ env/
 
 # Environment files
 .env
-.env.local
+.env.*
+!.env.example
+!.env.docker.example
 
 # Flask / SQLite runtime
 instance/
 *.db
 *.sqlite
 *.sqlite3
+flask_session/
 
 # App-generated files
 storage/
+
+# Logs / reports
+*.log
+.coverage
+htmlcov/
+coverage.xml
 
 # Migrations cache
 flask_migrations/__pycache__/

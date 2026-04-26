@@ -2,8 +2,8 @@
   const root = document.querySelector(".live-chat-shell[data-session-id]");
   if (!root) return;
 
-  const { LiveChatApi, LiveChatView, LiveChatGift, LiveChatActions, LiveChatShell } = window;
-  if (!LiveChatApi || !LiveChatView || !LiveChatGift || !LiveChatActions || !LiveChatShell) {
+  const { LiveChatApi, LiveChatView, LiveChatGift, LiveChatActions, LiveChatShell, LiveChatCostumeRoom } = window;
+  if (!LiveChatApi || !LiveChatView || !LiveChatGift || !LiveChatActions || !LiveChatShell || !LiveChatCostumeRoom) {
     throw new Error("LiveChat dependencies are not loaded");
   }
 
@@ -26,6 +26,7 @@
 
   let currentContext = null;
   let giftController = null;
+  let costumeRoomController = null;
   let composeVisible = true;
   let userDefaultImageSettings = {};
 
@@ -79,7 +80,7 @@
     shell.renderMessages(context.messages || [], context);
     shell.renderSelectedImage(context.selected_image, context);
     shell.renderImageGrid(context.images || []);
-    renderCostumeRoom(context);
+    costumeRoomController?.render(context);
     renderSceneChoices(context);
   }
 
@@ -95,9 +96,7 @@
       if (settings?.default_quality && imageForm.quality) {
         imageForm.quality.value = settings.default_quality;
       }
-      if (settings?.default_quality && costumeForm?.quality) {
-        costumeForm.quality.value = settings.default_quality;
-      }
+      costumeRoomController?.applySettings(settings);
       if (settings?.default_size && imageForm.size) {
         imageForm.size.value = settings.default_size;
       }
@@ -145,47 +144,6 @@
     }
   }
 
-  function renderCostumeRoom(context) {
-    const costumes = context.costumes || [];
-    const selectedCostume = context.selected_costume || costumes.find((item) => item.is_selected) || costumes[0] || null;
-    if (costumePreview) {
-      const mediaUrl = selectedCostume?.asset?.media_url;
-      costumePreview.innerHTML = mediaUrl
-        ? `
-          <button class="live-chat-costume-preview-button" type="button" data-costume-id="${selectedCostume.id}">
-            <img src="${mediaUrl}" alt="selected costume reference">
-            <span>現在の衣装基準</span>
-          </button>
-        `
-        : '<div class="empty-panel">衣装の基準画像がありません。</div>';
-    }
-    if (!costumeGrid) return;
-    if (!costumes.length) {
-      costumeGrid.innerHTML = '<div class="empty-panel">衣装候補がありません。</div>';
-      return;
-    }
-    costumeGrid.innerHTML = costumes.map((item) => {
-      const mediaUrl = item.asset?.media_url;
-      const label = item.image_type === "costume_initial" ? "初期衣装" : "衣装";
-      return `
-        <div class="live-chat-costume-card ${item.is_selected ? "selected" : ""}">
-          <button class="live-chat-costume-select" type="button" data-costume-id="${item.id}">
-            ${mediaUrl ? `<img src="${mediaUrl}" alt="${label}">` : "<span>No Image</span>"}
-            <span class="live-chat-costume-card-label">${item.is_selected ? "選択中" : label}</span>
-          </button>
-        </div>
-      `;
-    }).join("");
-  }
-
-  function setCostumeLoading(active) {
-    if (!generateCostumeButton) return;
-    generateCostumeButton.disabled = active;
-    generateCostumeButton.innerHTML = active
-      ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>衣装生成中...'
-      : "衣装を生成";
-  }
-
   function renderSceneChoices(context) {
     if (!sceneChoicePanel) return;
     sceneChoicePanel.classList.add("is-hidden");
@@ -216,6 +174,7 @@
           throw new Error("\u8d08\u308a\u7269\u753b\u50cf\u306e\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002");
         }
       } else {
+        shell.setImageLoading(true, "auto");
         const result = await LiveChatApi.postMessage(sessionId, {
           message_text: rawMessage || "\u8a71\u3092\u9032\u3081\u3066",
           auto_reply: true,
@@ -235,6 +194,7 @@
       NovelUI.toast(error.message || "\u30e1\u30c3\u30bb\u30fc\u30b8\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
     } finally {
       shell.setReplyLoading(false, currentContext);
+      shell.setImageLoading(false, "auto");
     }
   });
 
@@ -253,6 +213,17 @@
     onUploaded: loadContext,
   });
   giftController.bind();
+
+  costumeRoomController = LiveChatCostumeRoom.createCostumeRoomController({
+    api: LiveChatApi,
+    getSessionId: () => sessionId,
+    costumeForm,
+    costumeGrid,
+    costumePreview,
+    generateCostumeButton,
+    loadContext,
+  });
+  costumeRoomController.bind();
 
   LiveChatActions.bindImageActions({
     api: LiveChatApi,
@@ -274,46 +245,6 @@
   toggleComposeButton?.addEventListener("click", () => {
     setComposeVisible(!composeVisible);
   });
-
-  costumeForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const promptText = costumeForm.prompt_text.value.trim();
-    if (!promptText) {
-      NovelUI.toast("着替え指示を入力してください。", "warning");
-      return;
-    }
-    setCostumeLoading(true);
-    try {
-      await LiveChatApi.generateCostume(sessionId, {
-        prompt_text: promptText,
-        size: costumeForm.size.value,
-        quality: costumeForm.quality.value,
-      });
-      costumeForm.prompt_text.value = "";
-      await loadContext();
-      NovelUI.toast("衣装を生成し、基準画像に設定しました。");
-    } catch (error) {
-      NovelUI.toast(error.message || "衣装生成に失敗しました。", "danger");
-    } finally {
-      setCostumeLoading(false);
-    }
-  });
-
-  const handleCostumeSelect = async (event) => {
-    if (event.target.closest("[data-delete-costume-id]")) return;
-    const button = event.target.closest("[data-costume-id]");
-    if (!button) return;
-    try {
-      await LiveChatApi.selectCostume(sessionId, button.dataset.costumeId);
-      await loadContext();
-      NovelUI.toast("衣装の基準画像を変更しました。");
-    } catch (error) {
-      NovelUI.toast(error.message || "衣装の選択に失敗しました。", "danger");
-    }
-  };
-
-  costumeGrid?.addEventListener("click", handleCostumeSelect);
-  costumePreview?.addEventListener("click", handleCostumeSelect);
 
   document.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-scene-choice-id]");

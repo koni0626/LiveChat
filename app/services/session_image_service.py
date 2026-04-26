@@ -11,6 +11,9 @@ class SessionImageService:
     def list_costumes(self, session_id: int):
         return self._repo.list_costumes_by_session(session_id)
 
+    def list_costume_library(self, session_id: int):
+        return self._repo.list_costumes_for_session_library(session_id)
+
     def get_selected_costume(self, session_id: int):
         return self._repo.get_selected_costume(session_id)
 
@@ -19,6 +22,9 @@ class SessionImageService:
 
     def create_session_image(self, session_id: int, payload: dict):
         return self._repo.create_for_session(session_id, payload)
+
+    def create_costume_link_for_session(self, session_id: int, source_image_id: int):
+        return self._repo.create_costume_link_for_session(session_id, source_image_id)
 
     def select_session_image(self, session_image_id: int):
         return self._repo.select(session_image_id)

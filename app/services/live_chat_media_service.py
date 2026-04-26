@@ -95,6 +95,9 @@ class LiveChatMediaService:
             "id": row.id,
             "session_id": row.session_id,
             "asset_id": row.asset_id,
+            "owner_user_id": getattr(row, "owner_user_id", None),
+            "character_id": getattr(row, "character_id", None),
+            "linked_from_image_id": getattr(row, "linked_from_image_id", None),
             "image_type": row.image_type,
             "prompt_text": row.prompt_text,
             "state_json": self._load_json(row.state_json),
@@ -104,6 +107,21 @@ class LiveChatMediaService:
             "is_reference": bool(getattr(row, "is_reference", 0)),
             "created_at": row.created_at.isoformat() if getattr(row, "created_at", None) else None,
             "asset": self._serialize_asset(asset),
+        }
+
+    def _resolve_costume_library_keys(self, session_id: int, context: dict | None = None):
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return {}
+        character = None
+        if context:
+            character = self._resolve_target_character(context)
+        if not character:
+            characters = self._select_characters(session_id)
+            character = characters[0] if characters else None
+        return {
+            "owner_user_id": session.owner_user_id,
+            "character_id": character.get("id") if character else None,
         }
 
     def collect_session_reference_assets(self, session_id: int, active_characters: list[dict], *, limit: int = 1):
@@ -136,6 +154,7 @@ class LiveChatMediaService:
             session_id,
             {
                 "asset_id": asset_id,
+                **self._resolve_costume_library_keys(session_id),
                 "image_type": "costume_initial",
                 "prompt_text": "キャラクター設定の基準画像",
                 "state_json": {"source": "character_base_asset", "character_id": character.get("id")},
@@ -327,13 +346,41 @@ class LiveChatMediaService:
 
     def list_costumes(self, session_id: int):
         self.ensure_initial_costume(session_id)
-        return [self.serialize_session_image(item) for item in self._session_image_service.list_costumes(session_id)]
+        local_rows = self._session_image_service.list_costumes(session_id)
+        selected_local = next((item for item in local_rows if item.is_selected), None)
+        library_rows = self._session_image_service.list_costume_library(session_id)
+        selected_asset_id = selected_local.asset_id if selected_local else None
+        seen_asset_ids = set()
+        serialized = []
+        for item in library_rows:
+            if item.asset_id in seen_asset_ids:
+                continue
+            seen_asset_ids.add(item.asset_id)
+            data = self.serialize_session_image(item)
+            if item.session_id != session_id:
+                data["is_shared"] = True
+                data["is_selected"] = bool(selected_asset_id and item.asset_id == selected_asset_id)
+            else:
+                data["is_shared"] = bool(getattr(item, "linked_from_image_id", None))
+            serialized.append(data)
+        return serialized
 
     def select_costume(self, session_id: int, session_image_id: int):
         row = self._session_image_service.get_session_image(session_image_id)
-        if not row or row.session_id != session_id or row.image_type not in {"costume_initial", "costume_reference"}:
+        if not row or row.image_type not in {"costume_initial", "costume_reference"}:
             return None
-        selected = self._session_image_service.select_session_image(session_image_id)
+        if row.session_id != session_id:
+            keys = self._resolve_costume_library_keys(session_id)
+            if (
+                row.image_type != "costume_reference"
+                or row.owner_user_id != keys.get("owner_user_id")
+                or row.character_id != keys.get("character_id")
+            ):
+                return None
+            row = self._session_image_service.create_costume_link_for_session(session_id, row.id)
+            if not row:
+                return None
+        selected = self._session_image_service.select_session_image(row.id)
         return self.serialize_session_image(selected)
 
     def register_uploaded_costume(self, session_id: int, asset_id: int, payload: dict | None = None):
@@ -345,6 +392,7 @@ class LiveChatMediaService:
             session_id,
             {
                 "asset_id": asset_id,
+                **self._resolve_costume_library_keys(session_id),
                 "image_type": "costume_reference",
                 "prompt_text": payload.get("prompt_text"),
                 "state_json": {
@@ -507,6 +555,7 @@ class LiveChatMediaService:
             session_id,
             {
                 "asset_id": asset.id,
+                **self._resolve_costume_library_keys(session_id, context),
                 "image_type": "costume_reference",
                 "prompt_text": prompt,
                 "state_json": {

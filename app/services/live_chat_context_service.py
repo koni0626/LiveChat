@@ -111,11 +111,11 @@ class LiveChatContextService:
         state = self._session_state_service.get_state(session_id)
         messages = self._chat_message_service.list_messages(session_id)
         images = self._session_image_service.list_session_images(session_id)
-        costumes = self._session_image_service.list_costumes(session_id)
-        if not costumes:
+        local_costumes = self._session_image_service.list_costumes(session_id)
+        if not local_costumes:
             self._media_service.ensure_initial_costume(session_id)
             images = self._session_image_service.list_session_images(session_id)
-            costumes = self._session_image_service.list_costumes(session_id)
+        costumes = self._media_service.list_costumes(session_id)
         gift_events = self._session_gift_event_service.list_gift_events(session_id)
         costume_types = {"costume_initial", "costume_reference"}
         scene_images = [item for item in images if item.image_type not in costume_types]
@@ -163,8 +163,8 @@ class LiveChatContextService:
             "state": self._serializer.serialize_state(state),
             "characters": characters,
             "images": [self._media_service.serialize_session_image(item) for item in scene_images],
-            "costumes": [self._media_service.serialize_session_image(item) for item in costumes],
-            "selected_costume": self._media_service.serialize_session_image(next((item for item in costumes if item.is_selected), None)),
+            "costumes": costumes,
+            "selected_costume": next((item for item in costumes if item.get("is_selected")), None),
             "gift_events": [self._gift_event_serializer(item) for item in gift_events],
             "selected_image": self._media_service.serialize_session_image(selected_image) if selected_image else None,
         }

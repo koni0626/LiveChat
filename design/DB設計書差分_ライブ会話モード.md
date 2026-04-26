@@ -2,7 +2,7 @@
 
 ## 1. 目的
 
-本書は、既存の [DB設計書.md](C:/Users/konishi/PycharmProjects/NovelCreatetor/design/DB設計書.md) をベースに、ライブ会話モードを実現するために必要な差分を整理する。
+本書は、既存の [DB設計書.md](./DB設計書.md) をベースに、ライブ会話モードを実現するために必要な差分を整理する。
 
 ここでは以下を明確にする。
 

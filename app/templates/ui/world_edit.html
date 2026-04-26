@@ -69,6 +69,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/markdown_editor.js') }}"></script>
 <script>
 (() => {
   const projectId = Number({{ project_id }});
@@ -77,12 +78,10 @@
   const draftButton = document.getElementById("worldAiDraft");
   const modalElement = document.getElementById("markdownEditorModal");
   document.body.appendChild(modalElement);
-  const modal = new bootstrap.Modal(modalElement);
   const modalTitle = document.getElementById("markdownEditorTitle");
   const modalTextarea = document.getElementById("markdownEditorTextarea");
   const modalPreview = document.getElementById("markdownEditorPreview");
   const modalApplyButton = document.getElementById("markdownEditorApply");
-  let editingFieldName = "";
 
   const markdownFields = [
     { name: "time_period", label: "時代背景", hint: "いつの時代か、何が起きているか", placeholder: "## 時代\n- \n\n## 現在起きていること\n- " },
@@ -93,104 +92,17 @@
     { name: "forbidden_settings", label: "禁止設定", hint: "出してはいけない設定、矛盾させたくない設定", placeholder: "- 出してはいけない設定\n- 矛盾させたくない設定\n- キャラクターに言わせたくないこと" },
   ];
 
-  function escapeHtml(value) {
-    return NovelUI.escape(value ?? "");
-  }
-
-  function renderInlineMarkdown(text) {
-    return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  }
-
-  function markdownToHtml(markdown) {
-    const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
-    const html = [];
-    let inList = false;
-    function closeList() {
-      if (inList) {
-        html.push("</ul>");
-        inList = false;
-      }
-    }
-    for (const rawLine of lines) {
-      const trimmed = rawLine.trim();
-      if (!trimmed) {
-        closeList();
-        continue;
-      }
-      if (trimmed.startsWith("## ")) {
-        closeList();
-        html.push(`<h5>${renderInlineMarkdown(trimmed.slice(3))}</h5>`);
-      } else if (trimmed.startsWith("# ")) {
-        closeList();
-        html.push(`<h4>${renderInlineMarkdown(trimmed.slice(2))}</h4>`);
-      } else if (trimmed.startsWith("> ")) {
-        closeList();
-        html.push(`<blockquote>${renderInlineMarkdown(trimmed.slice(2))}</blockquote>`);
-      } else if (trimmed.startsWith("- ")) {
-        if (!inList) {
-          html.push("<ul>");
-          inList = true;
-        }
-        html.push(`<li>${renderInlineMarkdown(trimmed.slice(2))}</li>`);
-      } else {
-        closeList();
-        html.push(`<p>${renderInlineMarkdown(trimmed)}</p>`);
-      }
-    }
-    closeList();
-    return html.join("") || `<p class="text-muted mb-0">まだ入力されていません。</p>`;
-  }
-
-  function fieldInput(name) {
-    return worldForm.querySelector(`[name="${name}"]`);
-  }
-
-  function plainPreview(value) {
-    const text = String(value || "").replace(/[#>*`_-]/g, "").replace(/\s+/g, " ").trim();
-    return text ? text.slice(0, 140) + (text.length > 140 ? "..." : "") : "まだ入力されていません。";
-  }
-
-  function renderMarkdownCards() {
-    markdownGrid.innerHTML = markdownFields.map((field) => {
-      const value = fieldInput(field.name)?.value || "";
-      return `
-        <article class="markdown-summary-card" data-markdown-card="${field.name}">
-          <div class="markdown-summary-head">
-            <div>
-              <h4>${NovelUI.escape(field.label)}</h4>
-              <p>${NovelUI.escape(field.hint)}</p>
-            </div>
-            <button class="btn btn-sm btn-outline-light" type="button" data-edit-markdown="${field.name}">
-              <i class="bi bi-pencil-square"></i>
-              <span>編集</span>
-            </button>
-          </div>
-          <div class="markdown-summary-body">${NovelUI.escape(plainPreview(value))}</div>
-        </article>
-      `;
-    }).join("");
-  }
-
-  function openMarkdownEditor(fieldName) {
-    const field = markdownFields.find((item) => item.name === fieldName);
-    const input = fieldInput(fieldName);
-    if (!field || !input) return;
-    editingFieldName = fieldName;
-    modalTitle.textContent = field.label;
-    modalTextarea.placeholder = field.placeholder;
-    modalTextarea.value = input.value || "";
-    modalPreview.innerHTML = markdownToHtml(modalTextarea.value);
-    modal.show();
-    setTimeout(() => modalTextarea.focus(), 180);
-  }
-
-  function applyMarkdownEditor() {
-    const input = fieldInput(editingFieldName);
-    if (!input) return;
-    input.value = modalTextarea.value;
-    renderMarkdownCards();
-    modal.hide();
-  }
+  const markdownEditor = MarkdownEditor.create({
+    form: worldForm,
+    grid: markdownGrid,
+    fields: markdownFields,
+    modalElement,
+    modalTitle,
+    modalTextarea,
+    modalPreview,
+    modalApplyButton,
+    previewLength: 140,
+  });
 
   function formPayload() {
     return Object.fromEntries(new FormData(worldForm).entries());
@@ -212,7 +124,7 @@
       });
       if (!payload?.draft) throw new Error("AI仮入力の応答が不正です。");
       NovelUI.fillForm(worldForm, payload.draft);
-      renderMarkdownCards();
+      markdownEditor.renderCards();
       NovelUI.toast("世界観をAIで仮入力しました。内容を確認して保存してください。");
     } catch (error) {
       NovelUI.toast(error.message || "世界観のAI仮入力に失敗しました。", "danger");
@@ -226,15 +138,9 @@
     if (payload.world?.ui_fields) {
       NovelUI.fillForm(worldForm, payload.world.ui_fields);
     }
-    renderMarkdownCards();
+    markdownEditor.renderCards();
   }
 
-  markdownGrid.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-edit-markdown]");
-    if (button) openMarkdownEditor(button.dataset.editMarkdown);
-  });
-  modalTextarea.addEventListener("input", () => { modalPreview.innerHTML = markdownToHtml(modalTextarea.value); });
-  modalApplyButton.addEventListener("click", applyMarkdownEditor);
   draftButton.addEventListener("click", generateDraft);
 
   worldForm.addEventListener("submit", async (event) => {
@@ -248,7 +154,7 @@
     }
   });
 
-  renderMarkdownCards();
+  markdownEditor.renderCards();
   loadWorldContext().catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
 })();
 </script>

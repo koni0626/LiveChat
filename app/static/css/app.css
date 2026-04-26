@@ -1399,7 +1399,7 @@ body[data-screen="live-chat-rooms"] .live-chat-room-session-list .empty-panel {
 }
 
 .live-chat-stage-frame.is-loading::after {
-  content: "画像を生成中...";
+  content: attr(data-loading-label);
   position: absolute;
   left: 0;
   right: 0;

@@ -208,10 +208,14 @@
 
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/live_chat_novel_view.js') }}"></script>
+<script src="{{ url_for('static', filename='js/live_chat_log_view.js') }}"></script>
+<script src="{{ url_for('static', filename='js/live_chat_image_view.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live_chat_view.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live_chat_api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live_chat_gift.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live_chat_actions.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live_chat_shell.js') }}"></script>
+<script src="{{ url_for('static', filename='js/live_chat_costume_room.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live_chat.js') }}"></script>
 {% endblock %}

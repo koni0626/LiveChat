@@ -58,10 +58,13 @@
 
     function setImageLoading(active, mode = "generate") {
       state.imageLoading = active;
+      const loadingLabel = mode === "regenerate"
+        ? "\u518d\u751f\u6210\u4e2d..."
+        : (mode === "auto" ? "\u5834\u9762\u3092\u751f\u6210\u4e2d..." : "\u753b\u50cf\u751f\u6210\u4e2d...");
       if (generateImageButton) {
         generateImageButton.disabled = active;
         generateImageButton.innerHTML = active
-          ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>\u753b\u50cf\u751f\u6210\u4e2d...'
+          ? `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>${loadingLabel}`
           : "\u753b\u50cf\u3092\u751f\u6210";
       }
       if (regenerateImageButton) {
@@ -73,6 +76,11 @@
       const frame = selectedImagePanel?.querySelector(".live-chat-stage-frame");
       if (frame) {
         frame.classList.toggle("is-loading", active);
+        if (active) {
+          frame.dataset.loadingLabel = loadingLabel;
+        } else {
+          delete frame.dataset.loadingLabel;
+        }
       }
     }
 
