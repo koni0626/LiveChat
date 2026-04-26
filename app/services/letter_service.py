@@ -355,7 +355,7 @@ NGルール: {character.get("ng_rules") or ""}
         result = self._image_ai_client.generate_image(
             prompt,
             size="1536x1024",
-            quality="low",
+            quality=current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium"),
             input_image_paths=reference_paths,
             input_fidelity="high" if reference_paths else None,
         )

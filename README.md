@@ -35,6 +35,7 @@ Main keys:
 OPENAI_API_KEY=sk-...
 TEXT_AI_MODEL=gpt-5.4-mini
 IMAGE_AI_MODEL=gpt-image-2
+IMAGE_DEFAULT_QUALITY=medium
 DATABASE_URL=sqlite:///instance/app.db
 STORAGE_ROOT=storage
 LETTER_COOLDOWN_MINUTES=360
