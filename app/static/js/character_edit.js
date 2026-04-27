@@ -15,6 +15,10 @@
   const baseAssetPreview = document.getElementById("baseAssetPreview");
   const baseAssetDropzone = document.getElementById("baseAssetDropzone");
   const baseAssetFileInput = baseAssetUploadForm.querySelector('[name="file"]');
+  const thumbnailAssetUploadForm = document.getElementById("thumbnailAssetUploadForm");
+  const thumbnailAssetPreview = document.getElementById("thumbnailAssetPreview");
+  const thumbnailAssetDropzone = document.getElementById("thumbnailAssetDropzone");
+  const thumbnailAssetFileInput = thumbnailAssetUploadForm?.querySelector('[name="file"]');
   const markdownGrid = document.getElementById("characterMarkdownGrid");
   const modalElement = document.getElementById("markdownEditorModal");
   document.body.appendChild(modalElement);
@@ -57,7 +61,33 @@
   function characterPayload() {
     const body = Object.fromEntries(new FormData(form).entries());
     body.base_asset_id = body.base_asset_id ? Number(body.base_asset_id) : null;
+    body.thumbnail_asset_id = body.thumbnail_asset_id ? Number(body.thumbnail_asset_id) : null;
     return body;
+  }
+
+  function renderThumbnailAsset(asset) {
+    if (!thumbnailAssetPreview) return;
+    if (!asset?.media_url) {
+      thumbnailAssetPreview.innerHTML = `
+        <div class="character-thumbnail-empty">
+          <div class="base-asset-empty-icon"><i class="bi bi-person-square"></i></div>
+          <div>
+            <div class="base-asset-empty-title">顔アイコンはまだ登録されていません</div>
+            <div class="base-asset-empty-text">未登録の場合は、基準画像から作られたサムネイルまたは基準画像を表示します。</div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    thumbnailAssetPreview.innerHTML = `
+      <div class="character-thumbnail-preview">
+        <img src="${asset.media_url}" alt="${NovelUI.escape(asset.file_name || "character icon")}">
+        <div>
+          <div class="base-asset-empty-title">現在の顔アイコン</div>
+          <div class="small text-secondary">${NovelUI.escape(asset.file_name || "")}</div>
+        </div>
+      </div>
+    `;
   }
 
   function renderBaseAsset(asset) {
@@ -92,6 +122,7 @@
     }
     NovelUI.fillForm(form, character);
     renderBaseAsset(character.base_asset);
+    renderThumbnailAsset(character.thumbnail_asset);
     markdownEditor.renderCards();
     if (!silent) NovelUI.toast("キャラクターを保存しました。");
     return character;
@@ -99,6 +130,10 @@
 
   function setDropzoneActive(active) {
     baseAssetDropzone.classList.toggle("is-dragover", active);
+  }
+
+  function setThumbnailDropzoneActive(active) {
+    thumbnailAssetDropzone?.classList.toggle("is-dragover", active);
   }
 
   function ensureImageFile(file) {
@@ -139,6 +174,37 @@
     }
   }
 
+  async function uploadThumbnailAsset(file) {
+    if (!ensureImageFile(file)) return;
+    const character = currentCharacterId ? null : await saveCharacter({ silent: true });
+    const targetCharacterId = currentCharacterId || character?.id;
+    if (!targetCharacterId) return;
+    const uploadPayload = new FormData();
+    uploadPayload.append("file", file);
+    uploadPayload.append("project_id", String(projectId));
+    uploadPayload.append("asset_type", "character_icon");
+    try {
+      const response = await fetch("/api/v1/assets/upload", { method: "POST", body: uploadPayload, credentials: "same-origin" });
+      const payload = await response.json().catch(() => ({}));
+      const asset = payload?.data;
+      if (!response.ok || !asset) throw new Error(payload?.message || `HTTP ${response.status}`);
+      form.querySelector('[name="thumbnail_asset_id"]').value = asset.id;
+      const updated = await NovelUI.api(`/api/v1/characters/${targetCharacterId}`, { method: "PATCH", body: { thumbnail_asset_id: asset.id } });
+      NovelUI.fillForm(form, updated);
+      renderThumbnailAsset(updated.thumbnail_asset || asset);
+      renderBaseAsset(updated.base_asset);
+      if (thumbnailAssetFileInput) thumbnailAssetFileInput.value = "";
+      NovelUI.toast("顔アイコンをアップロードしました。");
+      if (!initialCharacterId && currentCharacterId) {
+        history.replaceState(null, "", `/projects/${projectId}/characters/${currentCharacterId}/edit`);
+      }
+    } catch (error) {
+      NovelUI.toast(error.message || "顔アイコンのアップロードに失敗しました。", "danger");
+    } finally {
+      setThumbnailDropzoneActive(false);
+    }
+  }
+
   function setGenerating(active) {
     generateButton.disabled = active;
     generateButton.innerHTML = active
@@ -154,6 +220,7 @@
       const generated = await NovelUI.api(`/api/v1/characters/${character.id}/base-image/generate`, { method: "POST", body });
       NovelUI.fillForm(form, generated);
       renderBaseAsset(generated.base_asset);
+      renderThumbnailAsset(generated.thumbnail_asset);
       markdownEditor.renderCards();
       NovelUI.toast("基本情報から全身像を生成し、基準画像に設定しました。");
       if (!initialCharacterId) {
@@ -192,11 +259,13 @@
     markdownEditor.renderCards();
     if (!currentCharacterId) {
       renderBaseAsset(null);
+      renderThumbnailAsset(null);
       return;
     }
     const character = await NovelUI.api(`/api/v1/characters/${currentCharacterId}`);
     NovelUI.fillForm(form, character);
     renderBaseAsset(character.base_asset);
+    renderThumbnailAsset(character.thumbnail_asset);
     markdownEditor.renderCards();
   }
 
@@ -232,6 +301,39 @@
     });
   }
 
+  function bindThumbnailDropzone() {
+    if (!thumbnailAssetDropzone || !thumbnailAssetFileInput) return;
+    thumbnailAssetDropzone.addEventListener("click", (event) => {
+      if (event.target !== thumbnailAssetFileInput) thumbnailAssetFileInput.click();
+    });
+    thumbnailAssetDropzone.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        thumbnailAssetFileInput.click();
+      }
+    });
+    ["dragenter", "dragover"].forEach((eventName) => {
+      thumbnailAssetDropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setThumbnailDropzoneActive(true);
+      });
+    });
+    ["dragleave", "dragend"].forEach((eventName) => {
+      thumbnailAssetDropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!thumbnailAssetDropzone.contains(event.relatedTarget)) setThumbnailDropzoneActive(false);
+      });
+    });
+    thumbnailAssetDropzone.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const [file] = event.dataTransfer?.files || [];
+      await uploadThumbnailAsset(file);
+    });
+  }
+
   function bindEvents() {
     if (canManageProject) {
       deleteButton?.addEventListener("click", deleteCharacter);
@@ -259,6 +361,11 @@
       await uploadBaseAsset(baseAssetFileInput.files[0]);
     });
 
+    thumbnailAssetUploadForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await uploadThumbnailAsset(thumbnailAssetFileInput?.files?.[0]);
+    });
+
     document.getElementById("characterAiAssist").addEventListener("click", () => {
       const button = document.getElementById("characterAiAssist");
       button.disabled = true;
@@ -282,6 +389,7 @@
     });
 
     bindDropzone();
+    bindThumbnailDropzone();
   }
 
   bindEvents();

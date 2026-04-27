@@ -283,8 +283,8 @@ body::before {
 .world-card-image,
 .world-signboard-image {
   width: 100%;
-  aspect-ratio: 3 / 2;
-  object-fit: cover;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
   border-radius: 1rem;
   border: 1px solid rgba(84, 177, 255, 0.18);
   background:
@@ -297,7 +297,7 @@ body::before {
   display: grid;
   place-items: center;
   min-height: 150px;
-  aspect-ratio: 3 / 2;
+  aspect-ratio: 16 / 9;
   border-radius: 1rem;
   border: 1px dashed rgba(84, 177, 255, 0.32);
   background:
@@ -1144,44 +1144,6 @@ body::before {
   min-width: 0;
   display: grid;
   gap: 0.45rem;
-}
-
-.live-chat-room-objective {
-  display: grid;
-  gap: 0.55rem;
-  margin-top: 0.25rem;
-}
-
-.live-chat-room-objective-toggle {
-  width: fit-content;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.42rem 0.72rem;
-  border: 1px solid rgba(84, 177, 255, 0.28);
-  border-radius: 999px;
-  background: rgba(6, 18, 34, 0.68);
-  color: #b9eaff;
-  font-size: 0.78rem;
-  font-weight: 800;
-}
-
-.live-chat-room-objective-toggle[aria-expanded="true"] i {
-  transform: rotate(180deg);
-}
-
-.live-chat-room-objective-toggle i {
-  transition: transform 0.16s ease;
-}
-
-.live-chat-room-objective-body {
-  min-height: 0;
-  padding: 0.85rem 0.95rem;
-  font-size: 0.88rem;
-}
-
-.live-chat-room-objective-body > :last-child {
-  margin-bottom: 0;
 }
 
 .live-chat-room-character-thumb {
@@ -3048,7 +3010,7 @@ body[data-screen="character-list"] .character-list-card.is-clickable {
 
 body[data-screen="character-list"] .character-card-image {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   object-fit: cover;
   object-position: center;
   border-radius: 1rem;
@@ -3061,6 +3023,35 @@ body[data-screen="character-list"] .character-card-placeholder {
   place-items: center;
   gap: 0.35rem;
   color: rgba(223, 246, 255, 0.72);
+}
+
+.character-thumbnail-preview,
+.character-thumbnail-empty {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
+  border: 1px solid rgba(84, 177, 255, 0.2);
+  border-radius: 1.2rem;
+  background:
+    radial-gradient(circle at top right, rgba(0, 245, 212, 0.14), transparent 38%),
+    rgba(6, 18, 34, 0.72);
+}
+
+.character-thumbnail-preview img {
+  width: 6.5rem;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 1.15rem;
+  border: 1px solid rgba(0, 245, 212, 0.32);
+  background: rgba(3, 8, 18, 0.8);
+}
+
+.character-thumbnail-empty .base-asset-empty-icon {
+  width: 6.5rem;
+  height: 6.5rem;
+  border-radius: 1.15rem;
 }
 
 body[data-screen="character-list"] .character-card-placeholder i {

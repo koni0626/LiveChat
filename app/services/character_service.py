@@ -10,6 +10,7 @@ from ..clients.text_ai_client import TextAIClient
 from ..repositories.character_repository import CharacterRepository
 from ..utils import json_util
 from .character_thumbnail_service import CharacterThumbnailService
+from .asset_service import AssetService
 from .world_service import WorldService
 
 
@@ -18,12 +19,14 @@ class CharacterService:
         self,
         repository: CharacterRepository | None = None,
         thumbnail_service: CharacterThumbnailService | None = None,
+        asset_service: AssetService | None = None,
         image_ai_client: ImageAIClient | None = None,
         text_ai_client: TextAIClient | None = None,
         world_service: WorldService | None = None,
     ):
         self._repo = repository or CharacterRepository()
         self._thumbnail_service = thumbnail_service or CharacterThumbnailService()
+        self._asset_service = asset_service or AssetService()
         self._image_ai_client = image_ai_client or ImageAIClient()
         self._text_ai_client = text_ai_client or TextAIClient()
         self._world_service = world_service or WorldService()
@@ -33,7 +36,7 @@ class CharacterService:
 
     def create_character(self, project_id: int, payload: dict):
         character = self._repo.create(project_id, payload)
-        if payload.get("base_asset_id"):
+        if payload.get("base_asset_id") and not payload.get("thumbnail_asset_id"):
             self._refresh_thumbnail(character)
         return character
 
@@ -42,7 +45,7 @@ class CharacterService:
 
     def update_character(self, character_id: int, payload: dict):
         character = self._repo.update(character_id, payload)
-        if character and "base_asset_id" in payload:
+        if character and "base_asset_id" in payload and self._can_refresh_thumbnail(character):
             self._refresh_thumbnail(character)
         return character
 
@@ -102,7 +105,8 @@ class CharacterService:
         if resolved_art_style:
             update_payload["art_style"] = resolved_art_style
         character = self._repo.update(character.id, update_payload)
-        self._refresh_thumbnail(character)
+        if self._can_refresh_thumbnail(character):
+            self._refresh_thumbnail(character)
         return self.get_character(character.id)
 
     def generate_character_draft(self, project_id: int, payload: dict | None = None) -> dict:
@@ -128,6 +132,13 @@ class CharacterService:
         if thumbnail:
             character = self._repo.update(character.id, {"thumbnail_asset_id": thumbnail.id})
         return character
+
+    def _can_refresh_thumbnail(self, character) -> bool:
+        thumbnail_asset_id = getattr(character, "thumbnail_asset_id", None)
+        if not thumbnail_asset_id:
+            return True
+        thumbnail = self._asset_service.get_asset(thumbnail_asset_id)
+        return getattr(thumbnail, "asset_type", None) == "character_thumbnail"
 
     def _build_base_image_prompt(self, character, payload: dict) -> str:
         art_style = str(payload.get("art_style") or getattr(character, "art_style", None) or "").strip()
