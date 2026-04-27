@@ -300,6 +300,8 @@ def build_opening_prompt(context: dict) -> str:
         summary = _build_character_memory_summary(_character_profile(character))
         if summary:
             lines.append(f"  memory={summary}")
+        if character.get("feed_profile_text"):
+            lines.append(f"  public_feed_tendency={character.get('feed_profile_text')}")
     return "\n".join(lines)
 
 
@@ -457,6 +459,8 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         summary = _build_character_memory_summary(_flatten_character_memory(character, character_memories))
         if summary:
             lines.append(f"  memory={summary}")
+        if character.get("feed_profile_text"):
+            lines.append(f"  public_feed_tendency={character.get('feed_profile_text')}")
     lines.append("If the player mentions something a character likes, remembers, or responds well to, let that improve the reaction.")
     lines.append("If the player touches a taboo, dislike, or romantic boundary, cool the reaction and let it affect the tone.")
     lines.append(
@@ -1075,6 +1079,8 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
         summary = _build_character_memory_summary(_flatten_character_memory(character, session_memory_map))
         if summary:
             lines.append(f"  memory={summary}")
+        if character.get("feed_profile_text"):
+            lines.append(f"  public_feed_tendency={character.get('feed_profile_text')}")
     lines.append("Recent conversation:")
     for message in context["messages"][-8:]:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")

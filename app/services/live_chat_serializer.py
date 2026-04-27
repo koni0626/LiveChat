@@ -5,6 +5,7 @@ import os
 from flask import current_app
 
 from ..utils import json_util
+from ..repositories.feed_repository import FeedRepository
 from .asset_service import AssetService
 
 
@@ -13,6 +14,7 @@ class LiveChatSerializer:
 
     def __init__(self, *, asset_service: AssetService):
         self._asset_service = asset_service
+        self._feed_repository = FeedRepository()
 
     def load_json(self, value):
         if value is None:
@@ -65,6 +67,7 @@ class LiveChatSerializer:
         memory_profile = self.load_json(getattr(character, "memory_profile_json", None)) or {}
         if not isinstance(memory_profile, dict):
             memory_profile = {}
+        feed_profile = self._feed_repository.get_profile(character.id)
         return {
             "id": character.id,
             "name": character.name,
@@ -81,6 +84,7 @@ class LiveChatSerializer:
             "memory_notes": getattr(character, "memory_notes", None),
             "favorite_items": self.load_json(getattr(character, "favorite_items_json", None)) or [],
             "memory_profile": memory_profile,
+            "feed_profile_text": getattr(feed_profile, "profile_text", None) if feed_profile else None,
             "base_asset": self.serialize_asset(base_asset),
         }
 

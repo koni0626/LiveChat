@@ -35,6 +35,7 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
     can_manage_project = authorization_service.can_manage_project(current_user, current_project)
     global_nav_links = [
         {"label": "メール", "icon": "bi-envelope-heart", "href": url_for("ui.letters_page")},
+        {"label": "Feed", "icon": "bi-broadcast", "href": url_for("ui.feed_page")},
         {"label": "ダッシュボード", "icon": "bi-house-door", "href": url_for("ui.dashboard_page")},
         {"label": "ワールド", "icon": "bi-collection", "href": url_for("ui.project_list_page")},
     ]
@@ -84,6 +85,11 @@ def project_list_page():
 @ui_bp.route("/letters", methods=["GET"])
 def letters_page():
     return _render("ui/letters.html", title="メール", screen_id="letters")
+
+
+@ui_bp.route("/feed", methods=["GET"])
+def feed_page():
+    return _render("ui/feed.html", title="Feed", screen_id="feed")
 
 
 @ui_bp.route("/projects/new", methods=["GET"])
