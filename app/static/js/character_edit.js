@@ -4,6 +4,7 @@
 
   const projectId = Number(root.dataset.projectId || document.body.dataset.projectId);
   const initialCharacterId = root.dataset.characterId ? Number(root.dataset.characterId) : null;
+  const canManageProject = root.dataset.canManageProject !== "false";
   let currentCharacterId = initialCharacterId;
 
   const form = document.getElementById("characterForm");
@@ -166,6 +167,7 @@
   }
 
   async function deleteCharacter() {
+    if (!canManageProject) return;
     if (!currentCharacterId || !deleteButton) return;
     const name = form.querySelector('[name="name"]')?.value || "このキャラクター";
     if (!confirm(`${name}を削除しますか？削除後は一覧に表示されません。`)) {
@@ -185,7 +187,7 @@
 
   async function loadCharacter() {
     if (deleteButton) {
-      deleteButton.hidden = !currentCharacterId;
+      deleteButton.hidden = !canManageProject || !currentCharacterId;
     }
     markdownEditor.renderCards();
     if (!currentCharacterId) {
@@ -231,7 +233,9 @@
   }
 
   function bindEvents() {
-    deleteButton?.addEventListener("click", deleteCharacter);
+    if (canManageProject) {
+      deleteButton?.addEventListener("click", deleteCharacter);
+    }
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();

@@ -1,138 +1,143 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-grid">
-  <div class="toolbar-panel">
+  <section class="toolbar-panel">
     <form class="row g-3 align-items-end" id="characterSearchForm">
-      <div class="col-md-8">
+      <div class="{{ 'col-md-8' if can_manage_project else 'col-md-10' }}">
         <label class="form-label" for="characterSearchInput">キャラクター検索</label>
-        <input class="form-control" id="characterSearchInput" name="search" placeholder="名前、あだ名、見た目で検索">
+        <input class="form-control" id="characterSearchInput" name="search" placeholder="名前、あだ名、外見で検索">
       </div>
-      <div class="col-md-4 d-flex gap-2">
+      <div class="{{ 'col-md-4' if can_manage_project else 'col-md-2' }} d-flex gap-2">
         <button class="btn btn-dark w-100" type="submit">検索</button>
+        {% if can_manage_project %}
         <a class="btn btn-sunrise w-100" href="/projects/{{ project_id }}/characters/new">追加</a>
+        {% endif %}
       </div>
     </form>
-  </div>
+  </section>
 
-  <section class="panel-card">
-    <div class="panel-head"><h3>キャラクター一覧</h3></div>
+  <section class="panel-card span-12">
+    <div class="panel-head">
+      <div>
+        <h3>キャラクター一覧</h3>
+        <p class="section-copy mb-0">ワールドで会話できるキャラクターを確認できます。</p>
+      </div>
+    </div>
     <div class="project-card-grid" id="characterGrid"></div>
   </section>
 </section>
 {% endblock %}
+
 {% block scripts %}
 <script>
 (() => {
   const projectId = Number({{ project_id }});
+  const canManageProject = {{ "true" if can_manage_project else "false" }};
   const form = document.getElementById("characterSearchForm");
-  const host = document.getElementById("characterGrid");
+  const grid = document.getElementById("characterGrid");
 
-  function renderThumbnail(character) {
-    const mediaUrl = character.thumbnail_asset?.media_url || character.base_asset?.media_url;
-    if (mediaUrl) {
-      return `<img class="character-thumb-image" src="${mediaUrl}" alt="${NovelUI.escape(character.name || "character")}">`;
-    }
-    return `<div class="character-thumb-placeholder"><i class="bi bi-person"></i></div>`;
+  function escapeText(value) {
+    return NovelUI.escape(value || "");
   }
 
-  async function deleteCharacter(characterId, characterName, button) {
-    const label = characterName || "このキャラクター";
-    if (!confirm(`${label}を削除しますか？削除後は一覧に表示されません。`)) {
-      return;
+  function renderThumbnail(character) {
+    const url = character.thumbnail_asset?.media_url || character.base_asset?.media_url;
+    if (!url) {
+      return `
+        <div class="character-card-image character-card-placeholder">
+          <i class="bi bi-person-bounding-box"></i>
+          <span>画像なし</span>
+        </div>
+      `;
     }
+    return `<img class="character-card-image" src="${escapeText(url)}" alt="${escapeText(character.name)}">`;
+  }
 
-    button.disabled = true;
-    try {
-      await NovelUI.api(`/api/v1/characters/${characterId}`, { method: "DELETE" });
-      NovelUI.toast("キャラクターを削除しました。");
-      await loadCharacters();
-    } catch (error) {
-      button.disabled = false;
-      NovelUI.toast(error.message || "キャラクターの削除に失敗しました。", "danger");
-    }
+  function renderCharacter(character) {
+    const nickname = character.nickname ? `<span class="character-role-badge">${escapeText(character.nickname)}</span>` : "";
+    const action = canManageProject
+      ? `<button class="btn btn-sm btn-outline-danger character-delete-button" type="button" data-character-id="${character.id}">削除</button>`
+      : "";
+    const cardClass = canManageProject ? "project-card character-list-card is-clickable" : "project-card character-list-card";
+    const clickableAttrs = canManageProject
+      ? `tabindex="0" role="button" aria-label="${escapeText(character.name)}を編集"`
+      : "";
+
+    return `
+      <article class="${cardClass}" data-character-id="${character.id}" ${clickableAttrs}>
+        ${renderThumbnail(character)}
+        <div class="vstack gap-2 flex-grow-1">
+          <div>${nickname}</div>
+          <h4 class="mb-0">${escapeText(character.name)}</h4>
+        </div>
+        ${action}
+      </article>
+    `;
+  }
+
+  function renderEmpty() {
+    grid.innerHTML = `
+      <div class="empty-panel span-12">
+        <div class="empty-panel-icon"><i class="bi bi-people"></i></div>
+        <div>
+          <h3>キャラクターはまだ登録されていません</h3>
+          <p>まずはワールドで話すキャラクターを追加してください。</p>
+        </div>
+      </div>
+    `;
   }
 
   async function loadCharacters() {
-    const params = new URLSearchParams();
-    const search = new FormData(form).get("search");
-    if (search) {
-      params.set("search", search);
-    }
-    const suffix = params.toString() ? `?${params.toString()}` : "";
-    const data = await NovelUI.api(`/api/v1/projects/${projectId}/characters${suffix}`);
-    const list = Array.isArray(data) ? data : [];
-
-    if (!list.length) {
-      host.innerHTML = `<div class="empty-panel">キャラクターはまだ登録されていません。</div>`;
+    const params = new URLSearchParams(new FormData(form));
+    const query = params.get("search") ? `?${params.toString()}` : "";
+    const characters = await NovelUI.api(`/api/v1/projects/${projectId}/characters${query}`);
+    if (!characters.length) {
+      renderEmpty();
       return;
     }
-
-    host.innerHTML = list.map((character) => `
-      <article class="project-card character-card" data-character-id="${character.id}" role="button" tabindex="0">
-        <div class="character-card-head">
-          <div class="character-thumb">
-            ${renderThumbnail(character)}
-          </div>
-          <div class="character-card-copy">
-            <div class="character-role-chip" title="${NovelUI.escape(character.nickname || "あだ名未設定")}">
-              ${NovelUI.escape(character.nickname || "あだ名未設定")}
-            </div>
-            <h4>${NovelUI.escape(character.name || "No Name")}</h4>
-          </div>
-        </div>
-        <div class="d-flex justify-content-end mt-3">
-          <button
-            class="btn btn-sm btn-outline-danger"
-            type="button"
-            data-character-delete-id="${character.id}"
-            data-character-name="${NovelUI.escape(character.name || "")}"
-          >
-            <i class="bi bi-trash"></i>
-            <span>削除</span>
-          </button>
-        </div>
-      </article>
-    `).join("");
+    grid.innerHTML = characters.map(renderCharacter).join("");
   }
 
-  host.addEventListener("click", async (event) => {
-    const deleteButton = event.target.closest("[data-character-delete-id]");
+  async function deleteCharacter(characterId) {
+    if (!canManageProject) return;
+    if (!confirm("このキャラクターを削除しますか？削除後は一覧に表示されません。")) {
+      return;
+    }
+    await NovelUI.api(`/api/v1/characters/${characterId}`, { method: "DELETE" });
+    NovelUI.toast("キャラクターを削除しました。");
+    await loadCharacters();
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    loadCharacters().catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
+  });
+
+  grid.addEventListener("click", (event) => {
+    const deleteButton = event.target.closest(".character-delete-button");
     if (deleteButton) {
-      event.preventDefault();
       event.stopPropagation();
-      await deleteCharacter(
-        Number(deleteButton.dataset.characterDeleteId),
-        deleteButton.dataset.characterName,
-        deleteButton
-      );
+      deleteCharacter(Number(deleteButton.dataset.characterId)).catch((error) => {
+        NovelUI.toast(error.message || "キャラクターの削除に失敗しました。", "danger");
+      });
       return;
     }
 
     const card = event.target.closest("[data-character-id]");
-    if (card) {
+    if (canManageProject && card) {
       location.href = `/projects/${projectId}/characters/${card.dataset.characterId}/edit`;
     }
   });
 
-  host.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    if (event.target.closest("[data-character-delete-id]")) return;
+  grid.addEventListener("keydown", (event) => {
+    if (!canManageProject || (event.key !== "Enter" && event.key !== " ")) return;
     const card = event.target.closest("[data-character-id]");
     if (!card) return;
     event.preventDefault();
     location.href = `/projects/${projectId}/characters/${card.dataset.characterId}/edit`;
   });
 
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    loadCharacters().catch((error) => {
-      NovelUI.toast(error.message || "キャラクター一覧の読み込みに失敗しました。", "danger");
-    });
-  });
-
-  loadCharacters().catch((error) => {
-    NovelUI.toast(error.message || "キャラクター一覧の読み込みに失敗しました。", "danger");
-  });
+  loadCharacters().catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
 })();
 </script>
 {% endblock %}

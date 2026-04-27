@@ -24,12 +24,24 @@
     </form>
   </div>
 
-  <section class="panel-card">
+  <section class="panel-card world-carousel-panel">
     <div class="panel-head">
       <h3>ワールド一覧</h3>
-      <span class="soft-code" id="projectCountLabel">0 items</span>
+      <div class="world-carousel-head-actions">
+        <span class="soft-code" id="projectCountLabel">0 items</span>
+        <div class="world-carousel-controls" aria-label="ワールドカルーセル操作">
+          <button class="world-carousel-button" type="button" id="worldCarouselPrev" aria-label="前のワールド">
+            <i class="bi bi-chevron-left"></i>
+          </button>
+          <button class="world-carousel-button" type="button" id="worldCarouselNext" aria-label="次のワールド">
+            <i class="bi bi-chevron-right"></i>
+          </button>
+        </div>
+      </div>
     </div>
-    <div class="project-card-grid" id="projectList"></div>
+    <div class="world-carousel-viewport" id="worldCarouselViewport">
+      <div class="world-carousel-track" id="projectList"></div>
+    </div>
   </section>
 </section>
 {% endblock %}
@@ -38,8 +50,11 @@
 (() => {
   const canManageWorlds = {{ "true" if current_user_role in ["superuser", "project_user"] else "false" }};
   const form = document.getElementById("projectSearchForm");
+  const viewport = document.getElementById("worldCarouselViewport");
   const host = document.getElementById("projectList");
   const countLabel = document.getElementById("projectCountLabel");
+  const prevButton = document.getElementById("worldCarouselPrev");
+  const nextButton = document.getElementById("worldCarouselNext");
 
   function statusLabel(status) {
     return status === "published" || status === "active" ? "公開" : "下書き";
@@ -51,6 +66,18 @@
       return `<img class="world-card-image" src="${mediaUrl}" alt="${NovelUI.escape(project.title || "ワールド看板")}">`;
     }
     return `<div class="world-card-placeholder"><i class="bi bi-image"></i><span>看板画像なし</span></div>`;
+  }
+
+  function updateCarouselButtons() {
+    const hasOverflow = viewport.scrollWidth > viewport.clientWidth + 4;
+    prevButton.disabled = !hasOverflow || viewport.scrollLeft <= 4;
+    nextButton.disabled = !hasOverflow || viewport.scrollLeft + viewport.clientWidth >= viewport.scrollWidth - 4;
+  }
+
+  function scrollCarousel(direction) {
+    const firstCard = host.querySelector(".project-card");
+    const cardWidth = firstCard ? firstCard.getBoundingClientRect().width : viewport.clientWidth * 0.8;
+    viewport.scrollBy({ left: direction * (cardWidth + 24), behavior: "smooth" });
   }
 
   async function loadProjects() {
@@ -66,14 +93,16 @@
     const data = await NovelUI.api(`/api/v1/projects${suffix}`);
     const list = Array.isArray(data) ? data : [];
     countLabel.textContent = `${list.length} items`;
+    viewport.scrollTo({ left: 0 });
 
     if (!list.length) {
-      host.innerHTML = `<div class="empty-panel">条件に合うワールドがありません。</div>`;
+      host.innerHTML = `<div class="empty-panel world-carousel-empty">条件に合うワールドがありません。</div>`;
+      updateCarouselButtons();
       return;
     }
 
     host.innerHTML = list.map((project) => `
-      <article class="project-card">
+      <article class="project-card world-carousel-card">
         ${renderWorldImage(project)}
         <div class="project-card-top">
           <span class="soft-code">${NovelUI.escape(statusLabel(project.status))}</span>
@@ -81,11 +110,12 @@
         <h4>${NovelUI.escape(project.title || "Untitled")}</h4>
         <p>${NovelUI.escape(project.summary || "説明はまだありません。")}</p>
         <div class="d-flex justify-content-between align-items-center mt-3">
-          <a class="btn btn-sm btn-dark" href="/projects/${project.id}/home">開く</a>
+          <a class="btn btn-sm btn-dark" href="/projects/${project.id}/live-chat">ルームへ</a>
           ${canManageWorlds ? `<button class="btn btn-sm btn-outline-danger" data-project-delete="${project.id}">削除</button>` : ""}
         </div>
       </article>
     `).join("");
+    requestAnimationFrame(updateCarouselButtons);
   }
 
   form.addEventListener("submit", (event) => {
@@ -111,6 +141,11 @@
       NovelUI.toast(error.message || "削除に失敗しました。", "danger");
     }
   });
+
+  prevButton.addEventListener("click", () => scrollCarousel(-1));
+  nextButton.addEventListener("click", () => scrollCarousel(1));
+  viewport.addEventListener("scroll", () => requestAnimationFrame(updateCarouselButtons));
+  window.addEventListener("resize", () => requestAnimationFrame(updateCarouselButtons));
 
   loadProjects().catch((error) => {
     NovelUI.toast(error.message || "ワールド一覧の読み込みに失敗しました。", "danger");

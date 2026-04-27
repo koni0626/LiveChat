@@ -3,20 +3,26 @@ from __future__ import annotations
 from flask import Blueprint, render_template, session, url_for
 
 from ...models import User
+from ...services.authorization_service import AuthorizationService
+from ...services.project_service import ProjectService
 
 
 ui_bp = Blueprint("ui", __name__)
+authorization_service = AuthorizationService()
+project_service = ProjectService()
 
 
 def _project_nav(project_id: int | None, current_user: User | None = None):
     if project_id is None:
         return []
+    project = project_service.get_project(project_id)
+    can_manage_project = authorization_service.can_manage_project(current_user, project)
     links = [
         {"label": "ホーム", "icon": "bi-grid-1x2", "href": url_for("ui.project_home_page", project_id=project_id)},
-        {"label": "世界観", "icon": "bi-globe2", "href": url_for("ui.world_page", project_id=project_id)},
-        {"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)},
     ]
-    if current_user and getattr(current_user, "role", "user") in {"superuser", "project_user"}:
+    if can_manage_project:
+        links.append({"label": "世界観", "icon": "bi-globe2", "href": url_for("ui.world_page", project_id=project_id)})
+        links.append({"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)})
         links.append({"label": "ルーム", "icon": "bi-door-open", "href": url_for("ui.live_chat_rooms_page", project_id=project_id)})
     links.append({"label": "ライブチャット", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)})
     return links
@@ -25,6 +31,8 @@ def _project_nav(project_id: int | None, current_user: User | None = None):
 def _render(template_name: str, *, title: str, screen_id: str, project_id: int | None = None, **context):
     user_id = session.get("user_id")
     current_user = User.query.get(user_id) if user_id else None
+    current_project = project_service.get_project(project_id) if project_id else None
+    can_manage_project = authorization_service.can_manage_project(current_user, current_project)
     global_nav_links = [
         {"label": "メール", "icon": "bi-envelope-heart", "href": url_for("ui.letters_page")},
         {"label": "ダッシュボード", "icon": "bi-house-door", "href": url_for("ui.dashboard_page")},
@@ -46,6 +54,7 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
         current_user_display_name=(getattr(current_user, "display_name", None) if current_user else None),
         current_user_email=(getattr(current_user, "email", None) if current_user else None),
         current_user_role=(getattr(current_user, "role", "user") if current_user else None),
+        can_manage_project=can_manage_project,
         project_nav_links=_project_nav(project_id, current_user),
         global_nav_links=global_nav_links,
         **context,

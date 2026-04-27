@@ -2781,6 +2781,138 @@ body[data-screen="world-edit"] .empty-panel {
   font-weight: 600;
 }
 
+body[data-screen="project-list"] .world-card-slider {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(280px, 360px);
+  grid-template-columns: none;
+  gap: 1rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.15rem 0.15rem 0.75rem;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 245, 212, 0.48) rgba(8, 17, 31, 0.7);
+}
+
+body[data-screen="project-list"] .world-card-slider::-webkit-scrollbar {
+  height: 0.7rem;
+}
+
+body[data-screen="project-list"] .world-card-slider::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(8, 17, 31, 0.7);
+}
+
+body[data-screen="project-list"] .world-card-slider::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(8, 17, 31, 0.7);
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(0, 245, 212, 0.72), rgba(189, 92, 255, 0.72));
+}
+
+body[data-screen="project-list"] .world-card-slider .project-card {
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+body[data-screen="project-list"] .world-card-slider .empty-panel {
+  width: min(720px, calc(100vw - 4rem));
+}
+
+@media (max-width: 768px) {
+  body[data-screen="project-list"] .world-card-slider {
+    grid-auto-columns: minmax(240px, 82vw);
+    padding-bottom: 0.9rem;
+  }
+}
+
+body[data-screen="project-list"] .world-carousel-panel {
+  overflow: hidden;
+}
+
+body[data-screen="project-list"] .world-carousel-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex: 0 0 auto;
+}
+
+body[data-screen="project-list"] .world-carousel-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+body[data-screen="project-list"] .world-carousel-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2.45rem;
+  height: 2.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(84, 177, 255, 0.26);
+  background:
+    linear-gradient(180deg, rgba(8, 17, 31, 0.92), rgba(8, 18, 35, 0.82)),
+    radial-gradient(circle at top, rgba(0, 245, 212, 0.12), transparent 40%);
+  color: #dff6ff;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+body[data-screen="project-list"] .world-carousel-button:hover:not(:disabled) {
+  border-color: rgba(0, 245, 212, 0.52);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+body[data-screen="project-list"] .world-carousel-button:disabled {
+  opacity: 0.34;
+  cursor: not-allowed;
+}
+
+body[data-screen="project-list"] .world-carousel-viewport {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.15rem 0.2rem 0.9rem;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+body[data-screen="project-list"] .world-carousel-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+body[data-screen="project-list"] .world-carousel-track {
+  display: flex;
+  gap: 1.2rem;
+  align-items: stretch;
+}
+
+body[data-screen="project-list"] .world-carousel-card {
+  flex: 0 0 clamp(280px, 34vw, 420px);
+  min-height: 360px;
+  scroll-snap-align: start;
+}
+
+body[data-screen="project-list"] .world-carousel-empty {
+  flex: 0 0 min(720px, 100%);
+}
+
+@media (max-width: 768px) {
+  body[data-screen="project-list"] .panel-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  body[data-screen="project-list"] .world-carousel-head-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  body[data-screen="project-list"] .world-carousel-card {
+    flex-basis: min(82vw, 340px);
+  }
+}
+
 body[data-screen="character-list"] .empty-panel {
   min-height: 104px;
   display: flex;
@@ -2801,6 +2933,56 @@ body[data-screen="character-list"] .empty-panel {
 
 body[data-screen="character-list"] .character-card h4 {
   color: #f4fbff;
+}
+
+body[data-screen="character-list"] .character-list-card {
+  min-height: 0;
+  gap: 0.85rem;
+}
+
+body[data-screen="character-list"] .character-list-card.is-clickable {
+  cursor: pointer;
+}
+
+body[data-screen="character-list"] .character-card-image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 1rem;
+  border: 1px solid rgba(84, 177, 255, 0.16);
+  background: rgba(3, 8, 18, 0.65);
+}
+
+body[data-screen="character-list"] .character-card-placeholder {
+  display: grid;
+  place-items: center;
+  gap: 0.35rem;
+  color: rgba(223, 246, 255, 0.72);
+}
+
+body[data-screen="character-list"] .character-card-placeholder i {
+  font-size: 1.8rem;
+}
+
+body[data-screen="character-list"] .character-role-badge {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #c8efff;
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+
+body[data-screen="character-list"] .character-list-card h4 {
+  color: #f4fbff;
+  font-size: 1.18rem;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 body[data-screen="character-list"] .character-card .badge {

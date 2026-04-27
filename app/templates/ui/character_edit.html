@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="editor-grid" data-character-editor data-project-id="{{ project_id }}" data-character-id="{{ character_id or '' }}">
+<section class="editor-grid" data-character-editor data-project-id="{{ project_id }}" data-character-id="{{ character_id or '' }}" data-can-manage-project="{{ 'true' if can_manage_project else 'false' }}">
   <section class="panel-card">
     <div class="panel-head">
       <div>
