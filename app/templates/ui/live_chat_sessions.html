@@ -2,7 +2,7 @@
 {% block content %}
 <section class="page-grid live-chat-room-page" data-user-role="{{ current_user_role or 'user' }}" data-manage-mode="{{ 'true' if manage_mode else 'false' }}">
   {% if manage_mode and current_user_role not in ["superuser", "project_user"] %}
-  <div class="empty-panel">ルーム作成はプロジェクトユーザー以上の権限が必要です。</div>
+  <div class="empty-panel">ルーム管理はプロジェクトユーザー以上の権限が必要です。</div>
   {% endif %}
 
   <section class="panel-card">

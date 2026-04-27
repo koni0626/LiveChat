@@ -1,54 +1,69 @@
 {% extends "base.html" %}
+{% set show_quick_start = current_user_role != "user" %}
 {% block content %}
 <section class="page-grid">
   <div class="hero-panel">
     <div>
       <div class="eyebrow">Dashboard</div>
-      <h2 class="section-title">ライブチャット用のプロジェクトをすぐ開けます。</h2>
-      <p class="section-copy">世界観とキャラクターを整えたら、そのままライブチャットセッションを作って会話と画像生成を試せます。</p>
+      <h2 class="section-title">ライブチャット用のワールドをすぐ開けます。</h2>
+      <p class="section-copy">世界観とキャラクターを整えたワールドから、ライブチャットセッションを作成できます。</p>
     </div>
     <div class="hero-actions">
+      {% if show_quick_start %}
       <a href="{{ url_for('ui.project_create_page') }}" class="btn btn-sunrise">
-        <i class="bi bi-plus-lg"></i><span>新規プロジェクト</span>
+        <i class="bi bi-plus-lg"></i><span>新規ワールド</span>
       </a>
+      {% endif %}
       <a href="{{ url_for('ui.project_list_page') }}" class="btn btn-outline-light">
-        <i class="bi bi-collection"></i><span>プロジェクト一覧</span>
+        <i class="bi bi-collection"></i><span>ワールド一覧</span>
       </a>
     </div>
   </div>
 
   <div class="stats-row">
     <article class="metric-card">
-      <div class="metric-label">Projects</div>
+      <div class="metric-label">Worlds</div>
       <div class="metric-value" id="dashboardProjectCount">0</div>
     </article>
   </div>
 
   <div class="content-grid">
-    <section class="panel-card span-8">
+    <section class="panel-card {{ 'span-8' if show_quick_start else 'span-12' }}">
       <div class="panel-head">
-        <h3>最近のプロジェクト</h3>
+        <h3>最近のワールド</h3>
         <a class="btn btn-sm btn-outline-dark" href="{{ url_for('ui.project_list_page') }}">すべて見る</a>
       </div>
       <div class="project-card-grid" id="recentProjects"></div>
     </section>
 
+    {% if show_quick_start %}
     <section class="panel-card span-4">
       <div class="panel-head"><h3>Quick Start</h3></div>
       <div class="quick-actions">
-        <a class="quick-link" href="{{ url_for('ui.project_create_page') }}"><i class="bi bi-stars"></i><span>新しい会話プロジェクトを作る</span></a>
+        <a class="quick-link" href="{{ url_for('ui.project_create_page') }}"><i class="bi bi-stars"></i><span>新しいワールドを作る</span></a>
         <a class="quick-link" href="{{ url_for('ui.settings_page') }}"><i class="bi bi-sliders"></i><span>接続設定を確認する</span></a>
         <a class="quick-link" href="/health"><i class="bi bi-heart-pulse"></i><span>ヘルスチェックを見る</span></a>
       </div>
     </section>
+    {% endif %}
   </div>
 </section>
 {% endblock %}
 {% block scripts %}
 <script>
 (() => {
+  const showProjectCreateHint = {{ "true" if show_quick_start else "false" }};
+
   function statusLabel(status) {
     return status === "published" || status === "active" ? "公開" : "下書き";
+  }
+
+  function renderWorldImage(project) {
+    const mediaUrl = project.thumbnail_asset?.media_url;
+    if (mediaUrl) {
+      return `<img class="world-card-image" src="${mediaUrl}" alt="${NovelUI.escape(project.title || "ワールド看板")}">`;
+    }
+    return `<div class="world-card-placeholder"><i class="bi bi-image"></i><span>看板画像なし</span></div>`;
   }
 
   async function loadDashboard() {
@@ -58,12 +73,15 @@
 
     const host = document.getElementById("recentProjects");
     if (!list.length) {
-      host.innerHTML = `<div class="empty-panel">まだプロジェクトがありません。新規作成から始めてください。</div>`;
+      host.innerHTML = showProjectCreateHint
+        ? `<div class="empty-panel">まだワールドがありません。新規作成から始めてください。</div>`
+        : `<div class="empty-panel">利用できるワールドがまだありません。</div>`;
       return;
     }
 
     host.innerHTML = list.slice(0, 6).map((project) => `
       <a class="project-card" href="/projects/${project.id}/home">
+        ${renderWorldImage(project)}
         <div class="project-card-top">
           <span class="soft-code">${NovelUI.escape(statusLabel(project.status))}</span>
         </div>

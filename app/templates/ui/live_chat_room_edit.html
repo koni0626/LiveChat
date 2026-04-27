@@ -8,7 +8,7 @@
     <div class="panel-head">
       <div>
         <h3>{{ "ルーム編集" if room_id else "ルーム新規追加" }}</h3>
-        <p class="section-copy mb-0">話すキャラクター、公開状態、キャラクター(AI)の目的を設定します。</p>
+        <p class="section-copy mb-0">話すキャラクター、公開状態、キャラクターへの指示を設定します。</p>
       </div>
       <a class="btn btn-sm btn-outline-dark" href="{{ url_for('ui.live_chat_rooms_page', project_id=project_id) }}">一覧へ戻る</a>
     </div>
@@ -40,8 +40,8 @@
         <article class="markdown-summary-card live-chat-room-objective-card">
           <div class="markdown-summary-head">
             <div>
-              <h4>キャラクター(AI)の目的</h4>
-              <p>このルームでAIキャラクターが何を目指して会話するかをMarkdownで入力します。</p>
+              <h4>キャラクターへの指示</h4>
+              <p>このルームでAIキャラクターに守ってほしい会話方針をMarkdownで入力します。</p>
             </div>
             <button class="btn btn-sm btn-outline-light" type="button" id="liveChatRoomObjectiveEditButton">
               <i class="bi bi-pencil-square"></i>
@@ -66,8 +66,8 @@
     <div class="modal-content markdown-modal">
       <div class="modal-header">
         <div>
-          <h3 class="modal-title h5" id="liveChatRoomObjectiveModalLabel">キャラクター(AI)の目的を編集</h3>
-          <p class="mb-0 text-secondary">Markdownで、AIキャラクターが会話中に目指す目的や避けたい展開を書けます。</p>
+          <h3 class="modal-title h5" id="liveChatRoomObjectiveModalLabel">キャラクターへの指示を編集</h3>
+          <p class="mb-0 text-secondary">Markdownで、AIキャラクターに守ってほしい目的や避けたい展開を書けます。</p>
         </div>
         <button class="btn-close btn-close-white" type="button" data-bs-dismiss="modal" aria-label="閉じる"></button>
       </div>
@@ -218,7 +218,7 @@
       conversation_objective: roomForm.conversation_objective.value.trim(),
     };
     if (!body.conversation_objective) {
-      NovelUI.toast("キャラクター(AI)の目的を入力してください。", "warning");
+      NovelUI.toast("キャラクターへの指示を入力してください。", "warning");
       openObjectiveEditor();
       return;
     }

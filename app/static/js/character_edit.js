@@ -7,6 +7,7 @@
   let currentCharacterId = initialCharacterId;
 
   const form = document.getElementById("characterForm");
+  const deleteButton = document.getElementById("characterDeleteButton");
   const generateForm = document.getElementById("baseAssetGenerateForm");
   const generateButton = document.getElementById("generateBaseImageButton");
   const baseAssetUploadForm = document.getElementById("baseAssetUploadForm");
@@ -164,7 +165,28 @@
     }
   }
 
+  async function deleteCharacter() {
+    if (!currentCharacterId || !deleteButton) return;
+    const name = form.querySelector('[name="name"]')?.value || "このキャラクター";
+    if (!confirm(`${name}を削除しますか？削除後は一覧に表示されません。`)) {
+      return;
+    }
+
+    deleteButton.disabled = true;
+    try {
+      await NovelUI.api(`/api/v1/characters/${currentCharacterId}`, { method: "DELETE" });
+      NovelUI.toast("キャラクターを削除しました。");
+      location.href = `/projects/${projectId}/characters`;
+    } catch (error) {
+      deleteButton.disabled = false;
+      NovelUI.toast(error.message || "キャラクターの削除に失敗しました。", "danger");
+    }
+  }
+
   async function loadCharacter() {
+    if (deleteButton) {
+      deleteButton.hidden = !currentCharacterId;
+    }
     markdownEditor.renderCards();
     if (!currentCharacterId) {
       renderBaseAsset(null);
@@ -209,6 +231,8 @@
   }
 
   function bindEvents() {
+    deleteButton?.addEventListener("click", deleteCharacter);
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {

@@ -5,7 +5,7 @@
     <form class="row g-3 align-items-end" id="characterSearchForm">
       <div class="col-md-8">
         <label class="form-label" for="characterSearchInput">キャラクター検索</label>
-        <input class="form-control" id="characterSearchInput" name="search" placeholder="名前、あだ名、口調、見た目で検索">
+        <input class="form-control" id="characterSearchInput" name="search" placeholder="名前、あだ名、見た目で検索">
       </div>
       <div class="col-md-4 d-flex gap-2">
         <button class="btn btn-dark w-100" type="submit">検索</button>
@@ -35,6 +35,23 @@
     return `<div class="character-thumb-placeholder"><i class="bi bi-person"></i></div>`;
   }
 
+  async function deleteCharacter(characterId, characterName, button) {
+    const label = characterName || "このキャラクター";
+    if (!confirm(`${label}を削除しますか？削除後は一覧に表示されません。`)) {
+      return;
+    }
+
+    button.disabled = true;
+    try {
+      await NovelUI.api(`/api/v1/characters/${characterId}`, { method: "DELETE" });
+      NovelUI.toast("キャラクターを削除しました。");
+      await loadCharacters();
+    } catch (error) {
+      button.disabled = false;
+      NovelUI.toast(error.message || "キャラクターの削除に失敗しました。", "danger");
+    }
+  }
+
   async function loadCharacters() {
     const params = new URLSearchParams();
     const search = new FormData(form).get("search");
@@ -46,12 +63,12 @@
     const list = Array.isArray(data) ? data : [];
 
     if (!list.length) {
-      host.innerHTML = `<div class="empty-panel">キャラクターはまだありません。</div>`;
+      host.innerHTML = `<div class="empty-panel">キャラクターはまだ登録されていません。</div>`;
       return;
     }
 
     host.innerHTML = list.map((character) => `
-      <a class="project-card character-card" href="/projects/${projectId}/characters/${character.id}/edit">
+      <article class="project-card character-card" data-character-id="${character.id}" role="button" tabindex="0">
         <div class="character-card-head">
           <div class="character-thumb">
             ${renderThumbnail(character)}
@@ -63,9 +80,48 @@
             <h4>${NovelUI.escape(character.name || "No Name")}</h4>
           </div>
         </div>
-      </a>
+        <div class="d-flex justify-content-end mt-3">
+          <button
+            class="btn btn-sm btn-outline-danger"
+            type="button"
+            data-character-delete-id="${character.id}"
+            data-character-name="${NovelUI.escape(character.name || "")}"
+          >
+            <i class="bi bi-trash"></i>
+            <span>削除</span>
+          </button>
+        </div>
+      </article>
     `).join("");
   }
+
+  host.addEventListener("click", async (event) => {
+    const deleteButton = event.target.closest("[data-character-delete-id]");
+    if (deleteButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      await deleteCharacter(
+        Number(deleteButton.dataset.characterDeleteId),
+        deleteButton.dataset.characterName,
+        deleteButton
+      );
+      return;
+    }
+
+    const card = event.target.closest("[data-character-id]");
+    if (card) {
+      location.href = `/projects/${projectId}/characters/${card.dataset.characterId}/edit`;
+    }
+  });
+
+  host.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if (event.target.closest("[data-character-delete-id]")) return;
+    const card = event.target.closest("[data-character-id]");
+    if (!card) return;
+    event.preventDefault();
+    location.href = `/projects/${projectId}/characters/${card.dataset.characterId}/edit`;
+  });
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();

@@ -84,7 +84,11 @@ def create_app(config_object=Config):
 
     @app.route("/", methods=["GET"])
     def index():
-        if flask_session.get("user_id"):
+        user_id = flask_session.get("user_id")
+        if user_id:
+            current_user = User.query.get(user_id)
+            if current_user and getattr(current_user, "role", "user") == "user":
+                return redirect(url_for("ui.project_list_page"))
             return redirect(url_for("ui.dashboard_page"))
         return redirect(url_for("ui.login_page"))
 

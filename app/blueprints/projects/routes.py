@@ -1,7 +1,10 @@
-from flask import Blueprint, request, session
+import os
+
+from flask import Blueprint, current_app, request, session
 
 from ...api import ForbiddenError, NotFoundError, UnauthorizedError, json_response
 from ...models import User
+from ...services.asset_service import AssetService
 from ...services.authorization_service import AuthorizationService
 from ...services.project_service import ProjectService
 
@@ -9,10 +12,40 @@ from ...services.project_service import ProjectService
 projects_bp = Blueprint("projects", __name__)
 project_service = ProjectService()
 authorization_service = AuthorizationService()
+asset_service = AssetService()
 
 
 def _project_status(status):
     return "published" if status in {"published", "active"} else "draft"
+
+
+def _build_media_url(file_path: str | None):
+    if not file_path:
+        return None
+    storage_root = current_app.config.get("STORAGE_ROOT")
+    normalized_path = os.path.normpath(file_path)
+    normalized_root = os.path.normpath(storage_root)
+    if not normalized_path.startswith(normalized_root):
+        return None
+    relative = os.path.relpath(normalized_path, normalized_root).replace("\\", "/")
+    return f"/media/{relative}"
+
+
+def _serialize_asset_summary(asset_id: int | None):
+    if not asset_id:
+        return None
+    asset = asset_service.get_asset(asset_id)
+    if not asset:
+        return None
+    return {
+        "id": asset.id,
+        "asset_type": asset.asset_type,
+        "file_name": asset.file_name,
+        "media_url": _build_media_url(asset.file_path),
+        "mime_type": asset.mime_type,
+        "width": asset.width,
+        "height": asset.height,
+    }
 
 
 def _serialize_project(project):
@@ -22,6 +55,7 @@ def _serialize_project(project):
         "id": project.id,
         "owner_user_id": project.owner_user_id,
         "thumbnail_asset_id": project.thumbnail_asset_id,
+        "thumbnail_asset": _serialize_asset_summary(project.thumbnail_asset_id),
         "world_id": project.world_id,
         "title": project.title,
         "slug": project.slug,
@@ -105,6 +139,24 @@ def get_project(project_id: int):
         raise NotFoundError()
     if not authorization_service.can_view_project(user, project):
         raise NotFoundError()
+    return json_response(_serialize_project(project))
+
+
+@projects_bp.route("/<int:project_id>/signboard/generate", methods=["POST"])
+def generate_project_signboard(project_id: int):
+    user = _current_user()
+    project = project_service.get_project(project_id)
+    if not project:
+        raise NotFoundError()
+    if not authorization_service.can_manage_project(user, project):
+        raise ForbiddenError()
+    payload = request.get_json(silent=True) or {}
+    try:
+        project = project_service.generate_signboard_image(project_id, payload)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    if not project:
+        return json_response({"message": "not_found"}, status=404)
     return json_response(_serialize_project(project))
 
 

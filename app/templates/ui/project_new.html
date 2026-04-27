@@ -3,12 +3,12 @@
 <section class="page-grid narrow-grid">
   <section class="panel-card">
     <div class="panel-head">
-      <h3>新しいプロジェクトを作成</h3>
-      <span class="soft-code">Project Bootstrap</span>
+      <h3>新しいワールドを作成</h3>
+      <span class="soft-code">World Bootstrap</span>
     </div>
     <form id="projectCreateForm" class="row g-4">
       <div class="col-md-8">
-        <label class="form-label">作品名</label>
+        <label class="form-label">ワールド名</label>
         <input class="form-control form-control-lg" name="title" required>
       </div>
       <div class="col-md-4">
@@ -20,7 +20,7 @@
       </div>
       <div class="col-12">
         <label class="form-label">説明</label>
-        <textarea class="form-control" name="summary" rows="4" placeholder="プロジェクトの説明や利用者向けのメモを入力"></textarea>
+        <textarea class="form-control" name="summary" rows="4" placeholder="ワールドの説明や利用者向けのメモを入力"></textarea>
       </div>
       <div class="col-12 d-flex gap-2 justify-content-end">
         <a class="btn btn-outline-dark" href="{{ url_for('ui.project_list_page') }}">キャンセル</a>
@@ -41,7 +41,7 @@
       const project = await NovelUI.api("/api/v1/projects", { method: "POST", body });
       location.href = `/projects/${project.id}/home?edit=1`;
     } catch (error) {
-      NovelUI.toast(error.message || "プロジェクト作成に失敗しました。", "danger");
+      NovelUI.toast(error.message || "ワールド作成に失敗しました。", "danger");
     }
   });
 })();

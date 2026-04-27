@@ -36,7 +36,7 @@
             {% endfor %}
           </nav>
           {% if project_nav_links %}
-          <div class="nav-section-title mt-4">Project</div>
+          <div class="nav-section-title mt-4">World</div>
           <nav class="nav flex-column">
             {% for item in project_nav_links %}
             <a class="nav-link app-nav-link" href="{{ item.href }}">
@@ -74,10 +74,12 @@
               <span>ライブチャット</span>
             </a>
             {% endif %}
+            {% if current_user_role in ["superuser", "project_user"] %}
             <a class="btn btn-sunrise btn-sm" href="{{ url_for('ui.project_create_page') }}">
               <i class="bi bi-plus-lg"></i>
-              <span>New Project</span>
+              <span>New World</span>
             </a>
+            {% endif %}
           </div>
         </header>
         <div class="page-body">

@@ -5,7 +5,7 @@
     <form class="row g-3 align-items-end" id="projectSearchForm">
       <div class="col-md-6">
         <label class="form-label" for="projectSearchInput">検索</label>
-        <input class="form-control" id="projectSearchInput" type="text" name="search" placeholder="タイトルや slug で検索">
+        <input class="form-control" id="projectSearchInput" type="text" name="search" placeholder="ワールド名や説明で検索">
       </div>
       <div class="col-md-3">
         <label class="form-label" for="projectStatusSelect">ステータス</label>
@@ -17,14 +17,16 @@
       </div>
       <div class="col-md-3 d-flex gap-2">
         <button class="btn btn-dark w-100" type="submit">検索</button>
+        {% if current_user_role in ["superuser", "project_user"] %}
         <a class="btn btn-sunrise w-100" href="{{ url_for('ui.project_create_page') }}">新規作成</a>
+        {% endif %}
       </div>
     </form>
   </div>
 
   <section class="panel-card">
     <div class="panel-head">
-      <h3>作品一覧</h3>
+      <h3>ワールド一覧</h3>
       <span class="soft-code" id="projectCountLabel">0 items</span>
     </div>
     <div class="project-card-grid" id="projectList"></div>
@@ -34,12 +36,21 @@
 {% block scripts %}
 <script>
 (() => {
+  const canManageWorlds = {{ "true" if current_user_role in ["superuser", "project_user"] else "false" }};
   const form = document.getElementById("projectSearchForm");
   const host = document.getElementById("projectList");
   const countLabel = document.getElementById("projectCountLabel");
 
   function statusLabel(status) {
     return status === "published" || status === "active" ? "公開" : "下書き";
+  }
+
+  function renderWorldImage(project) {
+    const mediaUrl = project.thumbnail_asset?.media_url;
+    if (mediaUrl) {
+      return `<img class="world-card-image" src="${mediaUrl}" alt="${NovelUI.escape(project.title || "ワールド看板")}">`;
+    }
+    return `<div class="world-card-placeholder"><i class="bi bi-image"></i><span>看板画像なし</span></div>`;
   }
 
   async function loadProjects() {
@@ -57,12 +68,13 @@
     countLabel.textContent = `${list.length} items`;
 
     if (!list.length) {
-      host.innerHTML = `<div class="empty-panel">条件に合う作品がありません。</div>`;
+      host.innerHTML = `<div class="empty-panel">条件に合うワールドがありません。</div>`;
       return;
     }
 
     host.innerHTML = list.map((project) => `
       <article class="project-card">
+        ${renderWorldImage(project)}
         <div class="project-card-top">
           <span class="soft-code">${NovelUI.escape(statusLabel(project.status))}</span>
         </div>
@@ -70,7 +82,7 @@
         <p>${NovelUI.escape(project.summary || "説明はまだありません。")}</p>
         <div class="d-flex justify-content-between align-items-center mt-3">
           <a class="btn btn-sm btn-dark" href="/projects/${project.id}/home">開く</a>
-          <button class="btn btn-sm btn-outline-danger" data-project-delete="${project.id}">削除</button>
+          ${canManageWorlds ? `<button class="btn btn-sm btn-outline-danger" data-project-delete="${project.id}">削除</button>` : ""}
         </div>
       </article>
     `).join("");
@@ -79,7 +91,7 @@
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     loadProjects().catch((error) => {
-      NovelUI.toast(error.message || "作品一覧の読み込みに失敗しました。", "danger");
+      NovelUI.toast(error.message || "ワールド一覧の読み込みに失敗しました。", "danger");
     });
   });
 
@@ -88,12 +100,12 @@
     if (!button) {
       return;
     }
-    if (!window.confirm("この作品を削除しますか？")) {
+    if (!window.confirm("このワールドを削除しますか？")) {
       return;
     }
     try {
       await NovelUI.api(`/api/v1/projects/${button.dataset.projectDelete}`, { method: "DELETE" });
-      NovelUI.toast("作品を削除しました。");
+      NovelUI.toast("ワールドを削除しました。");
       await loadProjects();
     } catch (error) {
       NovelUI.toast(error.message || "削除に失敗しました。", "danger");
@@ -101,7 +113,7 @@
   });
 
   loadProjects().catch((error) => {
-    NovelUI.toast(error.message || "作品一覧の読み込みに失敗しました。", "danger");
+    NovelUI.toast(error.message || "ワールド一覧の読み込みに失敗しました。", "danger");
   });
 })();
 </script>

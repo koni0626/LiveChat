@@ -48,11 +48,13 @@
     errorBox.classList.add("d-none");
     const formData = new FormData(form);
     try {
-      await NovelUI.api("/api/v1/auth/login", {
+      const result = await NovelUI.api("/api/v1/auth/login", {
         method: "POST",
         body: Object.fromEntries(formData.entries()),
       });
-      location.href = "{{ url_for('ui.dashboard_page') }}";
+      location.href = result?.user?.role === "user"
+        ? "{{ url_for('ui.project_list_page') }}"
+        : "{{ url_for('ui.dashboard_page') }}";
     } catch (error) {
       errorBox.textContent = error.message || "ログインに失敗しました。";
       errorBox.classList.remove("d-none");

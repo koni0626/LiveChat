@@ -17,7 +17,7 @@ def _project_nav(project_id: int | None, current_user: User | None = None):
         {"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)},
     ]
     if current_user and getattr(current_user, "role", "user") in {"superuser", "project_user"}:
-        links.append({"label": "ルーム作成", "icon": "bi-door-open", "href": url_for("ui.live_chat_rooms_page", project_id=project_id)})
+        links.append({"label": "ルーム", "icon": "bi-door-open", "href": url_for("ui.live_chat_rooms_page", project_id=project_id)})
     links.append({"label": "ライブチャット", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)})
     return links
 
@@ -28,7 +28,7 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
     global_nav_links = [
         {"label": "メール", "icon": "bi-envelope-heart", "href": url_for("ui.letters_page")},
         {"label": "ダッシュボード", "icon": "bi-house-door", "href": url_for("ui.dashboard_page")},
-        {"label": "プロジェクト", "icon": "bi-collection", "href": url_for("ui.project_list_page")},
+        {"label": "ワールド", "icon": "bi-collection", "href": url_for("ui.project_list_page")},
     ]
     if current_user and getattr(current_user, "role", "user") == "superuser":
         global_nav_links.extend(
@@ -69,7 +69,7 @@ def dashboard_page():
 
 @ui_bp.route("/projects", methods=["GET"])
 def project_list_page():
-    return _render("ui/projects.html", title="プロジェクト一覧", screen_id="project-list")
+    return _render("ui/projects.html", title="ワールド一覧", screen_id="project-list")
 
 
 @ui_bp.route("/letters", methods=["GET"])
@@ -79,12 +79,12 @@ def letters_page():
 
 @ui_bp.route("/projects/new", methods=["GET"])
 def project_create_page():
-    return _render("ui/project_new.html", title="新規プロジェクト", screen_id="project-create")
+    return _render("ui/project_new.html", title="新規ワールド", screen_id="project-create")
 
 
 @ui_bp.route("/projects/<int:project_id>/home", methods=["GET"])
 def project_home_page(project_id: int):
-    return _render("ui/project_home.html", title="プロジェクトホーム", screen_id="project-home", project_id=project_id)
+    return _render("ui/project_home.html", title="ワールドホーム", screen_id="project-home", project_id=project_id)
 
 
 @ui_bp.route("/projects/<int:project_id>/characters", methods=["GET"])
@@ -134,7 +134,7 @@ def live_chat_sessions_page(project_id: int):
 def live_chat_rooms_page(project_id: int):
     return _render(
         "ui/live_chat_sessions.html",
-        title="ルーム作成",
+        title="ルーム",
         screen_id="live-chat-rooms",
         project_id=project_id,
         manage_mode=True,
