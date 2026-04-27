@@ -1,0 +1,717 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="feed-layout" data-feed-page data-can-create="{{ 'true' if current_user_role in ['superuser', 'project_user'] else 'false' }}">
+  <section class="feed-hero-panel">
+    <div>
+      <div class="feed-hero-kicker">LAPLACE SIGNAL / CHARACTER BROADCAST</div>
+      <h2>キャラクターの公式Feed</h2>
+      <p>ワールドの空気、キャラクターの口調、今日の一枚を流す宣伝タイムライン。</p>
+    </div>
+    <button class="btn btn-outline-light btn-sm" type="button" id="feedReloadButton">
+      <i class="bi bi-arrow-clockwise"></i>
+      <span>更新</span>
+    </button>
+  </section>
+
+  <section class="feed-filter-panel">
+    <div class="feed-section-head">
+      <div>
+        <h3>Filter</h3>
+        <p class="section-copy mb-0">見たいワールドやキャラクターで絞り込みます。</p>
+      </div>
+    </div>
+    <form class="row g-3 align-items-end" id="feedFilterForm">
+      <div class="col-md-4">
+        <label class="form-label" for="feedProjectFilter">ワールド</label>
+        <select class="form-select" id="feedProjectFilter" name="project_id">
+          <option value="">すべて</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="feedCharacterFilter">キャラクター</label>
+        <select class="form-select" id="feedCharacterFilter" name="character_id">
+          <option value="">すべて</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="feedSearchInput">検索</label>
+        <input class="form-control" id="feedSearchInput" name="q" placeholder="本文で検索">
+      </div>
+    </form>
+  </section>
+
+  {% if current_user_role in ["superuser", "project_user"] %}
+  <section class="feed-composer-panel">
+    <div class="feed-section-head">
+      <div>
+        <h3>Broadcast Composer</h3>
+        <p class="section-copy mb-0">キャラクター名義でFeedへ投稿します。</p>
+      </div>
+    </div>
+    <form class="vstack gap-3" id="feedComposerForm">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" for="feedComposerProject">ワールド</label>
+          <select class="form-select" id="feedComposerProject" name="project_id" required></select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="feedComposerCharacter">キャラクター</label>
+          <select class="form-select" id="feedComposerCharacter" name="character_id" required></select>
+        </div>
+      </div>
+      <div>
+        <label class="form-label" for="feedComposerBody">本文</label>
+        <div class="feed-composer-dropzone" id="feedComposerDropzone">
+          <textarea class="form-control feed-composer-textarea" id="feedComposerBody" name="body" rows="5" maxlength="10000" placeholder="ここに本文を入力。画像はこのエリアへドラッグ&ドロップできます。"></textarea>
+          <div class="feed-composer-tools">
+            <button class="feed-attach-button" type="button" id="feedAttachButton" aria-label="画像を添付">
+              <i class="bi bi-plus-lg"></i>
+            </button>
+            <span class="feed-attach-hint">画像をドロップ、またはクリックして添付</span>
+            <input class="d-none" id="feedComposerImageInput" type="file" accept="image/png,image/jpeg,image/webp">
+            <button class="btn btn-sm btn-outline-light ms-auto" type="button" id="feedImportUrlButton">
+              <i class="bi bi-link-45deg"></i>
+              <span>URLから取り込む</span>
+            </button>
+          </div>
+          <div class="feed-attachment-preview d-none" id="feedAttachmentPreview"></div>
+        </div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 justify-content-end">
+        <select class="form-select feed-status-select" name="status" aria-label="公開状態">
+          <option value="published" selected>公開</option>
+          <option value="draft">下書き</option>
+        </select>
+        <button class="btn btn-sunrise" type="submit">
+          <i class="bi bi-send"></i>
+          <span>投稿する</span>
+        </button>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="feed-content-grid">
+    <section class="feed-stream" id="feedStream"></section>
+    <aside class="feed-sidebar">
+      <section class="feed-side-card feed-ranking-card">
+        <div class="feed-side-kicker">Top Broadcasters</div>
+        <h3>投稿ランキング</h3>
+        <p class="feed-ranking-copy">公開投稿数が多いキャラクター上位10位。</p>
+        <div class="feed-ranking-list" id="feedRankingList"></div>
+      </section>
+    </aside>
+  </section>
+</section>
+
+<div class="modal fade" id="feedEditModal" tabindex="-1" aria-labelledby="feedEditModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <form class="modal-content feed-edit-modal" id="feedEditForm">
+      <div class="modal-header">
+        <div>
+          <p class="feed-side-kicker mb-1">Edit Broadcast</p>
+          <h5 class="modal-title" id="feedEditModalTitle">投稿を編集</h5>
+        </div>
+        <button class="btn-close btn-close-white" type="button" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body vstack gap-3">
+        <input type="hidden" id="feedEditPostId">
+        <div class="row g-3">
+          <div class="col-md-7">
+            <label class="form-label" for="feedEditCharacter">キャラクター</label>
+            <select class="form-select" id="feedEditCharacter" name="character_id" required></select>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label" for="feedEditStatus">公開状態</label>
+            <select class="form-select" id="feedEditStatus" name="status">
+              <option value="published">公開</option>
+              <option value="draft">下書き</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="form-label" for="feedEditBody">本文</label>
+          <textarea class="form-control feed-composer-textarea" id="feedEditBody" name="body" rows="8" maxlength="10000" required></textarea>
+        </div>
+        <div>
+          <label class="form-label" for="feedEditImageInput">画像を差し替え</label>
+          <input class="form-control" id="feedEditImageInput" type="file" accept="image/png,image/jpeg,image/webp">
+          <p class="form-hint mb-0 mt-2">画像を選択した場合、保存時に投稿画像も差し替えます。</p>
+        </div>
+        <label class="form-check">
+          <input class="form-check-input" id="feedEditRemoveImage" type="checkbox">
+          <span class="form-check-label">現在の画像を削除する</span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-light" type="button" data-bs-dismiss="modal">キャンセル</button>
+        <button class="btn btn-sunrise" type="submit">
+          <i class="bi bi-check2-circle"></i>
+          <span>保存</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const root = document.querySelector("[data-feed-page]");
+  if (!root) return;
+
+  const canCreate = root.dataset.canCreate === "true";
+  const filterForm = document.getElementById("feedFilterForm");
+  const projectFilter = document.getElementById("feedProjectFilter");
+  const characterFilter = document.getElementById("feedCharacterFilter");
+  const stream = document.getElementById("feedStream");
+  const composerForm = document.getElementById("feedComposerForm");
+  const composerProject = document.getElementById("feedComposerProject");
+  const composerCharacter = document.getElementById("feedComposerCharacter");
+  const composerDropzone = document.getElementById("feedComposerDropzone");
+  const composerBody = document.getElementById("feedComposerBody");
+  const composerImageInput = document.getElementById("feedComposerImageInput");
+  const attachButton = document.getElementById("feedAttachButton");
+  const importUrlButton = document.getElementById("feedImportUrlButton");
+  const attachmentPreview = document.getElementById("feedAttachmentPreview");
+  const rankingList = document.getElementById("feedRankingList");
+  const reloadButton = document.getElementById("feedReloadButton");
+  const editModalEl = document.getElementById("feedEditModal");
+  const editForm = document.getElementById("feedEditForm");
+  const editPostId = document.getElementById("feedEditPostId");
+  const editCharacter = document.getElementById("feedEditCharacter");
+  const editStatus = document.getElementById("feedEditStatus");
+  const editBody = document.getElementById("feedEditBody");
+  const editImageInput = document.getElementById("feedEditImageInput");
+  const editRemoveImage = document.getElementById("feedEditRemoveImage");
+  if (editModalEl && editModalEl.parentElement !== document.body) {
+    document.body.appendChild(editModalEl);
+  }
+  const editModal = editModalEl ? new bootstrap.Modal(editModalEl) : null;
+  let projects = [];
+  let selectedComposerImage = null;
+  let selectedComposerImageUrl = null;
+  let importedImageAssetId = null;
+  const feedPostBodies = new Map();
+  const feedPosts = new Map();
+  const collapsedBodyLimit = 420;
+
+  function escapeText(value) {
+    return NovelUI.escape(value || "");
+  }
+
+  function formatDate(value) {
+    if (!value) return "";
+    try {
+      return new Intl.DateTimeFormat("ja-JP", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+    } catch (_) {
+      return value;
+    }
+  }
+
+  function avatar(post) {
+    const character = post.character || {};
+    const image = character.thumbnail_asset?.media_url || character.base_asset?.media_url;
+    if (image) {
+      return `<img src="${escapeText(image)}" alt="${escapeText(character.name)}">`;
+    }
+    return `<span>${escapeText((character.name || "?").slice(0, 1))}</span>`;
+  }
+
+  function postImage(post) {
+    if (!post.image_asset?.media_url) return "";
+    return `<img class="feed-post-image" src="${escapeText(post.image_asset.media_url)}" alt="Feed image">`;
+  }
+
+  function bodyToHtml(body) {
+    return escapeText(body).replace(/\n/g, "<br>");
+  }
+
+  function shouldCollapseBody(body) {
+    return body.length > collapsedBodyLimit || body.split(/\r?\n/).length > 8;
+  }
+
+  function collapsedBody(body) {
+    if (body.length <= collapsedBodyLimit) return body;
+    return `${body.slice(0, collapsedBodyLimit).trimEnd()}...`;
+  }
+
+  function renderPostBody(post) {
+    const postId = String(post.id);
+    const body = String(post.body || "");
+    feedPostBodies.set(postId, body);
+    if (!shouldCollapseBody(body)) {
+      return `<div class="feed-post-body">${bodyToHtml(body)}</div>`;
+    }
+    return `
+      <div class="feed-post-body is-collapsed" data-feed-body>
+        <span class="feed-body-text">${bodyToHtml(collapsedBody(body))}</span>
+      </div>
+      <button class="feed-expand-button" type="button" data-feed-expand data-post-id="${postId}" data-expanded="false">さらに表示</button>
+    `;
+  }
+
+  function managementActions(post) {
+    if (!post.can_manage) return "";
+    return `
+      <div class="feed-post-manage">
+        <button class="btn btn-sm btn-outline-light feed-post-edit" type="button" data-post-id="${post.id}">
+          <i class="bi bi-pencil-square"></i>
+          <span>編集</span>
+        </button>
+        <label class="btn btn-sm btn-outline-light mb-0">
+          <i class="bi bi-upload"></i>
+          <span>画像アップロード</span>
+          <input class="d-none feed-image-upload" type="file" accept="image/png,image/jpeg,image/webp" data-post-id="${post.id}">
+        </label>
+        <button class="btn btn-sm btn-outline-light feed-image-generate" type="button" data-post-id="${post.id}">
+          <i class="bi bi-stars"></i>
+          <span>画像生成</span>
+        </button>
+        <button class="btn btn-sm btn-outline-danger feed-post-delete" type="button" data-post-id="${post.id}">
+          <i class="bi bi-trash"></i>
+          <span>削除</span>
+        </button>
+      </div>
+    `;
+  }
+
+  function renderPost(post) {
+    feedPosts.set(String(post.id), post);
+    const characterName = post.character?.name || "Unknown";
+    const worldTitle = post.project?.title || "World";
+    const statusBadge = post.status !== "published" ? `<span class="feed-status-badge">${escapeText(post.status)}</span>` : "";
+    return `
+      <article class="feed-post-card" data-post-id="${post.id}">
+        <div class="feed-post-rail">
+          <div class="feed-post-avatar">${avatar(post)}</div>
+        </div>
+        <div class="feed-post-main">
+          <div class="feed-post-head">
+            <div>
+              <div class="feed-post-name">${escapeText(characterName)}</div>
+              <a class="feed-post-world" href="/projects/${post.project_id}/live-chat">${escapeText(worldTitle)}</a>
+            </div>
+            <div class="feed-post-date">${statusBadge}${escapeText(formatDate(post.published_at || post.created_at))}</div>
+          </div>
+          ${renderPostBody(post)}
+          ${postImage(post)}
+          <div class="feed-post-footer">
+            <button class="feed-like-button ${post.liked_by_me ? "is-liked" : ""}" type="button" data-post-id="${post.id}" data-liked="${post.liked_by_me ? "true" : "false"}">
+              <i class="bi ${post.liked_by_me ? "bi-heart-fill" : "bi-heart"}"></i>
+              <span>${post.like_count || 0}</span>
+            </button>
+            ${managementActions(post)}
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderEmpty() {
+    stream.innerHTML = `
+      <div class="empty-panel">
+        <div class="empty-panel-icon"><i class="bi bi-broadcast"></i></div>
+        <div>
+          <h3>まだ投稿がありません</h3>
+          <p>キャラクターの最初のつぶやきを投稿してください。</p>
+        </div>
+      </div>
+    `;
+  }
+
+  function rankingAvatar(item) {
+    const character = item.character || {};
+    const image = character.thumbnail_asset?.media_url || character.base_asset?.media_url;
+    if (image) {
+      return `<img src="${escapeText(image)}" alt="${escapeText(character.name)}">`;
+    }
+    return `<span>${escapeText((character.name || "?").slice(0, 1))}</span>`;
+  }
+
+  function renderRanking(items) {
+    if (!rankingList) return;
+    if (!items.length) {
+      rankingList.innerHTML = '<div class="feed-ranking-empty">まだランキング対象の投稿がありません。</div>';
+      return;
+    }
+    rankingList.innerHTML = items.map((item) => `
+      <a class="feed-ranking-item" href="/projects/${item.project?.id}/live-chat">
+        <span class="feed-ranking-rank">${item.rank}</span>
+        <span class="feed-ranking-avatar">${rankingAvatar(item)}</span>
+        <span class="feed-ranking-main">
+          <strong>${escapeText(item.character?.name || "Unknown")}</strong>
+          <small>${escapeText(item.project?.title || "World")}</small>
+        </span>
+        <span class="feed-ranking-count">${item.post_count}</span>
+      </a>
+    `).join("");
+  }
+
+  function ensureImageFile(file) {
+    if (!file) return false;
+    if (!file.type.startsWith("image/")) {
+      NovelUI.toast("画像ファイルを選択してください。", "warning");
+      return false;
+    }
+    return true;
+  }
+
+  function clearComposerImage() {
+    selectedComposerImage = null;
+    importedImageAssetId = null;
+    if (selectedComposerImageUrl) URL.revokeObjectURL(selectedComposerImageUrl);
+    selectedComposerImageUrl = null;
+    if (composerImageInput) composerImageInput.value = "";
+    if (attachmentPreview) {
+      attachmentPreview.classList.add("d-none");
+      attachmentPreview.innerHTML = "";
+    }
+    composerDropzone?.classList.remove("has-attachment");
+  }
+
+  function setComposerImage(file) {
+    if (!ensureImageFile(file)) return;
+    clearComposerImage();
+    selectedComposerImage = file;
+    selectedComposerImageUrl = URL.createObjectURL(file);
+    composerDropzone?.classList.add("has-attachment");
+    attachmentPreview.classList.remove("d-none");
+    attachmentPreview.innerHTML = `
+      <img src="${selectedComposerImageUrl}" alt="添付画像プレビュー">
+      <button class="feed-attachment-remove" type="button" id="feedAttachmentRemove" aria-label="添付画像を削除">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    `;
+  }
+
+  function setImportedImage(asset) {
+    if (!asset?.id || !asset.media_url) return;
+    clearComposerImage();
+    importedImageAssetId = asset.id;
+    composerDropzone?.classList.add("has-attachment");
+    attachmentPreview.classList.remove("d-none");
+    attachmentPreview.innerHTML = `
+      <img src="${escapeText(asset.media_url)}" alt="取り込み画像プレビュー">
+      <button class="feed-attachment-remove" type="button" id="feedAttachmentRemove" aria-label="添付画像を削除">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    `;
+  }
+
+  function extractFirstUrl(text) {
+    const match = String(text || "").match(/https?:\/\/\S+/);
+    return match ? match[0].replace(/[)\]。）、,]+$/, "") : "";
+  }
+
+  async function loadProjects() {
+    projects = await NovelUI.api("/api/v1/projects");
+    const options = projects.map((project) => `<option value="${project.id}">${escapeText(project.title)}</option>`).join("");
+    projectFilter.insertAdjacentHTML("beforeend", options);
+    if (composerProject) composerProject.innerHTML = options;
+    const firstProjectId = composerProject?.value || projectFilter.value || projects[0]?.id;
+    if (firstProjectId) await loadCharactersForProject(firstProjectId, { target: composerCharacter });
+  }
+
+  async function loadCharactersForProject(projectId, { target }) {
+    if (!target) return [];
+    target.innerHTML = '<option value="">読み込み中...</option>';
+    if (!projectId) {
+      target.innerHTML = '<option value="">すべて</option>';
+      return [];
+    }
+    const characters = await NovelUI.api(`/api/v1/projects/${projectId}/characters`);
+    const prefix = target === characterFilter ? '<option value="">すべて</option>' : "";
+    target.innerHTML = prefix + characters.map((character) => `<option value="${character.id}">${escapeText(character.name)}</option>`).join("");
+    return characters;
+  }
+
+  async function loadFeed() {
+    const params = new URLSearchParams(new FormData(filterForm));
+    [...params.keys()].forEach((key) => {
+      if (!params.get(key)) params.delete(key);
+    });
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    const posts = await NovelUI.api(`/api/v1/feed/posts${suffix}`);
+    if (!posts.length) {
+      renderEmpty();
+      return;
+    }
+    feedPostBodies.clear();
+    feedPosts.clear();
+    stream.innerHTML = posts.map(renderPost).join("");
+  }
+
+  async function loadRanking() {
+    const params = new URLSearchParams();
+    params.set("limit", "10");
+    if (projectFilter.value) params.set("project_id", projectFilter.value);
+    const items = await NovelUI.api(`/api/v1/feed/ranking/characters?${params.toString()}`);
+    renderRanking(items);
+  }
+
+  async function createPost(event) {
+    event.preventDefault();
+    const body = Object.fromEntries(new FormData(composerForm).entries());
+    const projectId = Number(body.project_id);
+    body.character_id = Number(body.character_id);
+    if (importedImageAssetId && !selectedComposerImage) {
+      body.image_asset_id = importedImageAssetId;
+    }
+    const previousProjectId = composerProject.value;
+    const previousCharacterId = composerCharacter.value;
+    try {
+      const post = await NovelUI.api(`/api/v1/projects/${projectId}/feed/posts`, { method: "POST", body });
+      if (selectedComposerImage) {
+        const imageBody = new FormData();
+        imageBody.append("file", selectedComposerImage);
+        const response = await fetch(`/api/v1/feed/posts/${post.id}/image/upload`, { method: "POST", body: imageBody, credentials: "same-origin" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.data?.message || payload?.message || `HTTP ${response.status}`);
+      }
+      composerForm.reset();
+      clearComposerImage();
+      composerProject.value = previousProjectId;
+      if (composerProject.value) await loadCharactersForProject(composerProject.value, { target: composerCharacter });
+      composerCharacter.value = previousCharacterId;
+      NovelUI.toast("Feedに投稿しました。");
+      await loadFeed();
+    } catch (error) {
+      NovelUI.toast(error.message || "投稿に失敗しました。", "danger");
+    }
+  }
+
+  async function toggleLike(button) {
+    const postId = Number(button.dataset.postId);
+    const liked = button.dataset.liked === "true";
+    const method = liked ? "DELETE" : "POST";
+    const post = await NovelUI.api(`/api/v1/feed/posts/${postId}/like`, { method });
+    button.dataset.liked = post.liked_by_me ? "true" : "false";
+    button.classList.toggle("is-liked", post.liked_by_me);
+    button.innerHTML = `<i class="bi ${post.liked_by_me ? "bi-heart-fill" : "bi-heart"}"></i><span>${post.like_count || 0}</span>`;
+  }
+
+  async function uploadImage(input) {
+    const [file] = input.files || [];
+    if (!file) return;
+    const postId = Number(input.dataset.postId);
+    const body = new FormData();
+    body.append("file", file);
+    const response = await fetch(`/api/v1/feed/posts/${postId}/image/upload`, { method: "POST", body, credentials: "same-origin" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.data?.message || payload?.message || `HTTP ${response.status}`);
+    NovelUI.toast("投稿画像をアップロードしました。");
+    await loadFeed();
+  }
+
+  async function generateImage(button) {
+    const postId = Number(button.dataset.postId);
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>生成中...';
+    try {
+      await NovelUI.api(`/api/v1/feed/posts/${postId}/image/generate`, { method: "POST", body: {} });
+      NovelUI.toast("投稿画像を生成しました。");
+      await loadFeed();
+    } finally {
+      button.disabled = false;
+      button.innerHTML = '<i class="bi bi-stars"></i><span>画像生成</span>';
+    }
+  }
+
+  async function deletePost(button) {
+    const postId = Number(button.dataset.postId);
+    if (!confirm("この投稿を削除しますか？")) return;
+    await NovelUI.api(`/api/v1/feed/posts/${postId}`, { method: "DELETE" });
+    NovelUI.toast("投稿を削除しました。");
+    await loadFeed();
+  }
+
+  async function openEditPost(button) {
+    const postId = String(button.dataset.postId);
+    const post = feedPosts.get(postId);
+    if (!post || !editModal) return;
+    editPostId.value = postId;
+    editBody.value = post.body || "";
+    editStatus.value = post.status || "published";
+    await loadCharactersForProject(post.project_id, { target: editCharacter });
+    editCharacter.value = String(post.character_id);
+    if (editImageInput) editImageInput.value = "";
+    if (editRemoveImage) editRemoveImage.checked = false;
+    editModal.show();
+  }
+
+  async function saveEditedPost(event) {
+    event.preventDefault();
+    const postId = Number(editPostId.value);
+    if (!postId) return;
+    const submitButton = editForm.querySelector('button[type="submit"]');
+    const originalHtml = submitButton.innerHTML;
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>保存中...';
+    try {
+      const payload = {
+        body: editBody.value,
+        character_id: Number(editCharacter.value),
+        status: editStatus.value,
+      };
+      if (editRemoveImage?.checked) {
+        payload.image_asset_id = null;
+      }
+      await NovelUI.api(`/api/v1/feed/posts/${postId}`, {
+        method: "PATCH",
+        body: payload,
+      });
+      const [file] = editImageInput?.files || [];
+      if (file) {
+        const imageBody = new FormData();
+        imageBody.append("file", file);
+        const response = await fetch(`/api/v1/feed/posts/${postId}/image/upload`, { method: "POST", body: imageBody, credentials: "same-origin" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.data?.message || payload?.message || `HTTP ${response.status}`);
+      }
+      editModal.hide();
+      NovelUI.toast("投稿を更新しました。");
+      await loadFeed();
+      await loadRanking();
+    } finally {
+      submitButton.disabled = false;
+      submitButton.innerHTML = originalHtml;
+    }
+  }
+
+  async function importFromUrl() {
+    const projectId = Number(composerProject.value);
+    if (!projectId) {
+      NovelUI.toast("先にワールドを選択してください。", "warning");
+      return;
+    }
+    const url = extractFirstUrl(composerBody.value);
+    if (!url) {
+      NovelUI.toast("本文にXなどの記事URLを貼ってください。", "warning");
+      return;
+    }
+    importUrlButton.disabled = true;
+    importUrlButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>取り込み中...';
+    try {
+      const result = await NovelUI.api(`/api/v1/projects/${projectId}/feed/import-url`, {
+        method: "POST",
+        body: { url },
+      });
+      if (result.body) {
+        composerBody.value = result.body;
+      }
+      if (result.image_asset) {
+        setImportedImage(result.image_asset);
+      }
+      NovelUI.toast("URLから本文と画像を取り込みました。");
+    } finally {
+      importUrlButton.disabled = false;
+      importUrlButton.innerHTML = '<i class="bi bi-link-45deg"></i><span>URLから取り込む</span>';
+    }
+  }
+
+  projectFilter.addEventListener("change", async () => {
+    await loadCharactersForProject(projectFilter.value, { target: characterFilter });
+    await loadFeed();
+    await loadRanking();
+  });
+  characterFilter.addEventListener("change", () => loadFeed().catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger")));
+  filterForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    loadFeed().catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
+  });
+  filterForm.addEventListener("input", (event) => {
+    if (event.target.id === "feedSearchInput") {
+      clearTimeout(filterForm._timer);
+      filterForm._timer = setTimeout(() => loadFeed().catch(() => {}), 350);
+    }
+  });
+  reloadButton.addEventListener("click", () => {
+    Promise.all([loadFeed(), loadRanking()]).catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
+  });
+  if (composerForm) {
+    composerForm.addEventListener("submit", createPost);
+    composerProject.addEventListener("change", () => {
+      loadCharactersForProject(composerProject.value, { target: composerCharacter }).catch((error) => NovelUI.toast(error.message || "キャラクター取得に失敗しました。", "danger"));
+    });
+    attachButton?.addEventListener("click", () => composerImageInput?.click());
+    importUrlButton?.addEventListener("click", () => {
+      importFromUrl().catch((error) => NovelUI.toast(error.message || "URL取り込みに失敗しました。", "danger"));
+    });
+    composerImageInput?.addEventListener("change", () => setComposerImage(composerImageInput.files?.[0]));
+    composerDropzone?.addEventListener("dragenter", (event) => {
+      event.preventDefault();
+      composerDropzone.classList.add("is-dragover");
+    });
+    composerDropzone?.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      composerDropzone.classList.add("is-dragover");
+    });
+    composerDropzone?.addEventListener("dragleave", (event) => {
+      if (!composerDropzone.contains(event.relatedTarget)) {
+        composerDropzone.classList.remove("is-dragover");
+      }
+    });
+    composerDropzone?.addEventListener("drop", (event) => {
+      event.preventDefault();
+      composerDropzone.classList.remove("is-dragover");
+      const [file] = event.dataTransfer?.files || [];
+      setComposerImage(file);
+    });
+    attachmentPreview?.addEventListener("click", (event) => {
+      if (event.target.closest("#feedAttachmentRemove")) {
+        clearComposerImage();
+      }
+    });
+  }
+  editForm?.addEventListener("submit", (event) => {
+    saveEditedPost(event).catch((error) => NovelUI.toast(error.message || "投稿の更新に失敗しました。", "danger"));
+  });
+  stream.addEventListener("click", (event) => {
+    const likeButton = event.target.closest(".feed-like-button");
+    if (likeButton) {
+      toggleLike(likeButton).catch((error) => NovelUI.toast(error.message || "いいねに失敗しました。", "danger"));
+      return;
+    }
+    const generateButton = event.target.closest(".feed-image-generate");
+    if (generateButton) {
+      generateImage(generateButton).catch((error) => NovelUI.toast(error.message || "画像生成に失敗しました。", "danger"));
+      return;
+    }
+    const deleteButton = event.target.closest(".feed-post-delete");
+    if (deleteButton) {
+      deletePost(deleteButton).catch((error) => NovelUI.toast(error.message || "削除に失敗しました。", "danger"));
+      return;
+    }
+    const editButton = event.target.closest(".feed-post-edit");
+    if (editButton) {
+      openEditPost(editButton).catch((error) => NovelUI.toast(error.message || "編集画面を開けませんでした。", "danger"));
+      return;
+    }
+    const expandButton = event.target.closest("[data-feed-expand]");
+    if (expandButton) {
+      const body = expandButton.previousElementSibling;
+      if (!body?.matches("[data-feed-body]")) return;
+      const fullBody = feedPostBodies.get(String(expandButton.dataset.postId)) || "";
+      const isExpanded = expandButton.dataset.expanded === "true";
+      body.classList.toggle("is-collapsed", isExpanded);
+      body.querySelector(".feed-body-text").innerHTML = bodyToHtml(isExpanded ? collapsedBody(fullBody) : fullBody);
+      expandButton.dataset.expanded = isExpanded ? "false" : "true";
+      expandButton.textContent = isExpanded ? "さらに表示" : "折りたたむ";
+      return;
+    }
+  });
+  stream.addEventListener("change", (event) => {
+    const input = event.target.closest(".feed-image-upload");
+    if (input) {
+      uploadImage(input).catch((error) => NovelUI.toast(error.message || "画像アップロードに失敗しました。", "danger"));
+    }
+  });
+
+  loadProjects()
+    .then(() => Promise.all([loadFeed(), loadRanking()]))
+    .catch((error) => NovelUI.toast(error.message || "Feedの初期化に失敗しました。", "danger"));
+})();
+</script>
+{% endblock %}
