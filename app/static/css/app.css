@@ -1146,6 +1146,44 @@ body::before {
   gap: 0.45rem;
 }
 
+.live-chat-room-objective {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+}
+
+.live-chat-room-objective-toggle {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.72rem;
+  border: 1px solid rgba(84, 177, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(6, 18, 34, 0.68);
+  color: #b9eaff;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.live-chat-room-objective-toggle[aria-expanded="true"] i {
+  transform: rotate(180deg);
+}
+
+.live-chat-room-objective-toggle i {
+  transition: transform 0.16s ease;
+}
+
+.live-chat-room-objective-body {
+  min-height: 0;
+  padding: 0.85rem 0.95rem;
+  font-size: 0.88rem;
+}
+
+.live-chat-room-objective-body > :last-child {
+  margin-bottom: 0;
+}
+
 .live-chat-room-character-thumb {
   width: 88px;
   height: 88px;

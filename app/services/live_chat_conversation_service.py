@@ -382,11 +382,6 @@ class LiveChatConversationService:
         updated_context = self._context_provider(session_id)
         self.update_line_visual_note(session_id, updated_context)
         generated_image = None
-        if intent.get("should_generate_image"):
-            try:
-                generated_image = self._media_service.generate_image(session_id, {"image_type": "directed_scene"})
-            except Exception:
-                generated_image = None
         updated_context = self._context_provider(session_id)
         self.update_session_memory(session_id, updated_context)
         updated_context = self._context_provider(session_id)
@@ -467,30 +462,6 @@ class LiveChatConversationService:
         generated_image = None
         image_generation_error = None
         auto_image_candidate = False
-        if not defer_post_processing:
-            auto_image_candidate = (
-                self._media_service
-                and self._should_auto_generate_scene_image(
-                    context_before_progression,
-                    updated_context,
-                    user_message.message_text,
-                )
-            )
-        skip_auto_image = str(payload.get("skip_auto_image") or "").lower() in {"1", "true", "yes", "on"}
-        if auto_image_candidate and not skip_auto_image:
-            try:
-                generated_image = self._media_service.generate_image(
-                    session_id,
-                    {
-                        "image_type": "auto_scene",
-                        "size": payload.get("size") or "1536x1024",
-                        "quality": payload.get("quality") or "low",
-                    },
-                )
-                updated_context = self._context_provider(session_id)
-            except Exception as exc:
-                image_generation_error = str(exc)
-                generated_image = None
         state = self._extract_state_payload(session, updated_context)
         assistant_payload = (
             {

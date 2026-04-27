@@ -46,6 +46,68 @@
     return text.length > maxLength ? `${text.slice(0, maxLength).trimEnd()}...` : text;
   }
 
+  function renderInlineMarkdown(text) {
+    return NovelUI.escape(text ?? "")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/`(.+?)`/g, "<code>$1</code>");
+  }
+
+  function markdownToHtml(markdown) {
+    const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+    const html = [];
+    let inList = false;
+    const closeList = () => {
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+    };
+    for (const rawLine of lines) {
+      const trimmed = rawLine.trim();
+      if (!trimmed) {
+        closeList();
+        continue;
+      }
+      if (trimmed.startsWith("## ")) {
+        closeList();
+        html.push(`<h5>${renderInlineMarkdown(trimmed.slice(3))}</h5>`);
+      } else if (trimmed.startsWith("# ")) {
+        closeList();
+        html.push(`<h4>${renderInlineMarkdown(trimmed.slice(2))}</h4>`);
+      } else if (trimmed.startsWith("> ")) {
+        closeList();
+        html.push(`<blockquote>${renderInlineMarkdown(trimmed.slice(2))}</blockquote>`);
+      } else if (trimmed.startsWith("- ")) {
+        if (!inList) {
+          html.push("<ul>");
+          inList = true;
+        }
+        html.push(`<li>${renderInlineMarkdown(trimmed.slice(2))}</li>`);
+      } else {
+        closeList();
+        html.push(`<p>${renderInlineMarkdown(trimmed)}</p>`);
+      }
+    }
+    closeList();
+    return html.join("");
+  }
+
+  function renderRoomObjective(room) {
+    const objective = String(room.conversation_objective || "").trim();
+    if (!objective) return "";
+    return `
+      <div class="live-chat-room-objective">
+        <button class="live-chat-room-objective-toggle" type="button" data-toggle-room-objective="${room.id}" aria-expanded="false">
+          <span>指示を開く</span>
+          <i class="bi bi-chevron-down"></i>
+        </button>
+        <div class="markdown-preview live-chat-room-objective-body is-collapsed" id="roomObjective-${room.id}" hidden>
+          ${markdownToHtml(objective)}
+        </div>
+      </div>
+    `;
+  }
+
   function statusLabel(value) {
     if (value === "published") return "公開";
     if (value === "archived") return "アーカイブ";
@@ -90,6 +152,7 @@
               <div class="small text-secondary">話す相手: ${NovelUI.escape(characterName)}</div>
             </div>
           </div>
+          ${renderRoomObjective(room)}
           ${manageMode ? renderManageActions(room) : renderStartForm(room)}
           <div class="live-chat-room-session-list mt-3" id="roomSessions-${room.id}"></div>
         </article>
@@ -198,6 +261,15 @@
     const deleteButton = event.target.closest("[data-delete-room]");
     if (deleteButton) {
       deleteRoom(Number(deleteButton.dataset.deleteRoom)).catch((error) => NovelUI.toast(error.message || "ルーム削除に失敗しました。", "danger"));
+    }
+    const objectiveToggle = event.target.closest("[data-toggle-room-objective]");
+    if (objectiveToggle) {
+      const body = document.getElementById(`roomObjective-${objectiveToggle.dataset.toggleRoomObjective}`);
+      const expanded = objectiveToggle.getAttribute("aria-expanded") === "true";
+      objectiveToggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+      objectiveToggle.querySelector("span").textContent = expanded ? "指示を開く" : "指示を閉じる";
+      body?.toggleAttribute("hidden", expanded);
+      body?.classList.toggle("is-collapsed", expanded);
     }
   });
 

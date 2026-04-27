@@ -192,11 +192,6 @@
             NovelUI.refreshLetterBadge?.();
           }, 3500);
         }
-        if (result?.auto_image_candidate) {
-          shell.setReplyLoading(false, currentContext);
-          await generateSessionImage(false, "auto", { image_type: "auto_scene" });
-          NovelUI.toast("\u5834\u9762\u6307\u793a\u3092\u53cd\u6620\u3057\u3066\u753b\u50cf\u3092\u751f\u6210\u3057\u307e\u3057\u305f\u3002");
-        }
       }
       composeForm.message_text.value = "";
       NovelUI.toast("\u30e1\u30c3\u30bb\u30fc\u30b8\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f\u3002");
