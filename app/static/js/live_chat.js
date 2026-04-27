@@ -77,8 +77,8 @@
     }
     imageForm.prompt_text.value = context.state.visual_prompt_text || "";
 
-    shell.renderMessages(context.messages || [], context);
     shell.renderSelectedImage(context.selected_image, context);
+    shell.renderMessages(context.messages || [], context);
     shell.renderImageGrid(context.images || []);
     costumeRoomController?.render(context);
     renderSceneChoices(context);
@@ -185,7 +185,13 @@
           NovelUI.toast("\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304b\u3089\u30e1\u30fc\u30eb\u304c\u5c4a\u304d\u307e\u3057\u305f\u3002");
           NovelUI.refreshLetterBadge?.();
         }
+        shell.setReplyLoading(false, currentContext, { render: false });
         await loadContext();
+        if (result?.deferred_processing) {
+          window.setTimeout(() => {
+            NovelUI.refreshLetterBadge?.();
+          }, 3500);
+        }
         if (result?.auto_image_candidate) {
           shell.setReplyLoading(false, currentContext);
           await generateSessionImage(false, "auto", { image_type: "auto_scene" });
@@ -253,6 +259,7 @@
     const button = event.target.closest("[data-scene-choice-id]");
     if (!button) return;
     setSceneChoiceLoading(true, button);
+    shell.setImageLoading(true, "auto");
     try {
       const result = await LiveChatApi.executeSceneChoice(sessionId, button.dataset.sceneChoiceId);
       if (result?.context) {
@@ -266,6 +273,7 @@
       await loadContext().catch(() => {});
     } finally {
       setSceneChoiceLoading(false);
+      shell.setImageLoading(false, "auto");
     }
   });
 

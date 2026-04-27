@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import threading
 from datetime import datetime
+from types import SimpleNamespace
 
+from flask import current_app
+
+from ..extensions import db
 from ..clients.text_ai_client import TextAIClient
 from ..utils import json_util
 from . import live_chat_prompt_support as prompt_support
@@ -288,6 +293,68 @@ class LiveChatConversationService:
         )
         return self._serialize_state(state) if self._serialize_state else state
 
+    def _defer_post_processing_enabled(self) -> bool:
+        try:
+            return bool(current_app.config.get("LIVE_CHAT_DEFER_POST_PROCESSING", True))
+        except RuntimeError:
+            return False
+
+    def _run_deferred_post_processing(
+        self,
+        session_id: int,
+        assistant_message_payload: dict | None,
+        user_message_text: str,
+    ):
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return None
+        updated_context = self._context_provider(session_id)
+        self.update_scene_progression(session_id, updated_context, user_message_text)
+        updated_context = self._context_provider(session_id)
+        self.update_conversation_director(session_id, updated_context, user_message_text)
+        updated_context = self._context_provider(session_id)
+        self.update_line_visual_note(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        self.update_session_memory(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        self.update_conversation_evaluation(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        if assistant_message_payload:
+            assistant_message = SimpleNamespace(**assistant_message_payload)
+            self.update_scene_choices(session_id, updated_context, assistant_message)
+            updated_context = self._context_provider(session_id)
+        if self._letter_service:
+            return self._letter_service.try_generate_for_context(
+                session,
+                updated_context,
+                trigger_type="conversation",
+            )
+        return None
+
+    def _schedule_deferred_post_processing(
+        self,
+        session_id: int,
+        assistant_message_payload: dict | None,
+        user_message_text: str,
+    ):
+        try:
+            app = current_app._get_current_object()
+        except RuntimeError:
+            self._run_deferred_post_processing(session_id, assistant_message_payload, user_message_text)
+            return False
+
+        def worker():
+            with app.app_context():
+                try:
+                    self._run_deferred_post_processing(session_id, assistant_message_payload, user_message_text)
+                except Exception:
+                    app.logger.exception("deferred live chat post-processing failed")
+                finally:
+                    db.session.remove()
+
+        threading.Thread(target=worker, name=f"live-chat-post-process-{session_id}", daemon=True).start()
+        return True
+
     def post_directed_scene_message(self, session, session_id: int, user_message, intent: dict):
         context = self._context_provider(session_id)
         self.apply_directed_scene(session_id, context, user_message.message_text, intent)
@@ -372,12 +439,14 @@ class LiveChatConversationService:
             return self.post_directed_scene_message(session, session_id, user_message, input_intent)
 
         created = [self._serialize_message(user_message)]
+        defer_post_processing = self._defer_post_processing_enabled()
         context_before_progression = self._context_provider(session_id)
         context = context_before_progression
-        self.update_scene_progression(session_id, context, user_message.message_text)
-        context = self._context_provider(session_id)
-        self.update_conversation_director(session_id, context, user_message.message_text)
-        context = self._context_provider(session_id)
+        if not defer_post_processing:
+            self.update_scene_progression(session_id, context, user_message.message_text)
+            context = self._context_provider(session_id)
+            self.update_conversation_director(session_id, context, user_message.message_text)
+            context = self._context_provider(session_id)
         auto_reply = str(payload.get("auto_reply", "true")).lower() not in {"0", "false", "no", "off"}
         assistant_message = None
         if auto_reply:
@@ -397,14 +466,16 @@ class LiveChatConversationService:
         updated_context = self._context_provider(session_id)
         generated_image = None
         image_generation_error = None
-        auto_image_candidate = (
-            self._media_service
-            and self._should_auto_generate_scene_image(
-                context_before_progression,
-                updated_context,
-                user_message.message_text,
+        auto_image_candidate = False
+        if not defer_post_processing:
+            auto_image_candidate = (
+                self._media_service
+                and self._should_auto_generate_scene_image(
+                    context_before_progression,
+                    updated_context,
+                    user_message.message_text,
+                )
             )
-        )
         skip_auto_image = str(payload.get("skip_auto_image") or "").lower() in {"1", "true", "yes", "on"}
         if auto_image_candidate and not skip_auto_image:
             try:
@@ -420,20 +491,41 @@ class LiveChatConversationService:
             except Exception as exc:
                 image_generation_error = str(exc)
                 generated_image = None
-        self.update_session_memory(session_id, updated_context)
-        updated_context = self._context_provider(session_id)
-        self.update_conversation_evaluation(session_id, updated_context)
-        updated_context = self._context_provider(session_id)
         state = self._extract_state_payload(session, updated_context)
-        updated_context = self._context_provider(session_id)
-        if assistant_message:
-            self.update_scene_choices(session_id, updated_context, assistant_message)
-            updated_context = self._context_provider(session_id)
-        new_letter = self._letter_service.try_generate_for_context(
-            session,
-            updated_context,
-            trigger_type="conversation",
+        assistant_payload = (
+            {
+                "id": assistant_message.id,
+                "speaker_name": assistant_message.speaker_name,
+                "message_text": assistant_message.message_text,
+            }
+            if assistant_message
+            else None
         )
+        deferred_processing = False
+        new_letter = None
+        if defer_post_processing:
+            deferred_processing = self._schedule_deferred_post_processing(
+                session_id,
+                assistant_payload,
+                user_message.message_text,
+            )
+        else:
+            self.update_line_visual_note(session_id, updated_context)
+            updated_context = self._context_provider(session_id)
+            self.update_session_memory(session_id, updated_context)
+            updated_context = self._context_provider(session_id)
+            self.update_conversation_evaluation(session_id, updated_context)
+            updated_context = self._context_provider(session_id)
+            state = self._extract_state_payload(session, updated_context)
+            updated_context = self._context_provider(session_id)
+            if assistant_message:
+                self.update_scene_choices(session_id, updated_context, assistant_message)
+                updated_context = self._context_provider(session_id)
+            new_letter = self._letter_service.try_generate_for_context(
+                session,
+                updated_context,
+                trigger_type="conversation",
+            )
         return {
             "messages": created,
             "state": state,
@@ -443,6 +535,7 @@ class LiveChatConversationService:
             "image_generation_error": image_generation_error,
             "auto_image_candidate": bool(auto_image_candidate),
             "new_letter": new_letter,
+            "deferred_processing": deferred_processing,
         }
 
     def execute_scene_choice(self, session_id: int, choice_id: str, payload: dict | None = None):
@@ -459,17 +552,23 @@ class LiveChatConversationService:
             return None
 
         context = self._context_provider(session_id)
-        prompt = self.build_choice_image_prompt(context, choice)
+        execution = text_support.generate_choice_execution(self._text_ai_client, context, choice)
+        directed_choice = {**choice}
+        for key in ("scene_instruction", "image_prompt_hint", "reply_hint"):
+            if execution.get(key):
+                directed_choice[key] = execution[key]
+        prompt = self.build_choice_image_prompt(context, directed_choice)
         scene_update = {
             "scene_phase": "choice_transition",
-            "location": choice.get("label"),
-            "background": choice.get("image_prompt_hint"),
-            "focus_summary": choice.get("scene_instruction") or choice.get("label"),
-            "next_topic": choice.get("reply_hint") or "react to the selected scene",
+            "location": execution.get("location") or state_json.get("location") or choice.get("label"),
+            "background": execution.get("background") or directed_choice.get("image_prompt_hint"),
+            "focus_summary": directed_choice.get("scene_instruction") or directed_choice.get("label"),
+            "next_topic": directed_choice.get("reply_hint") or "react to the selected scene",
             "transition_occurred": True,
-            "character_reaction_hint": choice.get("reply_hint") or "",
+            "character_reaction_hint": directed_choice.get("reply_hint") or "",
             "image_focus": prompt,
-            "selected_choice": choice,
+            "selected_choice": directed_choice,
+            "choice_execution": execution,
         }
         state_json["input_intent"] = {
             "intent": "visual_request",
@@ -493,9 +592,9 @@ class LiveChatConversationService:
             {
                 "sender_type": "narration",
                 "speaker_name": "選択",
-                "message_text": choice.get("label") or "場面を選択",
+                "message_text": directed_choice.get("label") or "場面を選択",
                 "message_role": "choice",
-                "state_snapshot_json": {"scene_choice": choice},
+                "state_snapshot_json": {"scene_choice": directed_choice, "choice_execution": execution},
             },
         )
         generated_image = self._media_service.generate_image(
@@ -513,7 +612,7 @@ class LiveChatConversationService:
         reply = text_support.generate_narration_reaction(
             self._text_ai_client,
             updated_context,
-            choice.get("label") or "",
+            directed_choice.get("label") or "",
             scene_update,
         )
         assistant_message = self._chat_message_service.create_message(
@@ -525,6 +624,8 @@ class LiveChatConversationService:
                 "message_role": "assistant",
                 "state_snapshot_json": {
                     "scene_choice": choice,
+                    "directed_choice": directed_choice,
+                    "choice_execution": execution,
                     "directed_scene": scene_update,
                 },
             },

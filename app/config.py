@@ -56,3 +56,9 @@ class Config:
     TEXT_AI_TIMEOUT_SECONDS = int(os.getenv("TEXT_AI_TIMEOUT_SECONDS", "120"))
     IMAGE_AI_TIMEOUT_SECONDS = int(os.getenv("IMAGE_AI_TIMEOUT_SECONDS", "60"))
     LETTER_COOLDOWN_MINUTES = int(os.getenv("LETTER_COOLDOWN_MINUTES", "360"))
+    LIVE_CHAT_DEFER_POST_PROCESSING = os.getenv("LIVE_CHAT_DEFER_POST_PROCESSING", "true").lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }

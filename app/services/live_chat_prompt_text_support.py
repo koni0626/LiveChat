@@ -672,30 +672,53 @@ def build_scene_choice_prompt(context: dict, speaker_name: str, message_text: st
 
 
 def fallback_scene_choices(context: dict, speaker_name: str, message_text: str) -> dict:
-    text = str(message_text or "")
-    candidates = []
-    keyword_map = [
-        ("海", "海へ行く", "キャラクターと一緒に海へ移動する。海辺に到着した開放的な場面を生成する。", "海辺、波、空、キャラクターがこちらを見る"),
-        ("山", "山へ行く", "キャラクターと一緒に山へ移動する。自然の中で空気が変わる場面を生成する。", "山道、森、自然、キャラクターがこちらを見る"),
-        ("夜景", "夜景を見る", "キャラクターと一緒に夜景が見える場所へ移動する。きらめく夜景を眺める場面を生成する。", "夜景、都市の光、ロマンチックな空気"),
-        ("店", "店に入る", "キャラクターと一緒に店内へ入る。店の雰囲気が伝わる場面を生成する。", "店内、商品棚、柔らかい照明"),
-        ("クルーザー", "クルーザーを見る", "キャラクターと一緒にクルーザーが見える場所へ移動する。クルーザーを印象的に見せる場面を生成する。", "港、クルーザー、水面、キャラクター"),
+    return {"should_show_choices": False, "choices": []}
+
+
+def build_choice_execution_prompt(context: dict, choice: dict) -> str:
+    state_json = context["state"].get("state_json") or {}
+    displayed_image = state_json.get("displayed_image_observation") or {}
+    scene_progression = state_json.get("scene_progression") or {}
+    session_objective = get_session_objective(context)
+    lines = [
+        "You are a visual-novel choice director.",
+        "The player selected one choice button. Interpret it using the full conversation context.",
+        "Do not use fixed templates. Convert the selected intent into concrete dramatic direction for dialogue and image generation.",
+        "Return only a JSON object.",
+        "Required keys: scene_instruction, image_prompt_hint, reply_hint, location, background, emotional_effect.",
+        "scene_instruction: Japanese summary of what the player did or chose.",
+        "image_prompt_hint: Japanese visual direction. If the selected choice is abstract, convert it into visible acting, expression, distance, pose, camera, mood, and background changes.",
+        "reply_hint: Japanese instruction for how the character should react next, matching personality and speech style.",
+        "location/background may stay unchanged if the choice is emotional rather than a place move.",
+        "Keep it safe, character-consistent, and suitable for a romance/live-chat visual novel.",
+        f"Selected choice label: {choice.get('label') or ''}",
+        f"Selected choice intent: {choice.get('intent') or ''}",
+        f"Existing scene_instruction: {choice.get('scene_instruction') or ''}",
+        f"Existing image_prompt_hint: {choice.get('image_prompt_hint') or ''}",
+        f"Existing reply_hint: {choice.get('reply_hint') or ''}",
+        f"Player name: {context['session'].get('player_name') or 'プレイヤー'}",
+        f"Session objective: {session_objective or 'none'}",
+        f"Current location: {state_json.get('location') or scene_progression.get('location') or ''}",
+        f"Current background: {state_json.get('background') or scene_progression.get('background') or ''}",
+        f"Displayed image summary: {displayed_image.get('short_summary') or ''}",
+        "Characters:",
     ]
-    for keyword, label, instruction, hint in keyword_map:
-        if keyword in text and label not in {item["label"] for item in candidates}:
-            candidates.append(
-                {
-                    "id": f"choice_{len(candidates) + 1}",
-                    "label": label,
-                    "intent": "scene_transition",
-                    "scene_instruction": instruction,
-                    "image_prompt_hint": hint,
-                    "reply_hint": f"{label}後、{speaker_name or 'キャラクター'}がその場面に合う短い一言を話す。",
-                }
-            )
-        if len(candidates) >= 2:
-            break
-    return {"should_show_choices": bool(candidates), "choices": candidates}
+    for character in context["characters"]:
+        lines.append(
+            f"- {character.get('name')}: personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, likes={character.get('likes_text') or ''}, dislikes={character.get('dislikes_text') or ''}, ng_rules={character.get('ng_rules') or ''}"
+        )
+    lines.append("Recent conversation:")
+    for message in context["messages"][-10:]:
+        lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
+    lines.extend(
+        [
+            "Examples of expected reasoning, not fixed output:",
+            "- If the choice is 'もっと褒める', make the image hint visible through the character blushing, softening, glancing away, leaning closer, or smiling with pleased embarrassment.",
+            "- If the choice is '海へ行く', make the location/background clearly seaside and the character react to the sea.",
+            "- If the choice is '話題を変える', do not force a location change; show a subtle mood shift or new prop/topic.",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def build_costume_rewrite_prompt(context: dict, character: dict, instruction: str, costume_context: str) -> str:

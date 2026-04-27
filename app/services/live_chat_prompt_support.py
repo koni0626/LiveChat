@@ -76,6 +76,10 @@ def fallback_scene_choices(context: dict, speaker_name: str, message_text: str) 
     return text_prompt_support.fallback_scene_choices(context, speaker_name, message_text)
 
 
+def build_choice_execution_prompt(context: dict, choice: dict) -> str:
+    return text_prompt_support.build_choice_execution_prompt(context, choice)
+
+
 def build_costume_rewrite_prompt(context: dict, character: dict, instruction: str, costume_context: str) -> str:
     return text_prompt_support.build_costume_rewrite_prompt(context, character, instruction, costume_context)
 

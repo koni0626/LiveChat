@@ -63,6 +63,16 @@ class LetterService:
         relative = os.path.relpath(normalized_path, normalized_root).replace("\\", "/")
         return f"/media/{relative}"
 
+    def _normalize_text(self, value):
+        return (
+            str(value or "")
+            .replace("\\r\\n", "\n")
+            .replace("\\n", "\n")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .strip()
+        )
+
     def _serialize_asset(self, asset):
         if not asset:
             return None
@@ -105,9 +115,9 @@ class LetterService:
             "recipient_user_id": letter.recipient_user_id,
             "sender_character_id": letter.sender_character_id,
             "sender_character": self._serialize_character(sender),
-            "subject": letter.subject,
-            "body": letter.body,
-            "summary": letter.summary,
+            "subject": self._normalize_text(letter.subject),
+            "body": self._normalize_text(letter.body),
+            "summary": self._normalize_text(letter.summary),
             "image_asset": self._serialize_asset(image_asset),
             "status": letter.status,
             "trigger_type": letter.trigger_type,
@@ -189,9 +199,9 @@ class LetterService:
                 "session_id": session.id,
                 "recipient_user_id": session.owner_user_id,
                 "sender_character_id": character["id"],
-                "subject": str(content.get("subject") or "あなたへ").strip()[:255],
-                "body": str(content.get("body") or "").strip(),
-                "summary": str(content.get("summary") or decision.get("reason") or "").strip() or None,
+                "subject": self._normalize_text(content.get("subject") or "あなたへ")[:255],
+                "body": self._normalize_text(content.get("body")),
+                "summary": self._normalize_text(content.get("summary") or decision.get("reason")) or None,
                 "image_asset_id": image_asset_id,
                 "status": "unread",
                 "trigger_type": trigger_type,

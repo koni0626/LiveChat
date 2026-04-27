@@ -78,6 +78,15 @@
     return letter.image_asset?.media_url || letter.sender_character?.thumbnail_asset?.media_url || letter.sender_character?.base_asset?.media_url || "";
   }
 
+  function normalizeLetterText(value) {
+    return String(value || "")
+      .replace(/\\r\\n/g, "\n")
+      .replace(/\\n/g, "\n")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .trim();
+  }
+
   function renderEmpty() {
     listHost.innerHTML = `
       <div class="empty-panel letter-empty">
@@ -130,7 +139,7 @@
     const imageUrl = letterImage(letter);
     modalTitle.textContent = letter.subject || "あなたへ";
     modalFrom.textContent = `${letter.sender_character?.name || "Character"} から`;
-    modalBody.textContent = letter.body || "";
+    modalBody.textContent = normalizeLetterText(letter.body);
     returnLink.href = letter.return_url || "#";
     if (imageUrl) {
       modalImage.src = imageUrl;

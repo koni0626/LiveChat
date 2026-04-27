@@ -41,7 +41,8 @@
       return state.novelPageState;
     }
 
-    function setReplyLoading(active, currentContext) {
+    function setReplyLoading(active, currentContext, options = {}) {
+      const changed = state.replyLoading !== active;
       state.replyLoading = active;
       const loading = document.getElementById("liveChatReplyLoading");
       if (loading) loading.hidden = !active;
@@ -53,14 +54,17 @@
       if (typeof onGiftInteractionChange === "function") {
         onGiftInteractionChange(active);
       }
+      if (options.render === false || (!changed && !active)) {
+        return;
+      }
       renderNovel(currentContext?.messages || [], currentContext);
     }
 
     function setImageLoading(active, mode = "generate") {
       state.imageLoading = active;
       const loadingLabel = mode === "regenerate"
-        ? "\u518d\u751f\u6210\u4e2d..."
-        : (mode === "auto" ? "\u5834\u9762\u3092\u751f\u6210\u4e2d..." : "\u753b\u50cf\u751f\u6210\u4e2d...");
+        ? "\u3082\u3046\u4e00\u679a\u3001\u9b45\u305b\u5834\u3092\u4ed5\u7acb\u3066\u4e2d..."
+        : (mode === "auto" ? "\u6b21\u306e\u5834\u9762\u3092\u30c9\u30e9\u30de\u30c1\u30c3\u30af\u306b\u64ae\u5f71\u4e2d..." : "\u3068\u3063\u3066\u304a\u304d\u306e\u4e00\u679a\u3092\u751f\u6210\u4e2d...");
       if (generateImageButton) {
         generateImageButton.disabled = active;
         generateImageButton.innerHTML = active
@@ -138,8 +142,8 @@
         textboxVisible: state.textboxVisible,
         imageLoading: state.imageLoading,
         replyLoading: state.replyLoading,
-        novelSpeakerText: novelElements.novelSpeaker?.textContent || "",
-        novelTextValue: novelElements.novelText?.textContent || "",
+        novelSpeakerText: "",
+        novelTextValue: "",
       });
     }
 
