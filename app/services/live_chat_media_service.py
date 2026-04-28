@@ -215,28 +215,34 @@ class LiveChatMediaService:
         context = self._context_provider(session_id)
         state = context["state"]
         state_json = dict(state.get("state_json") or {})
-        conversation_prompt = image_support.generate_japanese_conversation_image_prompt(self._text_ai_client, context, state)
-        state_json["conversation_image_prompt"] = conversation_prompt
         reuse_existing_prompt = str(payload.get("use_existing_prompt") or "").lower() in {"1", "true", "yes", "on"}
-        prompt = str(payload.get("prompt_text") or "").strip() if reuse_existing_prompt else ""
-        if not prompt:
+        conversation_prompt = {}
+        if reuse_existing_prompt:
+            prompt = str(payload.get("prompt_text") or "")
+            if not prompt.strip():
+                raise ValueError("prompt_text is required")
+            state_json["manual_prompt_passthrough"] = True
+            state_json.pop("image_prompt_safety_rewrite", None)
+        else:
+            conversation_prompt = image_support.generate_japanese_conversation_image_prompt(self._text_ai_client, context, state)
+            state_json["conversation_image_prompt"] = conversation_prompt
             prompt = str(conversation_prompt.get("prompt_ja") or "").strip()
-        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
-        prompt = prompt_support.apply_visual_style(prompt, context)
-        prompt = prompt_support.forbid_text_in_image(prompt)
-        safety_rewrite = text_support.rewrite_image_prompt_for_safety(
-            self._text_ai_client,
-            context,
-            prompt,
-            purpose=str(payload.get("image_type") or "live_scene"),
-        )
-        prompt = safety_rewrite.get("rewritten_prompt") or prompt
-        prompt = prompt_support.apply_visual_style(prompt, context)
-        prompt = prompt_support.forbid_text_in_image(prompt)
+            prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+            prompt = prompt_support.apply_visual_style(prompt, context)
+            prompt = prompt_support.forbid_text_in_image(prompt)
+            safety_rewrite = text_support.rewrite_image_prompt_for_safety(
+                self._text_ai_client,
+                context,
+                prompt,
+                purpose=str(payload.get("image_type") or "live_scene"),
+            )
+            prompt = safety_rewrite.get("rewritten_prompt") or prompt
+            prompt = prompt_support.apply_visual_style(prompt, context)
+            prompt = prompt_support.forbid_text_in_image(prompt)
+            if safety_rewrite.get("changed"):
+                state_json["image_prompt_safety_rewrite"] = safety_rewrite
         visual_state = prompt_support.build_visual_state(context, state, prompt=prompt)
         state_json["visual_state"] = visual_state
-        if safety_rewrite.get("changed"):
-            state_json["image_prompt_safety_rewrite"] = safety_rewrite
 
         active_characters = image_support.resolve_active_characters(context, state_json, conversation_prompt)
         reference_paths, reference_asset_ids = self.collect_session_reference_assets(session_id, active_characters, limit=1)
@@ -300,7 +306,7 @@ class LiveChatMediaService:
             session_id,
             {
                 "state_json": state_json,
-                "visual_prompt_text": result.get("revised_prompt") or prompt,
+                "visual_prompt_text": prompt if reuse_existing_prompt else result.get("revised_prompt") or prompt,
             },
         )
         return self.serialize_session_image(session_image)

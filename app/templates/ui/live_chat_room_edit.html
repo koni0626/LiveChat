@@ -51,6 +51,22 @@
           <div class="markdown-summary-body" id="liveChatRoomObjectivePreview">まだ入力されていません。</div>
         </article>
       </div>
+      <div class="col-12">
+        <textarea class="d-none" id="liveChatRoomProxyPlayerObjectiveInput" name="proxy_player_objective"></textarea>
+        <article class="markdown-summary-card live-chat-room-objective-card">
+          <div class="markdown-summary-head">
+            <div>
+              <h4>代理プレイヤーの目的</h4>
+              <p>空送信時にAIがプレイヤーの代わりに考える発話方針をMarkdownで入力します。</p>
+            </div>
+            <button class="btn btn-sm btn-outline-light" type="button" id="liveChatRoomProxyPlayerObjectiveEditButton">
+              <i class="bi bi-pencil-square"></i>
+              <span>編集</span>
+            </button>
+          </div>
+          <div class="markdown-summary-body" id="liveChatRoomProxyPlayerObjectivePreview">未設定の場合は会話の流れから自然に発話します。</div>
+        </article>
+      </div>
       <div class="col-12 d-flex gap-2 justify-content-end">
         <a class="btn btn-outline-dark" href="{{ url_for('ui.live_chat_rooms_page', project_id=project_id) }}">キャンセル</a>
         <button class="btn btn-sunrise" type="submit">{{ "ルームを更新" if room_id else "ルームを保存" }}</button>
@@ -95,6 +111,41 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="liveChatRoomProxyPlayerObjectiveModal" tabindex="-1" aria-labelledby="liveChatRoomProxyPlayerObjectiveModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content markdown-modal">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title h5" id="liveChatRoomProxyPlayerObjectiveModalLabel">代理プレイヤーの目的を編集</h3>
+          <p class="mb-0 text-secondary">Markdownで、空送信時にプレイヤー代理AIへ守らせたい目的や態度を書けます。</p>
+        </div>
+        <button class="btn-close btn-close-white" type="button" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="markdown-modal-grid">
+          <div class="markdown-field">
+            <label class="form-label" for="liveChatRoomProxyPlayerObjectiveMarkdownInput">Markdown入力</label>
+            <textarea
+              class="form-control markdown-modal-input"
+              id="liveChatRoomProxyPlayerObjectiveMarkdownInput"
+              rows="20"
+              placeholder="- キャラクターを自然に褒める&#10;- 相手の好きなものを聞き出す&#10;- 少し照れながら距離を縮める"
+            ></textarea>
+          </div>
+          <div class="markdown-field">
+            <div class="form-label">プレビュー</div>
+            <div class="markdown-preview markdown-modal-preview" id="liveChatRoomProxyPlayerObjectiveMarkdownPreview"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-light" type="button" data-bs-dismiss="modal">キャンセル</button>
+        <button class="btn btn-sunrise" type="button" id="liveChatRoomProxyPlayerObjectiveApplyButton">反映する</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endif %}
 {% endblock %}
 {% block scripts %}
@@ -113,6 +164,14 @@
   const objectiveMarkdownInput = document.getElementById("liveChatRoomObjectiveMarkdownInput");
   const objectiveMarkdownPreview = document.getElementById("liveChatRoomObjectiveMarkdownPreview");
   const objectiveApplyButton = document.getElementById("liveChatRoomObjectiveApplyButton");
+  const proxyPlayerObjectivePreview = document.getElementById("liveChatRoomProxyPlayerObjectivePreview");
+  const proxyPlayerObjectiveEditButton = document.getElementById("liveChatRoomProxyPlayerObjectiveEditButton");
+  const proxyPlayerObjectiveModalElement = document.getElementById("liveChatRoomProxyPlayerObjectiveModal");
+  if (proxyPlayerObjectiveModalElement) document.body.appendChild(proxyPlayerObjectiveModalElement);
+  const proxyPlayerObjectiveModal = proxyPlayerObjectiveModalElement ? new bootstrap.Modal(proxyPlayerObjectiveModalElement) : null;
+  const proxyPlayerObjectiveMarkdownInput = document.getElementById("liveChatRoomProxyPlayerObjectiveMarkdownInput");
+  const proxyPlayerObjectiveMarkdownPreview = document.getElementById("liveChatRoomProxyPlayerObjectiveMarkdownPreview");
+  const proxyPlayerObjectiveApplyButton = document.getElementById("liveChatRoomProxyPlayerObjectiveApplyButton");
 
   function escapeHtml(value) {
     return NovelUI.escape(value ?? "");
@@ -166,6 +225,10 @@
     objectivePreview.innerHTML = markdownToHtml(roomForm.conversation_objective.value);
   }
 
+  function renderProxyPlayerObjectivePreview() {
+    proxyPlayerObjectivePreview.innerHTML = markdownToHtml(roomForm.proxy_player_objective.value);
+  }
+
   function openObjectiveEditor() {
     objectiveMarkdownInput.value = roomForm.conversation_objective.value || "";
     objectiveMarkdownPreview.innerHTML = markdownToHtml(objectiveMarkdownInput.value);
@@ -179,13 +242,28 @@
     objectiveModal.hide();
   }
 
+  function openProxyPlayerObjectiveEditor() {
+    proxyPlayerObjectiveMarkdownInput.value = roomForm.proxy_player_objective.value || "";
+    proxyPlayerObjectiveMarkdownPreview.innerHTML = markdownToHtml(proxyPlayerObjectiveMarkdownInput.value);
+    proxyPlayerObjectiveModal.show();
+    setTimeout(() => proxyPlayerObjectiveMarkdownInput.focus(), 180);
+  }
+
+  function applyProxyPlayerObjectiveEditor() {
+    roomForm.proxy_player_objective.value = proxyPlayerObjectiveMarkdownInput.value;
+    renderProxyPlayerObjectivePreview();
+    proxyPlayerObjectiveModal.hide();
+  }
+
   function fillRoom(room) {
     roomForm.title.value = room.title || "";
     roomForm.character_id.value = room.character_id || "";
     roomForm.status.value = room.status || "draft";
     roomForm.description.value = room.description || "";
     roomForm.conversation_objective.value = room.conversation_objective || "";
+    roomForm.proxy_player_objective.value = room.proxy_player_objective || "";
     renderObjectivePreview();
+    renderProxyPlayerObjectivePreview();
   }
 
   async function loadCharacters() {
@@ -211,6 +289,7 @@
       status: roomForm.status.value,
       description: roomForm.description.value.trim(),
       conversation_objective: roomForm.conversation_objective.value.trim(),
+      proxy_player_objective: roomForm.proxy_player_objective.value.trim(),
     };
     if (!body.conversation_objective) {
       NovelUI.toast("キャラクターへの指示を入力してください。", "warning");
@@ -235,8 +314,14 @@
   objectiveMarkdownInput?.addEventListener("input", () => {
     objectiveMarkdownPreview.innerHTML = markdownToHtml(objectiveMarkdownInput.value);
   });
+  proxyPlayerObjectiveEditButton?.addEventListener("click", openProxyPlayerObjectiveEditor);
+  proxyPlayerObjectiveApplyButton?.addEventListener("click", applyProxyPlayerObjectiveEditor);
+  proxyPlayerObjectiveMarkdownInput?.addEventListener("input", () => {
+    proxyPlayerObjectiveMarkdownPreview.innerHTML = markdownToHtml(proxyPlayerObjectiveMarkdownInput.value);
+  });
 
   renderObjectivePreview();
+  renderProxyPlayerObjectivePreview();
   loadCharacters()
     .then(loadRoom)
     .catch((error) => NovelUI.toast(error.message || "ルーム設定の読み込みに失敗しました。", "danger"));

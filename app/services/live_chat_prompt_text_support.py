@@ -29,6 +29,24 @@ def get_session_objective(context: dict) -> str | None:
     return None
 
 
+def get_proxy_player_objective(context: dict) -> str | None:
+    room_snapshot = context.get("session", {}).get("room_snapshot_json") or {}
+    if isinstance(room_snapshot, dict):
+        value = str(room_snapshot.get("proxy_player_objective") or "").strip()
+        if value:
+            return value
+    room = context.get("room") or {}
+    if isinstance(room, dict):
+        value = str(room.get("proxy_player_objective") or "").strip()
+        if value:
+            return value
+    session_settings = context.get("session", {}).get("settings_json") or {}
+    if isinstance(session_settings, dict):
+        value = str(session_settings.get("proxy_player_objective") or "").strip()
+        return value or None
+    return None
+
+
 def _conversation_score(evaluation: dict | None) -> int | None:
     if not isinstance(evaluation, dict):
         return None
@@ -317,6 +335,92 @@ def fallback_opening_message(context: dict) -> dict:
     else:
         text = f"{player_name}、こんにちは。少し話してみようか。"
     return {"speaker_name": speaker, "message_text": text}
+
+
+def build_player_proxy_message_prompt(context: dict) -> str:
+    session_objective = get_session_objective(context)
+    proxy_player_objective = get_proxy_player_objective(context)
+    state_json = context["state"].get("state_json") or {}
+    scene_progression = state_json.get("scene_progression") or {}
+    conversation_evaluation = state_json.get("conversation_evaluation") or {}
+    relationship_state = state_json.get("relationship_state") or {}
+    player_name = context["session"].get("player_name") or "プレイヤー"
+    lines = [
+        "You write the next player line for a live visual novel chat when the real user pressed send without typing.",
+        "Return only a JSON object.",
+        "Required keys: message_text, reason.",
+        "message_text must be one natural Japanese spoken line from the player, not narration.",
+        "Do not write the AI character's reply.",
+        "Do not use generic commands such as 話を進めて, 続けて, or 何か話して.",
+        "Keep it short enough to feel like a real chat message: 8 to 80 Japanese characters.",
+        "The line should help the conversation move forward while matching the session objective.",
+        "Prefer reacting to the latest character line, asking a specific question, or giving a small emotional response.",
+        "If the latest character line offers a concrete choice or destination, the player may accept or ask about one specific option.",
+        f"Player name: {player_name}",
+        f"Project: {context['project'].get('title') or 'Untitled'}",
+    ]
+    if session_objective:
+        lines.append(f"Character/AI instruction: {session_objective}")
+    if proxy_player_objective:
+        lines.append(f"Proxy player objective: {proxy_player_objective}")
+        lines.append(
+            "The generated player line must prioritize the Proxy player objective. "
+            "Use it as the player's intent, curiosity, attitude, and desired direction."
+        )
+    if context["world"].get("overview"):
+        lines.append(f"World overview: {context['world']['overview']}")
+    if scene_progression:
+        lines.append(f"Current scene phase: {scene_progression.get('scene_phase') or ''}")
+        lines.append(f"Current location: {scene_progression.get('location') or ''}")
+        lines.append(f"Current scene focus: {scene_progression.get('focus_summary') or ''}")
+        lines.append(f"Next topic: {scene_progression.get('next_topic') or ''}")
+    if conversation_evaluation:
+        lines.append("Conversation evaluation:")
+        lines.append(f"- score={conversation_evaluation.get('score')}")
+        lines.append(f"- label={conversation_evaluation.get('label') or ''}")
+        lines.append(f"- mood={conversation_evaluation.get('mood') or ''}")
+        lines.append(f"- reason={conversation_evaluation.get('reason') or ''}")
+    if relationship_state:
+        lines.append("Relationship state:")
+        for name, metrics in relationship_state.items():
+            if isinstance(metrics, dict):
+                lines.append(
+                    f"- {name}: affection={metrics.get('affection', 0)}, interest={metrics.get('interest', 0)}, trust={metrics.get('trust', 0)}, tension={metrics.get('tension', 0)}"
+                )
+    lines.append("Characters:")
+    session_memory_map = ((context.get("state") or {}).get("state_json") or {}).get("session_memory", {}).get("character_memories") or {}
+    for character in context["characters"]:
+        lines.append(
+            f"- {character['name']}: nickname={character.get('nickname') or ''}, gender={character.get('gender') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, second_person={character.get('second_person') or ''}"
+        )
+        summary = _build_character_memory_summary(_flatten_character_memory(character, session_memory_map))
+        if summary:
+            lines.append(f"  memory={summary}")
+    lines.append("Recent conversation:")
+    for message in context["messages"][-10:]:
+        lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
+    lines.append("Write only what the player says next. The line should invite a better character response.")
+    return "\n".join(lines)
+
+
+def fallback_player_proxy_message(context: dict) -> str:
+    latest_character = next(
+        (
+            message
+            for message in reversed(context.get("messages") or [])
+            if message.get("sender_type") == "character" and str(message.get("message_text") or "").strip()
+        ),
+        None,
+    )
+    objective = get_session_objective(context) or ""
+    if latest_character:
+        text = str(latest_character.get("message_text") or "")
+        if any(token in text for token in ("どっち", "選", "海", "山", "行く")):
+            return "じゃあ、あなたが今いちばん見せたい場所へ連れていって。"
+        if any(token in objective for token in ("恋愛", "好き", "惚れ", "感情")):
+            return "今の言い方、少しドキッとした。もう少し聞かせて。"
+        return "それ、気になる。もう少し詳しく聞かせて。"
+    return "まずは、あなたのことをもう少し知りたい。"
 
 
 def normalize_compare_text(text: str) -> str:

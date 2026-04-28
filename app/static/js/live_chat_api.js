@@ -61,6 +61,13 @@
     });
   }
 
+  async function generateProxyPlayerMessage(sessionId) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/proxy-player-message`, {
+      method: "POST",
+      body: {},
+    });
+  }
+
   async function extractState(sessionId) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/state/extract`, {
       method: "POST",
@@ -121,6 +128,7 @@
     generateCostume,
     uploadCostume,
     postMessage,
+    generateProxyPlayerMessage,
     extractState,
     uploadImage,
     uploadGift,

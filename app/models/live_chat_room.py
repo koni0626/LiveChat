@@ -12,5 +12,6 @@ class LiveChatRoom(db.Model, TimestampMixin, SoftDeleteMixin):
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
     conversation_objective = db.Column(db.Text, nullable=False)
+    proxy_player_objective = db.Column(db.Text)
     status = db.Column(db.String(50), nullable=False, default="draft", index=True)
     sort_order = db.Column(db.Integer, nullable=False, default=0)

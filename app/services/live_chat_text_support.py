@@ -70,6 +70,28 @@ def generate_reply(text_ai_client, context: dict, user_message_text: str) -> dic
         return prompt_support.fallback_reply(context, user_message_text)
 
 
+def generate_player_proxy_message(text_ai_client, context: dict) -> str:
+    try:
+        prompt = prompt_support.build_player_proxy_message_prompt(context)
+        result = text_ai_client.generate_text(
+            prompt,
+            temperature=0.7,
+            response_format={"type": "json_object"},
+        )
+        parsed = text_ai_client._try_parse_json(result.get("text"))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("player proxy message response is invalid")
+        message_text = str(parsed.get("message_text") or "").strip()
+        if not message_text:
+            raise RuntimeError("player proxy message is empty")
+        forbidden = ("話を進めて", "続けて", "何か話して")
+        if any(token in message_text for token in forbidden):
+            raise RuntimeError("player proxy message is too generic")
+        return message_text[:160]
+    except Exception:
+        return prompt_support.fallback_player_proxy_message(context)
+
+
 def classify_user_input(text_ai_client, context: dict, user_message_text: str) -> dict:
     try:
         prompt = prompt_support.build_input_intent_prompt(context, user_message_text)

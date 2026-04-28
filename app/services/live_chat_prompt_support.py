@@ -8,6 +8,10 @@ def get_session_objective(context: dict) -> str | None:
     return text_prompt_support.get_session_objective(context)
 
 
+def get_proxy_player_objective(context: dict) -> str | None:
+    return text_prompt_support.get_proxy_player_objective(context)
+
+
 def _active_characters(context: dict, state_json: dict) -> list[dict]:
     return visual_prompt_support.active_characters(context, state_json)
 
@@ -18,6 +22,14 @@ def build_opening_prompt(context: dict) -> str:
 
 def fallback_opening_message(context: dict) -> dict:
     return text_prompt_support.fallback_opening_message(context)
+
+
+def build_player_proxy_message_prompt(context: dict) -> str:
+    return text_prompt_support.build_player_proxy_message_prompt(context)
+
+
+def fallback_player_proxy_message(context: dict) -> str:
+    return text_prompt_support.fallback_player_proxy_message(context)
 
 
 def normalize_compare_text(text: str) -> str:

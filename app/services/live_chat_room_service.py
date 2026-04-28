@@ -49,6 +49,7 @@ class LiveChatRoomService:
             "title": room.title,
             "description": room.description,
             "conversation_objective": room.conversation_objective,
+            "proxy_player_objective": getattr(room, "proxy_player_objective", None),
             "status": room.status,
             "sort_order": room.sort_order,
             "created_at": room.created_at.isoformat() if getattr(room, "created_at", None) else None,
@@ -136,6 +137,7 @@ class LiveChatRoomService:
             "room_id": room.id,
             "room_title": room.title,
             "conversation_objective": room.conversation_objective,
+            "proxy_player_objective": getattr(room, "proxy_player_objective", None),
             "character_id": room.character_id,
             "character_name": character.name if character else None,
             "status": room.status,
@@ -154,6 +156,8 @@ class LiveChatRoomService:
             if not objective:
                 raise ValueError("conversation_objective is required")
             normalized["conversation_objective"] = objective
+        if "proxy_player_objective" in payload or require_all:
+            normalized["proxy_player_objective"] = str(payload.get("proxy_player_objective") or "").strip() or None
         if "description" in payload:
             normalized["description"] = str(payload.get("description") or "").strip() or None
         if require_all or "character_id" in payload:

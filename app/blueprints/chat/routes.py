@@ -264,6 +264,15 @@ def post_chat_message(session_id: int):
     return json_response(result, status=201)
 
 
+@chat_bp.route("/chat/sessions/<int:session_id>/proxy-player-message", methods=["POST"])
+def generate_proxy_player_message(session_id: int):
+    _require_session(session_id, for_manage=True)
+    result = live_chat_service.generate_player_proxy_message(session_id)
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
 @chat_bp.route("/chat/sessions/<int:session_id>/messages/<int:message_id>", methods=["DELETE"])
 def delete_chat_message(session_id: int, message_id: int):
     _require_session(session_id, for_manage=True)
@@ -363,7 +372,10 @@ def delete_chat_costume(session_id: int, image_id: int):
 def generate_chat_image(session_id: int):
     _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
-    result = live_chat_service.generate_image(session_id, payload)
+    try:
+        result = live_chat_service.generate_image(session_id, payload)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
     if not result:
         raise NotFoundError()
     return json_response(result, status=201)

@@ -113,6 +113,7 @@ class LiveChatSessionWorkflowService:
             "settings_json": {
                 "selected_character_ids": [room.character_id],
                 "conversation_objective": room.conversation_objective,
+                "proxy_player_objective": getattr(room, "proxy_player_objective", None),
             },
             "room_snapshot_json": snapshot,
         }

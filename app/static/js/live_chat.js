@@ -174,8 +174,15 @@
           throw new Error("\u8d08\u308a\u7269\u753b\u50cf\u306e\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002");
         }
       } else {
+        if (!rawMessage) {
+          const proxy = await LiveChatApi.generateProxyPlayerMessage(sessionId);
+          composeForm.message_text.value = proxy?.message_text || "";
+          composeForm.message_text.focus();
+          NovelUI.toast("\u4ee3\u7406\u30d7\u30ec\u30a4\u30e4\u30fc\u306e\u30e1\u30c3\u30bb\u30fc\u30b8\u3092\u4f5c\u6210\u3057\u307e\u3057\u305f\u3002\u5185\u5bb9\u3092\u78ba\u8a8d\u3057\u3066\u3082\u3046\u4e00\u5ea6\u9001\u4fe1\u3057\u3066\u304f\u3060\u3055\u3044\u3002");
+          return;
+        }
         const result = await LiveChatApi.postMessage(sessionId, {
-          message_text: rawMessage || "\u8a71\u3092\u9032\u3081\u3066",
+          message_text: rawMessage,
           auto_reply: true,
           size: imageForm?.size?.value || "1536x1024",
           quality: imageForm?.quality?.value || "low",

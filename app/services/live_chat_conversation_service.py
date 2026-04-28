@@ -408,8 +408,12 @@ class LiveChatConversationService:
         session = self._chat_session_service.get_session(session_id)
         if not session:
             return None
-        message_text = str(payload.get("message_text") or "").strip() or "話を進めて"
         initial_context = self._context_provider(session_id)
+        raw_message_text = str(payload.get("message_text") or "").strip()
+        player_proxy_generated = not raw_message_text
+        message_text = raw_message_text
+        if player_proxy_generated:
+            message_text = text_support.generate_player_proxy_message(self._text_ai_client, initial_context)
         forced_intent = str(payload.get("input_intent") or "").strip()
         if forced_intent in {"dialogue", "narration", "visual_request"}:
             input_intent = {
@@ -427,7 +431,10 @@ class LiveChatConversationService:
                 "speaker_name": "ナレーション" if is_directed_scene else payload.get("speaker_name") or session.player_name or "プレイヤー",
                 "message_text": message_text,
                 "message_role": "narration" if is_directed_scene else "player",
-                "state_snapshot_json": {"input_intent": input_intent},
+                "state_snapshot_json": {
+                    "input_intent": input_intent,
+                    "player_proxy_generated": player_proxy_generated,
+                },
             },
         )
         if is_directed_scene:
@@ -509,6 +516,17 @@ class LiveChatConversationService:
             "deferred_processing": deferred_processing,
         }
 
+    def generate_player_proxy_message(self, session_id: int):
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return None
+        context = self._context_provider(session_id)
+        message_text = text_support.generate_player_proxy_message(self._text_ai_client, context)
+        return {
+            "message_text": message_text,
+            "player_name": session.player_name or "プレイヤー",
+        }
+
     def execute_scene_choice(self, session_id: int, choice_id: str, payload: dict | None = None):
         payload = dict(payload or {})
         session = self._chat_session_service.get_session(session_id)
@@ -578,7 +596,6 @@ class LiveChatConversationService:
                 "quality": payload.get("quality") or "low",
             },
         )
-        self.clear_scene_choices(session_id)
         updated_context = self._context_provider(session_id)
         reply = text_support.generate_narration_reaction(
             self._text_ai_client,
@@ -607,6 +624,8 @@ class LiveChatConversationService:
         self.update_session_memory(session_id, updated_context)
         updated_context = self._context_provider(session_id)
         self.update_conversation_evaluation(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        self.clear_scene_choices(session_id)
         updated_context = self._context_provider(session_id)
         return {
             "selected_choice": choice,
