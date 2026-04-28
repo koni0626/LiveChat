@@ -50,6 +50,8 @@ class LiveChatRoomService:
             "description": room.description,
             "conversation_objective": room.conversation_objective,
             "proxy_player_objective": getattr(room, "proxy_player_objective", None),
+            "proxy_player_gender": getattr(room, "proxy_player_gender", None),
+            "proxy_player_speech_style": getattr(room, "proxy_player_speech_style", None),
             "status": room.status,
             "sort_order": room.sort_order,
             "created_at": room.created_at.isoformat() if getattr(room, "created_at", None) else None,
@@ -138,6 +140,8 @@ class LiveChatRoomService:
             "room_title": room.title,
             "conversation_objective": room.conversation_objective,
             "proxy_player_objective": getattr(room, "proxy_player_objective", None),
+            "proxy_player_gender": getattr(room, "proxy_player_gender", None),
+            "proxy_player_speech_style": getattr(room, "proxy_player_speech_style", None),
             "character_id": room.character_id,
             "character_name": character.name if character else None,
             "status": room.status,
@@ -158,6 +162,10 @@ class LiveChatRoomService:
             normalized["conversation_objective"] = objective
         if "proxy_player_objective" in payload or require_all:
             normalized["proxy_player_objective"] = str(payload.get("proxy_player_objective") or "").strip() or None
+        if "proxy_player_gender" in payload or require_all:
+            normalized["proxy_player_gender"] = str(payload.get("proxy_player_gender") or "").strip() or None
+        if "proxy_player_speech_style" in payload or require_all:
+            normalized["proxy_player_speech_style"] = str(payload.get("proxy_player_speech_style") or "").strip() or None
         if "description" in payload:
             normalized["description"] = str(payload.get("description") or "").strip() or None
         if require_all or "character_id" in payload:

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+import threading
 from datetime import datetime
 
 from flask import current_app
 
 from ..clients.image_ai_client import ImageAIClient
 from ..clients.text_ai_client import TextAIClient
+from ..extensions import db
 from ..repositories.letter_repository import LetterRepository
 from ..utils import json_util
 from . import live_chat_image_support as image_support
@@ -163,6 +165,27 @@ class LetterService:
                 pass
             return None
 
+    def schedule_generate_for_context(self, session_id: int, context: dict, *, trigger_type: str = "conversation") -> bool:
+        try:
+            app = current_app._get_current_object()
+        except RuntimeError:
+            session = self._chat_session_service.get_session(session_id)
+            self.try_generate_for_context(session, context, trigger_type=trigger_type)
+            return False
+
+        def worker():
+            with app.app_context():
+                try:
+                    session = self._chat_session_service.get_session(session_id)
+                    self.try_generate_for_context(session, context, trigger_type=trigger_type)
+                except Exception:
+                    app.logger.exception("deferred letter generation failed")
+                finally:
+                    db.session.remove()
+
+        threading.Thread(target=worker, name=f"letter-generate-{session_id}", daemon=True).start()
+        return True
+
     def generate_for_context(self, session, context: dict, *, trigger_type: str = "conversation"):
         if not session or not getattr(session, "owner_user_id", None):
             return None
@@ -229,7 +252,7 @@ class LetterService:
                 "should_send_letter": True,
                 "reason": "会話が一定以上続き、関係の変化や余韻をメールで返せる節目になっているため。",
                 "emotional_hook": "会話の続きを期待させる余韻",
-                "image_direction": f"{character.get('name') or 'キャラクター'}が会話の余韻を抱えて、少し柔らかい表情でこちらを思い出している場面",
+                "image_direction": f"{character.get('name') or 'キャラクター'}がこちらを思い出して、少し照れた柔らかい表情を見せる場面。紙の手紙や封筒は描かない",
                 "fallback": True,
             }
         return {"should_send_letter": False}
@@ -313,7 +336,7 @@ class LetterService:
   "subject": "件名",
   "body": "本文。改行を含めてよい。180〜420字程度",
   "summary": "一覧表示用の短い要約",
-  "image_direction": "添付画像の具体的な情景"
+  "image_direction": "添付画像の具体的な情景。紙の手紙・封筒・スマホ・文字は描かず、受け取ったユーザーがキャラクターを可愛い、また会いたいと思う表情・仕草・距離感・雰囲気にする"
 }}
 
 宛先名: {player_name}
@@ -348,8 +371,12 @@ NGルール: {character.get("ng_rules") or ""}
         prompt = (
             "ノベルゲームのイベントCG。画像内には文字を一切入れない。セリフ、字幕、吹き出し、"
             "看板の読める文字、UI、ロゴ、透かし、擬音文字は入れない。"
-            "プレイヤー本人は画面に出さない。キャラクターがメールを書いた後の余韻が伝わる、"
-            "感情的で映える一枚。"
+            "プレイヤー本人は画面に出さない。"
+            "紙の手紙、封筒、スマホ、画面、文字、文章、ペンを持つ描写は禁止。"
+            "メールそのものを描くのではなく、メールを受け取ったユーザーが"
+            "キャラクターを可愛い、また会いたいと思うような、表情・仕草・距離感・空気感で見せる。"
+            "キャラクターがこちらを思い出している、または次に会う約束を感じさせる、"
+            "感情的で映えるイベントCG。"
             "参照画像・基準画像がある場合は、その画像の画風を最優先で維持する。"
             "線の太さ、塗り、色味、光の質感、肌や髪のレンダリング、顔立ち、キャラクターデザインの密度を変えない。"
             "別作品の絵柄に寄せず、同じ作家・同じシリーズのイベントCGに見えるようにする。"

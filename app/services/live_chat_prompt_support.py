@@ -12,6 +12,10 @@ def get_proxy_player_objective(context: dict) -> str | None:
     return text_prompt_support.get_proxy_player_objective(context)
 
 
+def get_proxy_player_profile(context: dict) -> dict:
+    return text_prompt_support.get_proxy_player_profile(context)
+
+
 def _active_characters(context: dict, state_json: dict) -> list[dict]:
     return visual_prompt_support.active_characters(context, state_json)
 

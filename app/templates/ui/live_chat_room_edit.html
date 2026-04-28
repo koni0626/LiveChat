@@ -67,6 +67,24 @@
           <div class="markdown-summary-body" id="liveChatRoomProxyPlayerObjectivePreview">未設定の場合は会話の流れから自然に発話します。</div>
         </article>
       </div>
+      <div class="col-md-4">
+        <label class="form-label" for="liveChatRoomProxyPlayerGenderInput">代理プレイヤーの性別・人格</label>
+        <input
+          class="form-control"
+          id="liveChatRoomProxyPlayerGenderInput"
+          name="proxy_player_gender"
+          placeholder="例：男性、女性、中性的、落ち着いた大人"
+        >
+      </div>
+      <div class="col-md-8">
+        <label class="form-label" for="liveChatRoomProxyPlayerSpeechStyleInput">代理プレイヤーの口調</label>
+        <input
+          class="form-control"
+          id="liveChatRoomProxyPlayerSpeechStyleInput"
+          name="proxy_player_speech_style"
+          placeholder="例：砕けた口調。一人称は俺。短く素直に話す。"
+        >
+      </div>
       <div class="col-12 d-flex gap-2 justify-content-end">
         <a class="btn btn-outline-dark" href="{{ url_for('ui.live_chat_rooms_page', project_id=project_id) }}">キャンセル</a>
         <button class="btn btn-sunrise" type="submit">{{ "ルームを更新" if room_id else "ルームを保存" }}</button>
@@ -262,6 +280,8 @@
     roomForm.description.value = room.description || "";
     roomForm.conversation_objective.value = room.conversation_objective || "";
     roomForm.proxy_player_objective.value = room.proxy_player_objective || "";
+    roomForm.proxy_player_gender.value = room.proxy_player_gender || "";
+    roomForm.proxy_player_speech_style.value = room.proxy_player_speech_style || "";
     renderObjectivePreview();
     renderProxyPlayerObjectivePreview();
   }
@@ -290,6 +310,8 @@
       description: roomForm.description.value.trim(),
       conversation_objective: roomForm.conversation_objective.value.trim(),
       proxy_player_objective: roomForm.proxy_player_objective.value.trim(),
+      proxy_player_gender: roomForm.proxy_player_gender.value.trim(),
+      proxy_player_speech_style: roomForm.proxy_player_speech_style.value.trim(),
     };
     if (!body.conversation_objective) {
       NovelUI.toast("キャラクターへの指示を入力してください。", "warning");

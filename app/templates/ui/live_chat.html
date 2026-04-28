@@ -76,9 +76,12 @@
             id="liveChatComposeInput"
             name="message_text"
             rows="2"
-            placeholder="メッセージまたは指示を入力。入力しない場合はメッセージを自動生成します。ここへ画像をドラッグ&ドロップすると贈り物として添付できます。"
+            placeholder="メッセージまたは指示を入力。メッセージを作成ボタンで代理メッセージを自動生成できます。ここへ画像をドラッグ&ドロップすると贈り物として添付できます。"
           "></textarea>
           <div class="live-chat-compose-editor-bar">
+            <button class="live-chat-compose-proxy" type="button" id="liveChatProxyMessageButton">
+              <span>メッセージを作成</span>
+            </button>
             <button class="live-chat-compose-attach" type="button" id="liveChatGiftSelectButton" aria-label="画像を添付" title="画像を添付">
               <span class="live-chat-compose-attach-icon">+</span>
               <span>添付</span>

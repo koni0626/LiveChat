@@ -514,8 +514,8 @@ class LiveChatGiftService:
         updated_context = self._context_provider(session_id)
         self._update_conversation_evaluation(session_id, updated_context)
         updated_context = self._context_provider(session_id)
-        new_letter = self._letter_service.try_generate_for_context(
-            session,
+        deferred_letter = self._letter_service.schedule_generate_for_context(
+            session_id,
             updated_context,
             trigger_type="gift",
         )
@@ -526,5 +526,6 @@ class LiveChatGiftService:
             "generated_image": generated_image,
             "session": updated_context["session"],
             "state": updated_context["state"],
-            "new_letter": new_letter,
+            "new_letter": None,
+            "deferred_letter": deferred_letter,
         }

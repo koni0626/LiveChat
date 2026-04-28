@@ -47,6 +47,23 @@ def get_proxy_player_objective(context: dict) -> str | None:
     return None
 
 
+def get_proxy_player_profile(context: dict) -> dict:
+    profile = {"gender": None, "speech_style": None}
+    sources = [
+        context.get("session", {}).get("room_snapshot_json") or {},
+        context.get("room") or {},
+        context.get("session", {}).get("settings_json") or {},
+    ]
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        if not profile["gender"]:
+            profile["gender"] = str(source.get("proxy_player_gender") or "").strip() or None
+        if not profile["speech_style"]:
+            profile["speech_style"] = str(source.get("proxy_player_speech_style") or "").strip() or None
+    return profile
+
+
 def _conversation_score(evaluation: dict | None) -> int | None:
     if not isinstance(evaluation, dict):
         return None
@@ -60,6 +77,79 @@ def _is_romance_goal(session_objective: str | None, evaluation: dict | None = No
     objective = str(session_objective or "")
     theme = str((evaluation or {}).get("theme") or "")
     return theme == "romance" or any(token in objective for token in ("恋愛", "好き", "惚れ", "感情"))
+
+
+ACTION_INPUT_MARKERS = (
+    "触れる",
+    "触れた",
+    "触る",
+    "触った",
+    "撫でる",
+    "撫でた",
+    "なでる",
+    "なでた",
+    "近づく",
+    "近づいた",
+    "近寄る",
+    "近寄った",
+    "手を取る",
+    "手を取った",
+    "手を握る",
+    "手を握った",
+    "見つめる",
+    "見つめた",
+    "外へ出る",
+    "外へ出た",
+    "外に出る",
+    "外に出た",
+    "連れ出す",
+    "連れ出した",
+)
+
+
+SWEET_LOOP_MARKERS = (
+    "可愛い",
+    "かわいい",
+    "照れ",
+    "赤く",
+    "でれでれ",
+    "見つめ",
+    "褒め",
+    "承認欲求",
+    "ずるい",
+    "甘え",
+    "近く",
+    "責任",
+)
+
+
+def _contains_action_input(text: str) -> bool:
+    value = str(text or "")
+    return any(marker in value for marker in ACTION_INPUT_MARKERS)
+
+
+def _recent_sweet_loop(context: dict) -> dict:
+    messages = (context.get("messages") or [])[-8:]
+    character_messages = [
+        str(message.get("message_text") or "")
+        for message in messages
+        if message.get("sender_type") == "character"
+    ]
+    if len(character_messages) < 3:
+        return {"detected": False, "hits": 0, "markers": []}
+    matched = []
+    hits = 0
+    for text in character_messages:
+        text_markers = [marker for marker in SWEET_LOOP_MARKERS if marker in text]
+        if text_markers:
+            hits += 1
+            matched.extend(text_markers)
+    unique_markers = list(dict.fromkeys(matched))
+    return {
+        "detected": hits >= 3 and len(unique_markers) >= 3,
+        "hits": hits,
+        "markers": unique_markers[:8],
+    }
 
 
 def _normalize_memory_items(values) -> list[str]:
@@ -340,6 +430,7 @@ def fallback_opening_message(context: dict) -> dict:
 def build_player_proxy_message_prompt(context: dict) -> str:
     session_objective = get_session_objective(context)
     proxy_player_objective = get_proxy_player_objective(context)
+    proxy_player_profile = get_proxy_player_profile(context)
     state_json = context["state"].get("state_json") or {}
     scene_progression = state_json.get("scene_progression") or {}
     conversation_evaluation = state_json.get("conversation_evaluation") or {}
@@ -367,6 +458,14 @@ def build_player_proxy_message_prompt(context: dict) -> str:
             "The generated player line must prioritize the Proxy player objective. "
             "Use it as the player's intent, curiosity, attitude, and desired direction."
         )
+    if proxy_player_profile.get("gender"):
+        lines.append(f"Proxy player gender/persona: {proxy_player_profile['gender']}")
+    if proxy_player_profile.get("speech_style"):
+        lines.append(f"Proxy player speech style: {proxy_player_profile['speech_style']}")
+    lines.append(
+        "The player line must follow the proxy player's gender/persona and speech style. "
+        "Do not imitate the AI character's first person, tone, honorifics, catchphrases, or verbal quirks."
+    )
     if context["world"].get("overview"):
         lines.append(f"World overview: {context['world']['overview']}")
     if scene_progression:
@@ -466,6 +565,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     visual_state = state_json.get("visual_state") or {}
     displayed_image = state_json.get("displayed_image_observation") or {}
     conversation_evaluation = state_json.get("conversation_evaluation") or {}
+    sweet_loop = _recent_sweet_loop(context)
     lines = [
         "You are the reply generator for a live visual novel conversation.",
         "Return only a JSON object.",
@@ -490,6 +590,12 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         lines.append(f"Emotional tone: {conversation_director.get('emotional_tone') or ''}")
         lines.append(f"Relationship goal: {conversation_director.get('relationship_goal') or ''}")
         lines.append(f"Scene goal: {conversation_director.get('scene_goal') or ''}")
+    if sweet_loop["detected"]:
+        lines.append(
+            "Recent sweet-loop warning: the last character replies are overusing romantic approval/blushing/praise. "
+            "This reply must pivot into one concrete new hook such as a mystery, incident, location move, playful wager, secret reveal, failed prediction, city anomaly, or photo/popularity mission."
+        )
+        lines.append(f"Do not repeat these markers as the main content: {', '.join(sweet_loop['markers'])}")
     if visual_state:
         lines.append(f"Current visual location: {visual_state.get('location') or ''}")
         lines.append(f"Current visual background: {visual_state.get('background_details') or ''}")
@@ -610,6 +716,8 @@ def build_input_intent_prompt(context: dict, user_message_text: str) -> str:
         "narration: the player is describing a scene transition, action, time skip, or staging direction, not asking for a spoken answer.",
         "visual_request: the player wants to see an image, outfit, location, object, or event CG.",
         "If the input is like 'そして僕たちは店の外に出た。', classify it as narration.",
+        "If the input includes a concrete player action such as 触れる, 撫でる, 近づく, 手を取る, 見つめる, or 外へ出る, classify it as narration so the scene can update.",
+        "If the input mixes speech and a concrete action, prefer narration when the action should visibly change distance, pose, touch, location, or mood.",
         "If the input is like 'この服を着て外に出た場面を見せて', classify it as visual_request.",
         f"Current location: {state_json.get('location') or scene_progression.get('location') or ''}",
         f"Current scene: {scene_progression.get('focus_summary') or state_json.get('focus_summary') or ''}",
@@ -634,6 +742,30 @@ def fallback_input_intent(user_message_text: str) -> dict:
         "歩き出",
         "向かった",
         "場面",
+        "触れる",
+        "触れた",
+        "触る",
+        "触った",
+        "撫でる",
+        "撫でた",
+        "なでる",
+        "なでた",
+        "近づく",
+        "近づいた",
+        "近寄る",
+        "近寄った",
+        "手を取る",
+        "手を取った",
+        "手を握る",
+        "手を握った",
+        "見つめる",
+        "見つめた",
+        "外へ出る",
+        "外へ出た",
+        "外に出る",
+        "外に出た",
+        "連れ出す",
+        "連れ出した",
     )
     visual_markers = (
         "見せて",
@@ -650,7 +782,7 @@ def fallback_input_intent(user_message_text: str) -> dict:
     if any(marker in text for marker in visual_markers) or any(marker in lowered for marker in visual_markers):
         return {"intent": "visual_request", "reason": "visual wording detected", "should_generate_image": True}
     if any(marker in text for marker in narration_markers):
-        return {"intent": "narration", "reason": "scene direction wording detected", "should_generate_image": True}
+        return {"intent": "narration", "reason": "scene/action wording detected", "should_generate_image": True}
     return {"intent": "dialogue", "reason": "normal player dialogue", "should_generate_image": False}
 
 
@@ -665,6 +797,8 @@ def build_narration_scene_prompt(context: dict, user_message_text: str, intent: 
         "Make the result concrete enough for image generation.",
         "Do not include the player as a visible person in the image.",
         "Prefer a dramatic visual-novel event CG moment, not a generic hallway/corridor.",
+        "If the player input contains a concrete action such as touching, stroking, moving closer, taking a hand, staring, or going outside, convert it into visible distance, pose, expression, mood, and possibly location changes.",
+        "For romantic action inputs, keep the result non-explicit: use hands near hair, cheek, shoulder, hand, or safe intimate distance; never depict nudity or explicit sexual contact.",
         f"Intent: {intent.get('intent')}",
         f"Intent reason: {intent.get('reason') or ''}",
         f"Project: {context['project'].get('title') or 'Untitled'}",
@@ -690,6 +824,26 @@ def fallback_narration_scene(context: dict, user_message_text: str, intent: dict
     text = str(user_message_text or "").strip()
     location = current.get("location") or state_json.get("location") or context["world"].get("name")
     background = current.get("background") or state_json.get("background")
+    if _contains_action_input(text):
+        action_focus = "プレイヤーの行動で距離感と表情が変化した"
+        if any(marker in text for marker in ("外へ出", "外に出", "連れ出")):
+            location = f"{context['world'].get('name') or '街'}の外の通り"
+            background = "夜の街明かりと近未来都市の光が見える屋外"
+            action_focus = "二人が外へ出て、夜の街を歩き出す"
+        elif any(marker in text for marker in ("触", "撫", "なで", "手を取", "手を握")):
+            action_focus = "プレイヤーがそっと触れ、キャラクターの表情と距離感が変わる"
+        elif any(marker in text for marker in ("近づ", "近寄", "見つめ")):
+            action_focus = "プレイヤーが距離を詰め、視線と緊張感が強くなる"
+        return {
+            "scene_phase": "action_beat",
+            "location": location,
+            "background": background,
+            "focus_summary": f"{action_focus}。{text}",
+            "next_topic": "キャラクターがその行動に反応しつつ、次の場所・謎・賭け・秘密のどれかへ話を進める",
+            "transition_occurred": True,
+            "character_reaction_hint": "行動への照れや驚きを短く出したあと、同じ甘い反応だけで終わらせず新しいフックを出す",
+            "image_focus": text or action_focus,
+        }
     if "店の外" in text or "外に出" in text:
         location = "店の外"
         background = "店の外の歩道、街明かりが服を照らしている"
@@ -748,7 +902,7 @@ def build_scene_choice_prompt(context: dict, speaker_name: str, message_text: st
         "You extract optional visual-novel choice buttons from the latest character line.",
         "Return only a JSON object.",
         "Required keys: should_show_choices, choices.",
-        "choices must be an array of 0 to 2 items.",
+        "choices must be an array of 0 to 3 items.",
         "Each choice requires: label, intent, scene_instruction, image_prompt_hint, reply_hint.",
         "Show choices only when the character line naturally offers or implies a player-selectable action, location change, visual event, or topic branch.",
         "Do not create choices for simple acknowledgements, exposition, or actions the character has already completed.",
@@ -1145,6 +1299,7 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
     relationship_state = state_json.get("relationship_state") or {}
     conversation_evaluation = state_json.get("conversation_evaluation") or {}
     memory_match = _analyze_player_memory_match(context)
+    sweet_loop = _recent_sweet_loop(context)
     lines = [
         "You are the conversation director for a live visual novel.",
         "Return only a JSON object.",
@@ -1197,6 +1352,17 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
             )
     if memory_match["reasons"]:
         lines.append(f"Memory match analysis: {', '.join(memory_match['reasons'])}")
+    if sweet_loop["detected"]:
+        lines.append(
+            "Sweet-loop breaker: the recent character replies are repeating the same romantic approval/blushing/praise pattern. "
+            "Do not continue with more of the same."
+        )
+        lines.append(f"Repeated sweet markers: {', '.join(sweet_loop['markers'])}")
+        lines.append(
+            "The director must divert this turn toward one fresh beat: mystery, incident, location move, playful wager, "
+            "secret reveal, failed prediction, city anomaly, or a photo/popularity mission. Keep a little romantic warmth, "
+            "but make the next beat concrete and plot-moving."
+        )
     lines.append("Characters:")
     session_memory_map = ((context.get("state") or {}).get("state_json") or {}).get("session_memory", {}).get("character_memories") or {}
     for character in context["characters"]:
@@ -1212,7 +1378,10 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
     for message in context["messages"][-8:]:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
     lines.append(f"- player: {user_message_text}")
-    lines.append("Avoid repeating guide-like movement offers. The director must add a fresh emotional or dramatic beat.")
+    lines.append(
+        "Avoid repeating guide-like movement offers or another generic sweet reaction. "
+        "The director must add a fresh emotional, dramatic, visual, or mystery beat."
+    )
     return "\n".join(lines)
 
 
@@ -1224,6 +1393,16 @@ def fallback_conversation_director(context: dict, user_message_text: str) -> dic
     is_romance = _is_romance_goal(get_session_objective(context), conversation_evaluation)
     lowered = str(user_message_text or "").lower()
     memory_match = _analyze_player_memory_match(context)
+    sweet_loop = _recent_sweet_loop(context)
+    if sweet_loop["detected"]:
+        return {
+            "turn_intent": "reveal",
+            "emotional_tone": "romantic warmth interrupted by a fresh mystery hook",
+            "relationship_goal": "keep the intimacy but prevent repetitive sweet approval by moving into a new shared experience",
+            "scene_goal": "divert into a city anomaly, secret observation log, playful wager, location move, or hidden weakness",
+            "must_include": ["one concrete mystery/incident/location/wager/secret hook", "a short romantic callback"],
+            "avoid": ["more generic blushing", "asking for more praise", "repeating cute/ずるい/見つめる reactions"],
+        }
     if memory_match["penalty"] > 0:
         return {
             "turn_intent": "test",

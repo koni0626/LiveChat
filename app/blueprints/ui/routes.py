@@ -34,10 +34,7 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
     current_project = project_service.get_project(project_id) if project_id else None
     can_manage_project = authorization_service.can_manage_project(current_user, current_project)
     global_nav_links = [
-        {"label": "メール", "icon": "bi-envelope-heart", "href": url_for("ui.letters_page")},
-        {"label": "Feed", "icon": "bi-broadcast", "href": url_for("ui.feed_page")},
         {"label": "ダッシュボード", "icon": "bi-house-door", "href": url_for("ui.dashboard_page")},
-        {"label": "ワールド", "icon": "bi-collection", "href": url_for("ui.project_list_page")},
     ]
     if current_user and getattr(current_user, "role", "user") == "superuser":
         global_nav_links.extend(
@@ -46,6 +43,13 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
                 {"label": "設定", "icon": "bi-sliders", "href": url_for("ui.settings_page")},
             ]
         )
+    global_nav_links.extend(
+        [
+            {"label": "メール", "icon": "bi-envelope-heart", "href": url_for("ui.letters_page")},
+            {"label": "Feed", "icon": "bi-broadcast", "href": url_for("ui.feed_page")},
+            {"label": "ワールド", "icon": "bi-collection", "href": url_for("ui.project_list_page")},
+        ]
+    )
     return render_template(
         template_name,
         page_title=title,

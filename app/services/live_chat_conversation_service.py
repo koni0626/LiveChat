@@ -144,7 +144,7 @@ class LiveChatConversationService:
             state_json["scene_choices"] = {
                 "source_message_id": assistant_message.id,
                 "created_at": datetime.utcnow().isoformat(),
-                "choices": choices_result["choices"][:2],
+                "choices": choices_result["choices"][:3],
             }
         else:
             state_json.pop("scene_choices", None)
@@ -355,6 +355,15 @@ class LiveChatConversationService:
         threading.Thread(target=worker, name=f"live-chat-post-process-{session_id}", daemon=True).start()
         return True
 
+    def _schedule_letter_generation(self, session_id: int, context: dict, trigger_type: str) -> bool:
+        if not self._letter_service:
+            return False
+        return self._letter_service.schedule_generate_for_context(
+            session_id,
+            context,
+            trigger_type=trigger_type,
+        )
+
     def post_directed_scene_message(self, session, session_id: int, user_message, intent: dict):
         context = self._context_provider(session_id)
         self.apply_directed_scene(session_id, context, user_message.message_text, intent)
@@ -389,18 +398,15 @@ class LiveChatConversationService:
         updated_context = self._context_provider(session_id)
         state = self._extract_state_payload(session, updated_context)
         updated_context = self._context_provider(session_id)
-        new_letter = self._letter_service.try_generate_for_context(
-            session,
-            updated_context,
-            trigger_type="scene_transition",
-        )
+        deferred_letter = self._schedule_letter_generation(session_id, updated_context, "scene_transition")
         return {
             "messages": [self._serialize_message(user_message), self._serialize_message(assistant_message)],
             "state": state,
             "session": updated_context["session"],
             "input_intent": intent,
             "generated_image": generated_image,
-            "new_letter": new_letter,
+            "new_letter": None,
+            "deferred_letter": deferred_letter,
         }
 
     def post_message(self, session_id: int, payload: dict | None = None):
@@ -480,6 +486,7 @@ class LiveChatConversationService:
             else None
         )
         deferred_processing = False
+        deferred_letter = False
         new_letter = None
         if defer_post_processing:
             deferred_processing = self._schedule_deferred_post_processing(
@@ -499,11 +506,7 @@ class LiveChatConversationService:
             if assistant_message:
                 self.update_scene_choices(session_id, updated_context, assistant_message)
                 updated_context = self._context_provider(session_id)
-            new_letter = self._letter_service.try_generate_for_context(
-                session,
-                updated_context,
-                trigger_type="conversation",
-            )
+            deferred_letter = self._schedule_letter_generation(session_id, updated_context, "conversation")
         return {
             "messages": created,
             "state": state,
@@ -513,6 +516,7 @@ class LiveChatConversationService:
             "image_generation_error": image_generation_error,
             "auto_image_candidate": bool(auto_image_candidate),
             "new_letter": new_letter,
+            "deferred_letter": deferred_letter if not defer_post_processing else False,
             "deferred_processing": deferred_processing,
         }
 
