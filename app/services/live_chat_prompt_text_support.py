@@ -588,6 +588,15 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         lines.append(f"Session objective: {session_objective}")
     if context["world"].get("overview"):
         lines.append(f"World overview: {context['world']['overview']}")
+    world_map_context = (context.get("world_map") or {}).get("prompt_context")
+    if world_map_context:
+        lines.append(
+            "Known world map locations and facility ownership. Treat these as factual setting knowledge available to active characters."
+        )
+        lines.append(
+            "If the player asks what facilities a character owns, manages, has, or is connected to, answer from locations whose owner matches that speaking character. If none are registered for them, say that no owned facility is currently known."
+        )
+        lines.append(world_map_context)
     if scene_progression:
         lines.append(f"Current scene phase: {scene_progression.get('scene_phase') or ''}")
         lines.append(f"Current location: {scene_progression.get('location') or ''}")
