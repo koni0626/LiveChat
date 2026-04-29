@@ -66,6 +66,8 @@ class CharacterService:
             prompt,
             size=payload.get("size") or "1024x1536",
             quality=payload.get("quality") or "medium",
+            model=payload.get("model") or payload.get("image_ai_model"),
+            provider=payload.get("provider") or payload.get("image_ai_provider"),
             output_format="png",
             background="opaque",
         )

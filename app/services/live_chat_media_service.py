@@ -250,6 +250,8 @@ class LiveChatMediaService:
             prompt,
             size=payload.get("size") or "1536x1024",
             quality=payload.get("quality") or "low",
+            model=payload.get("model") or payload.get("image_ai_model"),
+            provider=payload.get("provider") or payload.get("image_ai_provider"),
             input_image_paths=reference_paths,
             input_fidelity="high" if reference_paths else None,
         )
@@ -273,6 +275,11 @@ class LiveChatMediaService:
                 "metadata_json": json_util.dumps(
                     {
                         "source": "live_chat",
+                        "provider": result.get("provider"),
+                        "model": result.get("model"),
+                        "quality": result.get("quality") or payload.get("quality") or "low",
+                        "size": payload.get("size") or "1536x1024",
+                        "aspect_ratio": result.get("aspect_ratio"),
                         "revised_prompt": result.get("revised_prompt"),
                         "reference_asset_ids": reference_asset_ids,
                     }
@@ -526,6 +533,8 @@ class LiveChatMediaService:
             prompt,
             size=payload.get("size") or "1024x1536",
             quality=payload.get("quality") or "medium",
+            model=payload.get("model") or payload.get("image_ai_model"),
+            provider=payload.get("provider") or payload.get("image_ai_provider"),
             input_image_paths=reference_paths,
             input_fidelity="high",
         )
@@ -549,6 +558,8 @@ class LiveChatMediaService:
                 "metadata_json": json_util.dumps(
                     {
                         "source": "costume_room",
+                        "provider": result.get("provider"),
+                        "model": result.get("model"),
                         "instruction": instruction,
                         "rewritten_instruction": rewritten_instruction,
                         "safety_note": safety_note,

@@ -5,6 +5,7 @@ from ...models import User
 from ...services.authorization_service import AuthorizationService
 from ...services.feed_service import FeedService
 from ...services.project_service import ProjectService
+from ...services.user_setting_service import UserSettingService
 from ..access import current_user_or_401, require_project_manage
 
 
@@ -12,6 +13,7 @@ feed_bp = Blueprint("feed", __name__)
 feed_service = FeedService()
 authorization_service = AuthorizationService()
 project_service = ProjectService()
+user_setting_service = UserSettingService()
 
 
 def _current_user():
@@ -153,8 +155,9 @@ def upload_post_image(post_id: int):
 
 @feed_bp.route("/feed/posts/<int:post_id>/image/generate", methods=["POST"])
 def generate_post_image(post_id: int):
-    post, _ = _require_post_manage(post_id)
+    post, user = _require_post_manage(post_id)
     payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
     try:
         updated = feed_service.generate_post_image(post.id, payload)
     except ValueError as exc:

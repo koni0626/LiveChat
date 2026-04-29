@@ -71,7 +71,9 @@ class Config:
     }
     STORAGE_ROOT = os.getenv("STORAGE_ROOT", os.path.join(PROJECT_ROOT, "storage"))
     TEXT_AI_MODEL = os.getenv("TEXT_AI_MODEL", "gpt-5.4-mini")
+    IMAGE_AI_PROVIDER = os.getenv("IMAGE_AI_PROVIDER", "openai")
     IMAGE_AI_MODEL = os.getenv("IMAGE_AI_MODEL", "gpt-image-2")
+    XAI_IMAGE_MODEL = os.getenv("XAI_IMAGE_MODEL", "grok-imagine-image")
     IMAGE_DEFAULT_QUALITY = os.getenv("IMAGE_DEFAULT_QUALITY", "medium")
     TEXT_AI_TIMEOUT_SECONDS = int(os.getenv("TEXT_AI_TIMEOUT_SECONDS", "120"))
     IMAGE_AI_TIMEOUT_SECONDS = int(os.getenv("IMAGE_AI_TIMEOUT_SECONDS", "60"))

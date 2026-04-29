@@ -162,10 +162,13 @@ def analyze_story_config(story_id: int):
 def generate_story_opening_image(story_id: int):
     _, _, user = _require_story(story_id, for_manage=True)
     try:
-        settings = user_setting_service.get_settings(user.id)
+        settings = user_setting_service.apply_image_generation_settings(user.id)
         result = story_service.generate_opening_image(
             story_id,
-            quality=settings.get("default_quality") or "medium",
+            quality=settings.get("quality") or "medium",
+            size=settings.get("size"),
+            model=settings.get("model"),
+            provider=settings.get("provider"),
         )
     except ValueError as exc:
         raise ValidationError(str(exc))
@@ -295,8 +298,9 @@ def generate_story_session_player_draft(session_id: int):
 
 @stories_bp.route("/story-sessions/<int:session_id>/images", methods=["POST"])
 def generate_story_session_image(session_id: int):
-    _require_story_session(session_id)
+    _story_session, _project, user = _require_story_session(session_id)
     payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
     try:
         result = story_session_service.generate_scene_image(session_id, payload)
     except ValueError as exc:
@@ -308,8 +312,9 @@ def generate_story_session_image(session_id: int):
 
 @stories_bp.route("/story-sessions/<int:session_id>/costumes/generate", methods=["POST"])
 def generate_story_session_costume(session_id: int):
-    _require_story_session(session_id)
+    _story_session, _project, user = _require_story_session(session_id)
     payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
     try:
         result = story_session_service.generate_costume(session_id, payload)
     except ValueError as exc:

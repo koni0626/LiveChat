@@ -33,8 +33,11 @@ Main keys:
 
 ```text
 OPENAI_API_KEY=sk-...
+XAI_API_KEY=xai-...
 TEXT_AI_MODEL=gpt-5.4-mini
+IMAGE_AI_PROVIDER=openai
 IMAGE_AI_MODEL=gpt-image-2
+XAI_IMAGE_MODEL=grok-imagine-image
 IMAGE_DEFAULT_QUALITY=medium
 DATABASE_URL=sqlite:///instance/app.db
 STORAGE_ROOT=storage

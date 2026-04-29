@@ -4,6 +4,7 @@ from ...api import ForbiddenError, NotFoundError, json_response
 from ..access import require_project_manage, require_project_view
 from ...services.asset_service import AssetService
 from ...services.character_service import CharacterService
+from ...services.user_setting_service import UserSettingService
 from ...utils import json_util
 import os
 from flask import current_app
@@ -11,6 +12,7 @@ from flask import current_app
 characters_bp = Blueprint("characters", __name__)
 character_service = CharacterService()
 asset_service = AssetService()
+user_setting_service = UserSettingService()
 def _get_bool_query(name: str, default: bool = False) -> bool:
     value = request.args.get(name)
     if value is None:
@@ -184,7 +186,8 @@ def generate_character_base_image(character_id: int):
     existing = character_service.get_character(character_id)
     if not existing:
         raise NotFoundError()
-    require_project_manage(existing.project_id)
+    _project, user = require_project_manage(existing.project_id)
+    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
     try:
         character = character_service.generate_base_image(character_id, payload)
     except ValueError as exc:

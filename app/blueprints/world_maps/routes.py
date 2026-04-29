@@ -1,12 +1,14 @@
 from flask import Blueprint, request
 
 from ...api import ForbiddenError, NotFoundError, json_response
+from ...services.user_setting_service import UserSettingService
 from ...services.world_map_service import WorldMapService
 from ..access import require_project_manage, require_project_view
 
 
 world_maps_bp = Blueprint("world_maps", __name__)
 world_map_service = WorldMapService()
+user_setting_service = UserSettingService()
 
 
 def _require_location_view(location_id: int):
@@ -45,6 +47,7 @@ def upload_world_map(project_id: int):
 def generate_world_map(project_id: int):
     _project, user = require_project_manage(project_id)
     payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
     try:
         image = world_map_service.generate_map_image(project_id, payload, user.id)
     except RuntimeError as exc:
@@ -139,8 +142,10 @@ def upload_location_image(location_id: int):
 
 @world_maps_bp.route("/locations/<int:location_id>/image/generate", methods=["POST"])
 def generate_location_image(location_id: int):
-    _require_location_manage(location_id)
+    location = _require_location_manage(location_id)
     payload = request.get_json(silent=True) or {}
+    _project, user = require_project_manage(location.project_id)
+    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
     try:
         location = world_map_service.generate_location_image(location_id, payload)
     except RuntimeError as exc:

@@ -490,6 +490,8 @@ class FeedService:
             prompt,
             size=payload.get("size") or "1536x1024",
             quality=payload.get("quality") or current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium"),
+            model=payload.get("model") or payload.get("image_ai_model"),
+            provider=payload.get("provider") or payload.get("image_ai_provider"),
             output_format="png",
             background="opaque",
             input_image_paths=reference_paths,

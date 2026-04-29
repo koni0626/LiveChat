@@ -10,7 +10,14 @@
       </div>
       <div class="col-md-6">
         <label class="form-label">既定の画像モデル</label>
-<input class="form-control" name="image_ai_model" value="gpt-image-2">
+        <input class="form-control" name="image_ai_model" value="gpt-image-2" id="imageAiModelInput">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">画像生成プロバイダー</label>
+        <select class="form-select" name="image_ai_provider" id="imageAiProviderSelect">
+          <option value="openai">OpenAI</option>
+          <option value="grok">Grok / xAI</option>
+        </select>
       </div>
       <div class="col-md-4">
         <label class="form-label">既定の画像品質</label>
@@ -52,10 +59,27 @@
 <script>
 (() => {
   const form = document.getElementById("settingsForm");
+  const providerSelect = document.getElementById("imageAiProviderSelect");
+  const modelInput = document.getElementById("imageAiModelInput");
+  let providerDefaultModels = { openai: "gpt-image-2", grok: "grok-imagine-image" };
+
+  function applyProviderModelDefault(previousProvider) {
+    const provider = providerSelect?.value || "openai";
+    const previousDefault = providerDefaultModels[previousProvider];
+    const currentValue = (modelInput?.value || "").trim();
+    const incompatible =
+      (provider === "grok" && /^(gpt-|dall-e)/i.test(currentValue)) ||
+      (provider === "openai" && /^grok-/i.test(currentValue));
+    if (modelInput && (!currentValue || currentValue === previousDefault || incompatible)) {
+      modelInput.value = providerDefaultModels[provider] || currentValue;
+    }
+  }
 
   async function loadSettings() {
     const settings = await NovelUI.api("/api/v1/settings");
+    providerDefaultModels = settings?.available_options?.provider_default_models || providerDefaultModels;
     NovelUI.fillForm(form, settings);
+    if (providerSelect) providerSelect.dataset.previousProvider = providerSelect.value || "openai";
   }
 
   form.addEventListener("submit", async (event) => {
@@ -84,6 +108,11 @@
     } catch (error) {
       NovelUI.toast(error.message || "設定の初期化に失敗しました。", "danger");
     }
+  });
+
+  providerSelect?.addEventListener("change", (event) => {
+    applyProviderModelDefault(event.target.dataset.previousProvider || "openai");
+    event.target.dataset.previousProvider = event.target.value;
   });
 
   loadSettings().catch((error) => {

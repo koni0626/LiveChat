@@ -8,6 +8,7 @@ class UserSetting(db.Model, TimestampMixin):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, unique=True, index=True)
     text_ai_model = db.Column(db.String(100), nullable=False, default="gpt-5.4-mini")
+    image_ai_provider = db.Column(db.String(20), nullable=False, default="openai")
     image_ai_model = db.Column(db.String(100), nullable=False, default="gpt-image-2")
     default_quality = db.Column(db.String(20), nullable=False, default="medium")
     default_size = db.Column(db.String(20), nullable=False, default="1024x1024")

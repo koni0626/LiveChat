@@ -59,6 +59,8 @@ class StudioService:
             prompt,
             size=size,
             quality=quality,
+            model=payload.get("model") or payload.get("image_ai_model"),
+            provider=payload.get("provider") or payload.get("image_ai_provider"),
             output_format="png",
             background="opaque",
             input_image_paths=[source_asset.file_path],

@@ -194,7 +194,15 @@ class StoryService:
             "config_markdown": markdown,
         }
 
-    def generate_opening_image(self, story_id: int, *, quality: str | None = None):
+    def generate_opening_image(
+        self,
+        story_id: int,
+        *,
+        quality: str | None = None,
+        size: str | None = None,
+        model: str | None = None,
+        provider: str | None = None,
+    ):
         story = self.get_story(story_id)
         if not story:
             return None
@@ -213,8 +221,10 @@ class StoryService:
                 reference_asset_ids.append(asset.id)
         result = self._image_ai_client.generate_image(
             prompt,
-            size="1536x1024",
+            size=size or "1536x1024",
             quality=quality or current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium"),
+            model=model,
+            provider=provider,
             output_format="png",
             background="opaque",
             input_image_paths=reference_paths,

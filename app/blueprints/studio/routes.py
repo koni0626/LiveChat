@@ -5,12 +5,14 @@ from ...models import User
 from ...services.authorization_service import AuthorizationService
 from ...services.project_service import ProjectService
 from ...services.studio_service import StudioService
+from ...services.user_setting_service import UserSettingService
 
 
 studio_bp = Blueprint("studio", __name__)
 authorization_service = AuthorizationService()
 project_service = ProjectService()
 studio_service = StudioService()
+user_setting_service = UserSettingService()
 
 
 def _current_user():
@@ -43,6 +45,7 @@ def list_studio_images(project_id: int):
 def generate_studio_image(project_id: int):
     _, user = _require_project(project_id)
     payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
     try:
         result = studio_service.generate_variant(project_id, user.id, payload)
     except ValueError as exc:

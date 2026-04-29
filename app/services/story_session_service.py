@@ -455,6 +455,8 @@ class StorySessionService:
             prompt,
             size=image_options["size"],
             quality=image_options["quality"],
+            model=image_options.get("model"),
+            provider=image_options.get("provider"),
             input_image_paths=reference_paths,
             input_fidelity="high" if reference_paths else None,
         )
@@ -475,6 +477,8 @@ class StorySessionService:
                         "source": "story_session",
                         "session_id": session.id,
                         "story_id": session.story_id,
+                        "provider": result.get("provider"),
+                        "model": result.get("model"),
                         "revised_prompt": result.get("revised_prompt"),
                         "reference_asset_ids": reference_asset_ids,
                         "costume_reference_asset_ids": reference_asset_ids,
@@ -497,6 +501,8 @@ class StorySessionService:
                 "metadata_json": json_util.dumps(
                     {
                         "source": "story_session_generate_scene_image",
+                        "provider": result.get("provider"),
+                        "model": result.get("model"),
                         "quality": image_options["quality"],
                         "size": image_options["size"],
                         "reference_asset_ids": reference_asset_ids,
@@ -676,6 +682,8 @@ class StorySessionService:
             prompt,
             size=payload.get("size") or "1024x1536",
             quality=payload.get("quality") or "medium",
+            model=payload.get("model") or payload.get("image_ai_model"),
+            provider=payload.get("provider") or payload.get("image_ai_provider"),
             input_image_paths=reference_paths,
             input_fidelity="high",
         )
@@ -694,6 +702,8 @@ class StorySessionService:
                 "metadata_json": json_util.dumps(
                     {
                         "source": "story_costume_room",
+                        "provider": result.get("provider"),
+                        "model": result.get("model"),
                         "instruction": instruction,
                         "rewritten_instruction": rewritten_instruction,
                         "safety_note": safety_note,
@@ -1625,11 +1635,15 @@ class StorySessionService:
             settings = {}
         quality = str(payload.get("quality") or settings.get("default_quality") or "medium").strip()
         size = str(payload.get("size") or settings.get("default_size") or "1536x1024").strip()
+        provider = str(payload.get("provider") or payload.get("image_ai_provider") or settings.get("image_ai_provider") or "openai").strip()
+        model = str(payload.get("model") or payload.get("image_ai_model") or settings.get("image_ai_model") or "").strip()
         if quality not in UserSettingService.VALID_QUALITIES:
             quality = "medium"
         if size not in UserSettingService.VALID_SIZES:
             size = "1536x1024"
-        return {"quality": quality, "size": size}
+        if provider not in UserSettingService.VALID_IMAGE_PROVIDERS:
+            provider = "openai"
+        return {"quality": quality, "size": size, "provider": provider, "model": model or None}
 
     def _build_live_chat_visual_context(self, session, context: dict):
         story = context.get("story") or {}

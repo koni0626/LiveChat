@@ -175,10 +175,13 @@ def create_room_chat_session(room_id: int):
         settings = user_setting_service.get_settings(user.id)
         initial_image = live_chat_service.generate_image(
             created["session"]["id"],
-            {
-                "quality": settings.get("default_quality") or "low",
-                "size": settings.get("default_size") or "1536x1024",
-            },
+            user_setting_service.apply_image_generation_settings(
+                user.id,
+                {
+                    "quality": settings.get("default_quality") or "low",
+                    "size": settings.get("default_size") or "1536x1024",
+                },
+            ),
         )
         created["initial_image"] = initial_image
     except Exception as exc:  # Keep the session usable even when the image API is temporarily unavailable.
@@ -315,8 +318,9 @@ def list_chat_costumes(session_id: int):
 
 @chat_bp.route("/chat/sessions/<int:session_id>/costumes/generate", methods=["POST"])
 def generate_chat_costume(session_id: int):
-    _require_session(session_id, for_manage=True)
+    _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
     result = live_chat_service.generate_costume(session_id, payload)
     if not result:
         raise NotFoundError()
@@ -370,8 +374,9 @@ def delete_chat_costume(session_id: int, image_id: int):
 
 @chat_bp.route("/chat/sessions/<int:session_id>/images/generate", methods=["POST"])
 def generate_chat_image(session_id: int):
-    _require_session(session_id, for_manage=True)
+    _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
     try:
         result = live_chat_service.generate_image(session_id, payload)
     except ValueError as exc:

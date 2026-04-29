@@ -7,12 +7,14 @@ from ...models import User
 from ...services.asset_service import AssetService
 from ...services.authorization_service import AuthorizationService
 from ...services.project_service import ProjectService
+from ...services.user_setting_service import UserSettingService
 
 
 projects_bp = Blueprint("projects", __name__)
 project_service = ProjectService()
 authorization_service = AuthorizationService()
 asset_service = AssetService()
+user_setting_service = UserSettingService()
 
 
 def _project_status(status):
@@ -151,6 +153,7 @@ def generate_project_signboard(project_id: int):
     if not authorization_service.can_manage_project(user, project):
         raise ForbiddenError()
     payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
     try:
         project = project_service.generate_signboard_image(project_id, payload)
     except RuntimeError as exc:

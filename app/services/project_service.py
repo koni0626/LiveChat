@@ -113,8 +113,10 @@ class ProjectService:
         prompt = self._build_signboard_prompt(project)
         result = self._image_ai_client.generate_image(
             prompt,
-            size="1536x1024",
+            size=(payload or {}).get("size") or "1536x1024",
             quality=(payload or {}).get("quality") or current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium"),
+            model=(payload or {}).get("model") or (payload or {}).get("image_ai_model"),
+            provider=(payload or {}).get("provider") or (payload or {}).get("image_ai_provider"),
             output_format="png",
             background="opaque",
         )

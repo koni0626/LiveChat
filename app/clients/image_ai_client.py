@@ -1,9 +1,12 @@
+import base64
+import io
 import mimetypes
 import os
 import re
 from typing import Any, Optional
 
 import requests
+from PIL import Image
 
 
 class ImageAIClient:
@@ -25,20 +28,48 @@ class ImageAIClient:
         "lowcost": "512x512",
         "low_cost": "512x512",
     }
+    PROVIDER_ALIASES = {
+        "xai": "grok",
+        "grok": "grok",
+        "openai": "openai",
+    }
+    XAI_SIZE_ASPECT_RATIOS = {
+        "512x512": "1:1",
+        "1024x1024": "1:1",
+        "1024x1536": "2:3",
+        "1536x1024": "3:2",
+    }
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, provider: str = "openai") -> None:
         self._api_key = api_key
         self._model = model
         self._provider = provider
 
-    def _get_api_key(self) -> str:
+    def _resolve_provider(self, provider: Optional[str] = None) -> str:
+        value = str(provider or self._provider or os.getenv("IMAGE_AI_PROVIDER") or "openai").strip().lower()
+        return self.PROVIDER_ALIASES.get(value, "openai")
+
+    def _get_api_key(self, provider: Optional[str] = None) -> str:
+        resolved_provider = self._resolve_provider(provider)
+        if resolved_provider == "grok":
+            api_key = self._api_key or os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
+            if not api_key:
+                raise RuntimeError("XAI_API_KEY is required when IMAGE_AI_PROVIDER=grok")
+            return api_key
         api_key = self._api_key or os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY is required")
         return api_key
 
-    def _resolve_model(self, model: Optional[str] = None) -> str:
-        return model or self._model or os.getenv("IMAGE_AI_MODEL") or "gpt-image-2"
+    def _resolve_model(self, model: Optional[str] = None, provider: Optional[str] = None) -> str:
+        resolved_provider = self._resolve_provider(provider)
+        if model:
+            return model
+        if self._model:
+            return self._model
+        if resolved_provider == "grok":
+            return os.getenv("XAI_IMAGE_MODEL") or os.getenv("GROK_IMAGE_MODEL") or "grok-imagine-image"
+        return os.getenv("IMAGE_AI_MODEL") or "gpt-image-2"
 
     def _resolve_timeout(self) -> int:
         return int(os.getenv("IMAGE_AI_TIMEOUT_SECONDS", "60"))
@@ -228,6 +259,39 @@ class ImageAIClient:
             payload["negative_prompt"] = negative_prompt
         return payload
 
+    def _xai_aspect_ratio(self, size: Optional[str]) -> str:
+        normalized_size = self._normalize_choice(
+            size,
+            allowed=self.SUPPORTED_SIZES,
+            default="1024x1024",
+            aliases=self.SIZE_ALIASES,
+        )
+        return self.XAI_SIZE_ASPECT_RATIOS.get(normalized_size, "auto")
+
+    def _xai_resolution(self, quality: Optional[str]) -> str:
+        return "1k"
+
+    def _build_xai_request_payload(
+        self,
+        prompt: str,
+        *,
+        negative_prompt: Optional[str] = None,
+        size: Optional[str] = None,
+        model: Optional[str] = None,
+        quality: Optional[str] = None,
+    ) -> dict[str, Any]:
+        normalized_prompt = self._normalize_prompt(prompt)
+        if negative_prompt:
+            normalized_prompt = f"{normalized_prompt}\n\nAvoid: {negative_prompt}"
+        return {
+            "model": self._resolve_model(model, "grok"),
+            "prompt": normalized_prompt,
+            "n": 1,
+            "response_format": "b64_json",
+            "aspect_ratio": self._xai_aspect_ratio(size),
+            "resolution": self._xai_resolution(quality),
+        }
+
     def _build_edit_request_data(
         self,
         prompt: str,
@@ -278,7 +342,7 @@ class ImageAIClient:
             response = requests.post(
                 "https://api.openai.com/v1/images/generations",
                 headers={
-                    "Authorization": f"Bearer {self._get_api_key()}",
+                    "Authorization": f"Bearer {self._get_api_key('openai')}",
                     "Content-Type": "application/json",
                 },
                 json=payload,
@@ -311,7 +375,7 @@ class ImageAIClient:
                     file_info[1].seek(0)
                 response = requests.post(
                     "https://api.openai.com/v1/images/edits",
-                    headers={"Authorization": f"Bearer {self._get_api_key()}"},
+                    headers={"Authorization": f"Bearer {self._get_api_key('openai')}"},
                     data=request_data,
                     files=files,
                     timeout=self._resolve_timeout(),
@@ -360,15 +424,111 @@ class ImageAIClient:
         prompt: str,
         model: str,
         response_format: str,
+        provider: str = "openai",
     ) -> dict[str, Any]:
         data_list = response_json.get("data") or []
         first = data_list[0] if data_list else {}
         return {
-            "provider": self._provider,
+            "provider": provider,
             "model": model,
             "prompt": prompt,
             "response_format": response_format,
             "image_base64": first.get("b64_json"),
+            "image_url": first.get("url"),
+            "revised_prompt": response_json.get("revised_prompt") or first.get("revised_prompt"),
+            "raw_response": response_json,
+        }
+
+    def _call_xai_images_api(self, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            response = requests.post(
+                "https://api.x.ai/v1/images/generations",
+                headers={
+                    "Authorization": f"Bearer {self._get_api_key('grok')}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=self._resolve_timeout(),
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.Timeout as exc:
+            raise RuntimeError("xAI image generation request timed out") from exc
+        except requests.HTTPError as exc:
+            response = exc.response
+            raise RuntimeError(self._extract_error_message(response, "xAI image generation request failed")) from exc
+        except requests.RequestException as exc:
+            raise RuntimeError("xAI image generation request failed") from exc
+
+    def _image_path_to_data_uri(self, image_path: str) -> str:
+        mime_type = mimetypes.guess_type(image_path)[0] or "image/png"
+        with open(image_path, "rb") as file_handle:
+            encoded = base64.b64encode(file_handle.read()).decode("ascii")
+        return f"data:{mime_type};base64,{encoded}"
+
+    def _call_xai_image_edits_api(self, payload: dict[str, Any], image_paths: list[str]) -> dict[str, Any]:
+        request_payload = dict(payload)
+        image_items = [
+            {"type": "image_url", "url": self._image_path_to_data_uri(image_path)}
+            for image_path in image_paths[:5]
+        ]
+        if len(image_items) == 1 and request_payload.get("aspect_ratio") not in {None, "", "auto"}:
+            # xAI keeps the source image ratio for single-image edits. Sending the same
+            # reference twice makes this a multi-image edit, where aspect_ratio is honored.
+            request_payload["images"] = [image_items[0], image_items[0]]
+        elif len(image_items) == 1:
+            request_payload["image"] = image_items[0]
+        else:
+            request_payload["images"] = image_items
+        try:
+            response = requests.post(
+                "https://api.x.ai/v1/images/edits",
+                headers={
+                    "Authorization": f"Bearer {self._get_api_key('grok')}",
+                    "Content-Type": "application/json",
+                },
+                json=request_payload,
+                timeout=self._resolve_timeout(),
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.Timeout as exc:
+            raise RuntimeError("xAI image edit request timed out") from exc
+        except FileNotFoundError as exc:
+            raise RuntimeError("reference image file was not found") from exc
+        except requests.HTTPError as exc:
+            response = exc.response
+            raise RuntimeError(self._extract_error_message(response, "xAI image edit request failed")) from exc
+        except requests.RequestException as exc:
+            raise RuntimeError("xAI image edit request failed") from exc
+
+    def _convert_base64_image_to_png(self, image_base64: Optional[str]) -> Optional[str]:
+        if not image_base64:
+            return image_base64
+        try:
+            raw_bytes = base64.b64decode(image_base64)
+            with Image.open(io.BytesIO(raw_bytes)) as image:
+                output = io.BytesIO()
+                image.convert("RGBA" if image.mode in {"RGBA", "LA", "P"} else "RGB").save(output, format="PNG")
+            return base64.b64encode(output.getvalue()).decode("ascii")
+        except Exception:
+            return image_base64
+
+    def _normalize_xai_response(
+        self,
+        response_json: dict[str, Any],
+        *,
+        prompt: str,
+        model: str,
+    ) -> dict[str, Any]:
+        data_list = response_json.get("data") or []
+        first = data_list[0] if data_list else {}
+        return {
+            "provider": "grok",
+            "model": model,
+            "prompt": prompt,
+            "response_format": "b64_json",
+            "image_base64": self._convert_base64_image_to_png(first.get("b64_json")),
             "image_url": first.get("url"),
             "revised_prompt": response_json.get("revised_prompt") or first.get("revised_prompt"),
             "raw_response": response_json,
@@ -386,12 +546,65 @@ class ImageAIClient:
         background: str = "auto",
         input_image_paths: Optional[list[str]] = None,
         input_fidelity: Optional[str] = None,
+        provider: Optional[str] = None,
     ) -> dict[str, Any]:
         original_prompt = self._normalize_prompt(prompt)
         normalized_prompt = original_prompt
         safety_preflight = False
-        resolved_model = self._resolve_model(model)
+        resolved_provider = self._resolve_provider(provider)
+        resolved_model = self._resolve_model(model, resolved_provider)
         normalized_input_paths = [path for path in (input_image_paths or []) if path]
+
+        if resolved_provider == "grok":
+            xai_payload = self._build_xai_request_payload(
+                normalized_prompt,
+                negative_prompt=negative_prompt,
+                size=size,
+                model=resolved_model,
+                quality=quality,
+            )
+            safety_retry = False
+            prompt_before_retry = normalized_prompt
+            try:
+                response_json = (
+                    self._call_xai_image_edits_api(xai_payload, normalized_input_paths)
+                    if normalized_input_paths
+                    else self._call_xai_images_api(xai_payload)
+                )
+            except RuntimeError as exc:
+                if not self._is_sexual_safety_rejection(exc):
+                    raise
+                safety_retry = True
+                normalized_prompt = self._rewrite_prompt_for_safety_retry(prompt_before_retry)
+                xai_payload = self._build_xai_request_payload(
+                    normalized_prompt,
+                    negative_prompt=negative_prompt,
+                    size=size,
+                    model=resolved_model,
+                    quality=quality,
+                )
+                response_json = (
+                    self._call_xai_image_edits_api(xai_payload, normalized_input_paths)
+                    if normalized_input_paths
+                    else self._call_xai_images_api(xai_payload)
+                )
+            result = self._normalize_xai_response(
+                response_json,
+                prompt=normalized_prompt,
+                model=resolved_model,
+            )
+            result["operation"] = "edit" if normalized_input_paths else "generate"
+            result["reference_image_count"] = len(normalized_input_paths)
+            result["input_fidelity"] = input_fidelity if normalized_input_paths else None
+            result["quality"] = self._xai_resolution(quality)
+            result["output_format"] = "png"
+            result["background"] = background
+            result["aspect_ratio"] = xai_payload.get("aspect_ratio")
+            result["safety_preflight"] = safety_preflight
+            result["safety_retry"] = safety_retry
+            if safety_retry:
+                result["prompt_before_safety_retry"] = prompt_before_retry
+            return result
 
         if normalized_input_paths:
             data = self._build_edit_request_data(
@@ -423,7 +636,7 @@ class ImageAIClient:
                 )
                 response_json = self._call_openai_image_edits_api(data, normalized_input_paths)
             result = self._normalize_response(
-                response_json, prompt=normalized_prompt, model=resolved_model, response_format="b64_json"
+                response_json, prompt=normalized_prompt, model=resolved_model, response_format="b64_json", provider="openai"
             )
             result["operation"] = "edit"
             result["reference_image_count"] = len(normalized_input_paths)
@@ -468,7 +681,7 @@ class ImageAIClient:
             )
             response_json = self._call_openai_images_api(payload)
         result = self._normalize_response(
-            response_json, prompt=normalized_prompt, model=resolved_model, response_format="b64_json"
+            response_json, prompt=normalized_prompt, model=resolved_model, response_format="b64_json", provider="openai"
         )
         result["operation"] = "generate"
         result["reference_image_count"] = 0
