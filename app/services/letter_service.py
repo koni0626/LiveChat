@@ -82,6 +82,7 @@ class LetterService:
             "id": asset.id,
             "asset_type": asset.asset_type,
             "file_name": asset.file_name,
+            "file_path": asset.file_path,
             "mime_type": asset.mime_type,
             "media_url": self._build_media_url(asset.file_path),
         }
@@ -104,10 +105,14 @@ class LetterService:
             return None
         sender = self._character_service.get_character(letter.sender_character_id)
         image_asset = self._asset_service.get_asset(letter.image_asset_id) if letter.image_asset_id else None
+        generation_state = self._load_json(letter.generation_state_json) or {}
         return_url = (
-            f"/projects/{letter.project_id}/live-chat/{letter.session_id}"
-            if letter.session_id
-            else f"/projects/{letter.project_id}/live-chat"
+            generation_state.get("return_url")
+            or (
+                f"/projects/{letter.project_id}/live-chat/{letter.session_id}"
+                if letter.session_id
+                else f"/projects/{letter.project_id}/live-chat"
+            )
         )
         return {
             "id": letter.id,
@@ -124,7 +129,7 @@ class LetterService:
             "status": letter.status,
             "trigger_type": letter.trigger_type,
             "trigger_reason": letter.trigger_reason,
-            "generation_state": self._load_json(letter.generation_state_json) or {},
+            "generation_state": generation_state,
             "return_url": return_url,
             "read_at": letter.read_at.isoformat() if letter.read_at else None,
             "created_at": letter.created_at.isoformat() if letter.created_at else None,
@@ -233,6 +238,62 @@ class LetterService:
                     {
                         "decision": decision,
                         "content": content,
+                        "generated_at": datetime.utcnow().isoformat(),
+                    }
+                ),
+            }
+        )
+        return self.serialize_letter(letter)
+
+    def generate_for_story_context(self, story_session, context: dict, *, trigger_type: str = "story_clear"):
+        if not story_session or not getattr(story_session, "owner_user_id", None):
+            return None
+        character = self._resolve_sender_character(context)
+        if not character:
+            return None
+        messages = context.get("messages") or context.get("recent_messages") or []
+        if len(messages) < 2:
+            return None
+        existing = self._repo.find_story_clear_for_session(
+            story_session_id=story_session.id,
+            recipient_user_id=story_session.owner_user_id,
+            sender_character_id=character["id"],
+            project_id=story_session.project_id,
+            trigger_type=trigger_type,
+        )
+        if existing:
+            return self.serialize_letter(existing)
+        decision = {
+            "should_send_letter": True,
+            "reason": "ストーリーをクリアしたため、一区切りの余韻としてキャラクターからメールを送る。",
+            "emotional_hook": "一緒に最後までたどり着いた相手へ、会いたさと感謝を残す",
+            "image_direction": f"{character.get('name') or 'キャラクター'}がストーリー後の余韻の中でこちらを思い出し、また会いたいと感じさせる表情を見せる場面。",
+        }
+        content = self._generate_letter_content(context, character, decision)
+        if not content.get("body"):
+            return None
+        image_asset_id = self._generate_letter_image_asset(story_session, context, character, content)
+        return_url = f"/projects/{story_session.project_id}/story-sessions/{story_session.id}"
+        letter = self._repo.create(
+            {
+                "project_id": story_session.project_id,
+                "room_id": None,
+                "session_id": None,
+                "recipient_user_id": story_session.owner_user_id,
+                "sender_character_id": character["id"],
+                "subject": self._normalize_text(content.get("subject") or "また会いたい")[:255],
+                "body": self._normalize_text(content.get("body")),
+                "summary": self._normalize_text(content.get("summary") or decision.get("reason")) or None,
+                "image_asset_id": image_asset_id,
+                "status": "unread",
+                "trigger_type": trigger_type,
+                "trigger_reason": decision["reason"],
+                "generation_state_json": json_util.dumps(
+                    {
+                        "decision": decision,
+                        "content": content,
+                        "story_session_id": story_session.id,
+                        "return_url": return_url,
                         "generated_at": datetime.utcnow().isoformat(),
                     }
                 ),
@@ -377,8 +438,10 @@ NGルール: {character.get("ng_rules") or ""}
             "キャラクターを可愛い、また会いたいと思うような、表情・仕草・距離感・空気感で見せる。"
             "キャラクターがこちらを思い出している、または次に会う約束を感じさせる、"
             "感情的で映えるイベントCG。"
-            "参照画像・基準画像がある場合は、その画像の画風を最優先で維持する。"
-            "線の太さ、塗り、色味、光の質感、肌や髪のレンダリング、顔立ち、キャラクターデザインの密度を変えない。"
+            "参照画像・基準画像がある場合は、それを現在のキャラクター基準画像として最優先で使う。"
+            "同じ人物、同じ顔立ち、同じ髪型、同じ体型、同じ年齢感、同じ画風、同じ質感を維持する。"
+            "参照画像が衣装画像の場合は、同じ衣装デザイン、配色、素材感、装飾を維持し、別衣装に変更しない。"
+            "線の太さ、塗り、色味、光の質感、肌や髪のレンダリング、キャラクターデザインの密度を変えない。"
             "別作品の絵柄に寄せず、同じ作家・同じシリーズのイベントCGに見えるようにする。"
             f"キャラクター: {character.get('name')}。"
             f"外見: {character.get('appearance_summary') or ''}。"
@@ -387,11 +450,24 @@ NGルール: {character.get("ng_rules") or ""}
         )
         reference_paths = []
         reference_asset_ids = []
+        for asset_id in context.get("letter_reference_asset_ids") or []:
+            if not asset_id:
+                continue
+            asset = self._asset_service.get_asset(asset_id)
+            if asset and getattr(asset, "file_path", None) and os.path.exists(asset.file_path):
+                reference_paths.append(asset.file_path)
+                reference_asset_ids.append(asset.id)
+                break
         base_asset = character.get("base_asset") or {}
         base_path = base_asset.get("file_path")
-        if base_path and os.path.exists(base_path):
+        if not reference_paths and base_path and os.path.exists(base_path):
             reference_paths.append(base_path)
             reference_asset_ids.append(base_asset.get("id"))
+        if not reference_paths and base_asset.get("id"):
+            asset = self._asset_service.get_asset(base_asset.get("id"))
+            if asset and getattr(asset, "file_path", None) and os.path.exists(asset.file_path):
+                reference_paths.append(asset.file_path)
+                reference_asset_ids.append(asset.id)
         result = self._image_ai_client.generate_image(
             prompt,
             size="1536x1024",

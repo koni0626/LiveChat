@@ -63,9 +63,17 @@
   function renderWorldImage(project) {
     const mediaUrl = project.thumbnail_asset?.media_url;
     if (mediaUrl) {
-      return `<img class="world-card-image" src="${mediaUrl}" alt="${NovelUI.escape(project.title || "ワールド看板")}">`;
+      return `
+        <a class="world-card-image-link" href="/projects/${project.id}/home" aria-label="${NovelUI.escape(project.title || "ワールド")}を開く">
+          <img class="world-card-image" src="${mediaUrl}" alt="${NovelUI.escape(project.title || "ワールド看板")}">
+        </a>
+      `;
     }
-    return `<div class="world-card-placeholder"><i class="bi bi-image"></i><span>看板画像なし</span></div>`;
+    return `
+      <a class="world-card-image-link" href="/projects/${project.id}/home" aria-label="${NovelUI.escape(project.title || "ワールド")}を開く">
+        <div class="world-card-placeholder"><i class="bi bi-image"></i><span>看板画像なし</span></div>
+      </a>
+    `;
   }
 
   function updateCarouselButtons() {
@@ -109,11 +117,7 @@
         </div>
         <h4>${NovelUI.escape(project.title || "Untitled")}</h4>
         <p>${NovelUI.escape(project.summary || "説明はまだありません。")}</p>
-        <div class="d-flex justify-content-between align-items-center gap-2 mt-3">
-          <div class="d-flex gap-2 flex-wrap">
-            <a class="btn btn-sm btn-dark" href="/projects/${project.id}/live-chat">ルームへ</a>
-            <a class="btn btn-sm btn-outline-light" href="/projects/${project.id}/characters">キャラクター</a>
-          </div>
+        <div class="d-flex justify-content-end align-items-center gap-2 mt-3">
           ${canManageWorlds ? `<button class="btn btn-sm btn-outline-danger" data-project-delete="${project.id}">削除</button>` : ""}
         </div>
       </article>

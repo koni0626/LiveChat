@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="studio-detail-shell" data-project-id="{{ project_id }}" data-asset-id="{{ asset_id }}">
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <h3>画像編集</h3>
+        <p class="section-copy mb-0">選択画像を基準に、背景・衣装・表情・ポーズを変更します。</p>
+      </div>
+      <a class="btn btn-sm btn-outline-dark" href="{{ url_for('ui.studio_page', project_id=project_id) }}">ギャラリーへ</a>
+    </div>
+
+    <div class="studio-detail-hero" id="studioSelectedPanel">
+      <div class="empty-panel">画像を読み込んでいます...</div>
+    </div>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head">
+      <h3>編集</h3>
+    </div>
+    <form class="studio-form" id="studioForm">
+      <label class="form-label" for="studioInstructionInput">変更指示</label>
+      <textarea class="form-control" id="studioInstructionInput" rows="5" placeholder="例: 背景を夏の海に変えて、衣装を白いワンピースにし、明るい笑顔にする"></textarea>
+
+      <div class="row g-2">
+        <div class="col-md-6">
+          <label class="form-label" for="studioQualitySelect">品質</label>
+          <select class="form-select" id="studioQualitySelect">
+            <option value="medium">medium</option>
+            <option value="low">low</option>
+            <option value="high">high</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="studioSizeSelect">画像サイズ</label>
+          <select class="form-select" id="studioSizeSelect">
+            <option value="1536x1024">1536x1024</option>
+            <option value="1024x1024">1024x1024</option>
+            <option value="1024x1536">1024x1536</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn btn-sunrise" type="submit" id="studioGenerateButton">画像を変更</button>
+    </form>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head">
+      <h3>ギャラリー</h3>
+      <button class="btn btn-sm btn-outline-dark" type="button" id="studioReloadButton">再読み込み</button>
+    </div>
+    <div class="studio-grid" id="studioImageGrid"></div>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const projectId = Number({{ project_id }});
+  let selectedAssetId = Number({{ asset_id }});
+  let images = [];
+  let selected = null;
+  const selectedPanel = document.getElementById("studioSelectedPanel");
+  const grid = document.getElementById("studioImageGrid");
+  const generateButton = document.getElementById("studioGenerateButton");
+
+  function normalizePrompt(image) {
+    return image?.prompt_text || image?.metadata?.revised_prompt || image?.metadata?.prompt || "プロンプトは保存されていません。";
+  }
+
+  function selectImage(image, replaceUrl = true) {
+    selected = image || null;
+    if (selected) {
+      selectedAssetId = Number(selected.asset_id);
+      if (replaceUrl) {
+        history.replaceState(null, "", `/projects/${projectId}/studio/images/${selectedAssetId}`);
+      }
+    }
+    renderSelected();
+    renderGrid();
+  }
+
+  function renderSelected() {
+    if (!selected) {
+      selectedPanel.innerHTML = '<div class="empty-panel">画像が見つかりません。</div>';
+      return;
+    }
+    selectedPanel.innerHTML = `
+      <img class="studio-detail-image" src="${NovelUI.escape(selected.media_url)}" alt="${NovelUI.escape(selected.file_name || "selected image")}">
+      <div class="studio-selected-meta">
+        <span>${NovelUI.escape(selected.source_label || selected.source)}</span>
+        <span>${NovelUI.escape(selected.size || "")}</span>
+        <span>${NovelUI.escape(selected.quality || "")}</span>
+      </div>
+    `;
+  }
+
+  function renderGrid() {
+    if (!images.length) {
+      grid.innerHTML = '<div class="empty-panel">まだ表示できる画像がありません。</div>';
+      return;
+    }
+    grid.innerHTML = images.map((image) => `
+      <button class="studio-image-card ${Number(image.asset_id) === selectedAssetId ? "is-selected" : ""}" type="button" data-asset-id="${image.asset_id}">
+        <img src="${NovelUI.escape(image.media_url)}" alt="${NovelUI.escape(image.file_name || "generated image")}">
+        <span>${NovelUI.escape(image.source_label || image.source)}</span>
+      </button>
+    `).join("");
+  }
+
+  async function loadImages() {
+    images = await NovelUI.api(`/api/v1/projects/${projectId}/studio/images`);
+    selectImage(images.find((image) => Number(image.asset_id) === selectedAssetId) || images[0] || null, false);
+  }
+
+  document.getElementById("studioImageGrid").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-asset-id]");
+    if (!button) return;
+    const image = images.find((item) => Number(item.asset_id) === Number(button.dataset.assetId));
+    selectImage(image);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  document.getElementById("studioForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!selected) {
+      NovelUI.toast("基準画像を選択してください。", "warning");
+      return;
+    }
+    const instruction = document.getElementById("studioInstructionInput").value.trim();
+    if (!instruction) {
+      NovelUI.toast("変更指示を入力してください。", "warning");
+      return;
+    }
+    generateButton.disabled = true;
+    generateButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>生成中...';
+    try {
+      const generated = await NovelUI.api(`/api/v1/projects/${projectId}/studio/generate`, {
+        method: "POST",
+        body: {
+          source_asset_id: selected.asset_id,
+          instruction,
+          quality: document.getElementById("studioQualitySelect").value,
+          size: document.getElementById("studioSizeSelect").value,
+        },
+      });
+      images = [generated, ...images.filter((image) => Number(image.asset_id) !== Number(generated.asset_id))];
+      document.getElementById("studioInstructionInput").value = "";
+      selectImage(generated);
+      NovelUI.toast("画像を生成し、ギャラリーに追加しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "画像生成に失敗しました。", "danger");
+    } finally {
+      generateButton.disabled = false;
+      generateButton.innerHTML = "画像を変更";
+    }
+  });
+
+  document.getElementById("studioReloadButton").addEventListener("click", () => {
+    loadImages().catch((error) => NovelUI.toast(error.message || "画像を読み込めませんでした。", "danger"));
+  });
+
+  loadImages().catch((error) => NovelUI.toast(error.message || "画像を読み込めませんでした。", "danger"));
+})();
+</script>
+{% endblock %}

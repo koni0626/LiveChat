@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel-card studio-main" data-project-id="{{ project_id }}">
+  <div class="panel-head">
+    <div>
+      <h3>スタジオ</h3>
+      <p class="section-copy mb-0">チャットやストーリーで生成された画像を選択して編集します。</p>
+    </div>
+    <button class="btn btn-sm btn-outline-dark" type="button" id="studioReloadButton">再読み込み</button>
+  </div>
+  <div class="studio-grid" id="studioImageGrid"></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const projectId = Number({{ project_id }});
+  const grid = document.getElementById("studioImageGrid");
+
+  async function loadImages() {
+    const images = await NovelUI.api(`/api/v1/projects/${projectId}/studio/images`);
+    if (!images.length) {
+      grid.innerHTML = '<div class="empty-panel">まだ表示できる画像がありません。</div>';
+      return;
+    }
+    grid.innerHTML = images.map((image) => `
+      <a class="studio-image-card" href="/projects/${projectId}/studio/images/${image.asset_id}">
+        <img src="${NovelUI.escape(image.media_url)}" alt="${NovelUI.escape(image.file_name || "generated image")}">
+        <span>${NovelUI.escape(image.source_label || image.source)}</span>
+      </a>
+    `).join("");
+  }
+
+  document.getElementById("studioReloadButton").addEventListener("click", () => {
+    loadImages().catch((error) => NovelUI.toast(error.message || "画像を読み込めませんでした。", "danger"));
+  });
+
+  loadImages().catch((error) => NovelUI.toast(error.message || "画像を読み込めませんでした。", "danger"));
+})();
+</script>
+{% endblock %}

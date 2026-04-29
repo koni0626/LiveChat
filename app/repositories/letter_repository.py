@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from ..extensions import db
 from ..models.letter import Letter
+from ..utils import json_util
 
 
 class LetterRepository:
@@ -39,6 +40,31 @@ class LetterRepository:
         if room_id is not None:
             query = query.filter(Letter.room_id == room_id)
         return query.order_by(Letter.created_at.desc()).all()
+
+    def find_story_clear_for_session(
+        self,
+        *,
+        story_session_id: int,
+        recipient_user_id: int,
+        sender_character_id: int,
+        project_id: int,
+        trigger_type: str = "story_clear",
+    ):
+        rows = Letter.query.filter(
+            Letter.project_id == project_id,
+            Letter.recipient_user_id == recipient_user_id,
+            Letter.sender_character_id == sender_character_id,
+            Letter.trigger_type == trigger_type,
+            Letter.deleted_at.is_(None),
+        ).order_by(Letter.created_at.desc()).all()
+        for row in rows:
+            try:
+                state = json_util.loads(row.generation_state_json or "{}")
+            except Exception:
+                state = {}
+            if int((state or {}).get("story_session_id") or 0) == int(story_session_id):
+                return row
+        return None
 
     def get(self, letter_id: int):
         return Letter.query.get(letter_id)

@@ -23,8 +23,11 @@ def _project_nav(project_id: int | None, current_user: User | None = None):
     if can_manage_project:
         links.append({"label": "世界観", "icon": "bi-globe2", "href": url_for("ui.world_page", project_id=project_id)})
         links.append({"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)})
-        links.append({"label": "ルーム", "icon": "bi-door-open", "href": url_for("ui.live_chat_rooms_page", project_id=project_id)})
-    links.append({"label": "ライブチャット", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)})
+        links.append({"label": "ルーム", "icon": "bi-chat-square-heart", "href": url_for("ui.live_chat_rooms_page", project_id=project_id)})
+        links.append({"label": "ストーリー", "icon": "bi-journal-richtext", "href": url_for("ui.story_list_page", project_id=project_id)})
+        links.append({"label": "スタジオ", "icon": "bi-palette", "href": url_for("ui.studio_page", project_id=project_id)})
+    links.append({"label": "チャットルーム", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)})
+    links.append({"label": "セッション", "icon": "bi-dice-5", "href": url_for("ui.story_session_list_page", project_id=project_id)})
     return links
 
 
@@ -138,6 +141,41 @@ def world_page(project_id: int):
     return _render("ui/world_edit.html", title="世界観設定", screen_id="world-edit", project_id=project_id)
 
 
+@ui_bp.route("/projects/<int:project_id>/stories", methods=["GET"])
+def story_list_page(project_id: int):
+    return _render("ui/stories.html", title="ストーリー", screen_id="stories", project_id=project_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/stories/new", methods=["GET"])
+def story_create_page(project_id: int):
+    return _render("ui/story_edit.html", title="ストーリー作成", screen_id="story-edit", project_id=project_id, story_id=None)
+
+
+@ui_bp.route("/projects/<int:project_id>/stories/<int:story_id>/edit", methods=["GET"])
+def story_edit_page(project_id: int, story_id: int):
+    return _render("ui/story_edit.html", title="ストーリー編集", screen_id="story-edit", project_id=project_id, story_id=story_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/story-sessions", methods=["GET"])
+def story_session_list_page(project_id: int):
+    return _render("ui/story_sessions.html", title="セッション", screen_id="story-sessions", project_id=project_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/story-sessions/<int:session_id>", methods=["GET"])
+def story_session_page(project_id: int, session_id: int):
+    return _render("ui/story_session.html", title="セッション", screen_id="story-session", project_id=project_id, session_id=session_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/studio", methods=["GET"])
+def studio_page(project_id: int):
+    return _render("ui/studio.html", title="スタジオ", screen_id="studio", project_id=project_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/studio/images/<int:asset_id>", methods=["GET"])
+def studio_image_page(project_id: int, asset_id: int):
+    return _render("ui/studio_detail.html", title="スタジオ", screen_id="studio", project_id=project_id, asset_id=asset_id)
+
+
 @ui_bp.route("/projects/<int:project_id>/live-chat", methods=["GET"])
 def live_chat_sessions_page(project_id: int):
     return _render(
@@ -197,6 +235,17 @@ def live_chat_page(project_id: int, session_id: int):
 def live_chat_costume_create_page(project_id: int, session_id: int):
     return _render(
         "ui/live_chat_costume_create.html",
+        title="衣装生成",
+        screen_id="live-chat-costume-create",
+        project_id=project_id,
+        session_id=session_id,
+    )
+
+
+@ui_bp.route("/projects/<int:project_id>/story-sessions/<int:session_id>/costumes/new", methods=["GET"])
+def story_session_costume_create_page(project_id: int, session_id: int):
+    return _render(
+        "ui/story_session_costume_create.html",
         title="衣装生成",
         screen_id="live-chat-costume-create",
         project_id=project_id,

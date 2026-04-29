@@ -2,103 +2,63 @@
 {% set can_manage_project = current_user_role in ["superuser", "project_user"] %}
 {% block content %}
 <section class="page-grid" data-project-home="{{ project_id }}">
-  <div class="hero-panel">
-    <div>
-      <div class="eyebrow">World Hub</div>
-      <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-        <div>
-          <h2 class="section-title" id="projectHomeTitle">ワールド情報を読み込み中...</h2>
-          <p class="section-copy" id="projectHomeSummary">キャラクター、世界観、ライブチャットの起点になる画面です。</p>
-          <div class="d-flex flex-wrap gap-2 mt-3" id="projectMetaChips"></div>
-        </div>
-        <div class="d-flex flex-wrap gap-2">
-          {% if can_manage_project %}
-          <button class="btn btn-light" type="button" id="projectEditToggleButton">ワールド情報を編集</button>
-          {% endif %}
-          <a class="btn btn-outline-light" href="/projects/{{ project_id }}/live-chat">
-            <i class="bi bi-chat-dots"></i>
-            <span>ライブチャットへ</span>
-          </a>
-        </div>
+  <section class="panel-card world-home-entry">
+    <div class="world-home-signboard" id="worldSignboardPreview">
+      <div class="empty-panel mb-0">ワールド看板画像を読み込んでいます...</div>
+    </div>
+
+    <aside class="world-home-menu">
+      <div>
+        <div class="eyebrow">World Home</div>
+        <h2 class="section-title" id="projectHomeTitle">ワールドを読み込み中...</h2>
+        <p class="section-copy" id="projectHomeSummary">ワールドの説明を読み込み中...</p>
       </div>
 
-      {% if can_manage_project %}
-      <form id="projectEditForm" class="row g-3 mt-3" hidden>
-        <div class="col-lg-7 col-md-8">
-          <label class="form-label" for="projectTitleInput">作品名</label>
-          <input class="form-control" id="projectTitleInput" name="title" placeholder="作品名" required>
-        </div>
-        <div class="col-lg-3 col-md-4">
-          <label class="form-label" for="projectStatusSelect">ステータス</label>
-          <select class="form-select" id="projectStatusSelect" name="status">
-            <option value="draft">下書き</option>
-            <option value="published">公開</option>
-          </select>
-        </div>
-        <div class="col-12">
-          <label class="form-label" for="projectSummaryInput">説明</label>
-          <textarea class="form-control" id="projectSummaryInput" name="summary" rows="4" placeholder="ワールドの説明や利用者向けのメモを入力"></textarea>
-        </div>
-        <div class="col-12 d-flex justify-content-end gap-2">
-          <button class="btn btn-outline-dark" type="button" id="projectEditCancelButton">閉じる</button>
-          <button class="btn btn-sunrise" type="submit">保存</button>
+      <div class="world-home-actions">
+        {% if can_manage_project %}
+        <a class="quick-link" href="/projects/{{ project_id }}/world"><i class="bi bi-globe2"></i><span>世界観</span></a>
+        <a class="quick-link" href="/projects/{{ project_id }}/characters"><i class="bi bi-people"></i><span>キャラクター</span></a>
+        <a class="quick-link" href="/projects/{{ project_id }}/live-chat/rooms"><i class="bi bi-chat-square-heart"></i><span>ルーム</span></a>
+        {% endif %}
+        <a class="quick-link" href="/projects/{{ project_id }}/live-chat"><i class="bi bi-chat-dots"></i><span>チャットルーム</span></a>
+        {% if can_manage_project %}
+        <a class="quick-link" href="/projects/{{ project_id }}/stories"><i class="bi bi-journal-richtext"></i><span>ストーリー</span></a>
+        {% else %}
+        <a class="quick-link" href="/projects/{{ project_id }}/stories"><i class="bi bi-journal-richtext"></i><span>ストーリー</span></a>
+        {% endif %}
+        {% if can_manage_project %}
+        <a class="quick-link" href="/projects/{{ project_id }}/story-sessions"><i class="bi bi-dice-5"></i><span>セッション</span></a>
+        <a class="quick-link" href="/projects/{{ project_id }}/studio"><i class="bi bi-palette"></i><span>スタジオ</span></a>
+        {% endif %}
+      </div>
+    </aside>
+  </section>
+
+  {% if can_manage_project %}
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <h3>ワールド看板画像</h3>
+        <p class="section-copy mb-0">ワールド一覧とホームで表示される入口画像です。</p>
+      </div>
+    </div>
+    <div class="vstack gap-3">
+      <form id="worldSignboardUploadForm">
+        <div id="worldSignboardDropzone" class="dropzone" tabindex="0" role="button" aria-label="ワールド看板画像をドラッグアンドドロップ、またはクリックして選択">
+          <div class="dropzone-copy">
+            <div class="dropzone-title">看板画像をアップロード</div>
+            <div class="dropzone-hint">PNG / JPEG / WebP に対応。横長 1536x1024 推奨です。</div>
+          </div>
+          <input class="form-control d-none" type="file" name="file" accept="image/png,image/jpeg,image/webp">
         </div>
       </form>
-      {% endif %}
+      <button class="btn btn-sunrise w-100" type="button" id="worldSignboardGenerateButton">
+        <i class="bi bi-stars"></i>
+        <span>世界観から看板を生成</span>
+      </button>
     </div>
-  </div>
-
-  <div class="stats-row" id="projectStatsRow"></div>
-
-  <div class="content-grid">
-    <section class="panel-card span-7">
-      <div class="panel-head">
-        <h3>最近のライブチャットセッション</h3>
-      </div>
-      <div class="list-stack" id="recentLiveChatList"></div>
-    </section>
-    {% if can_manage_project %}
-    <section class="panel-card span-5">
-      <div class="panel-head">
-        <div>
-          <h3>ワールド看板画像</h3>
-          <p class="section-copy mb-0">一覧カードで世界観が一目で分かる画像です。1536x1024 固定で生成します。</p>
-        </div>
-      </div>
-      <div class="vstack gap-3">
-        <div id="worldSignboardPreview" class="world-signboard-preview"></div>
-        <form id="worldSignboardUploadForm">
-          <div id="worldSignboardDropzone" class="dropzone" tabindex="0" role="button" aria-label="ワールド看板画像をドラッグアンドドロップ、またはクリックして選択">
-            <div class="dropzone-copy">
-              <div class="dropzone-title">看板画像をアップロード</div>
-              <div class="dropzone-hint">PNG / JPEG / WebP に対応。横長 1536x1024 推奨です。</div>
-            </div>
-            <input class="form-control d-none" type="file" name="file" accept="image/png,image/jpeg,image/webp">
-          </div>
-        </form>
-        <button class="btn btn-sunrise w-100" type="button" id="worldSignboardGenerateButton">
-          <i class="bi bi-stars"></i>
-          <span>世界観から看板を生成</span>
-        </button>
-      </div>
-    </section>
-    {% endif %}
-    <section class="panel-card span-5">
-      <div class="panel-head">
-        <h3>主な操作</h3>
-      </div>
-      <div class="quick-actions quick-actions-tall">
-        {% if can_manage_project %}
-        <button class="quick-link text-start border-0 w-100" type="button" id="projectQuickEditButton">
-          <i class="bi bi-pencil-square"></i><span>ワールド情報編集</span>
-        </button>
-        <a class="quick-link" href="/projects/{{ project_id }}/characters"><i class="bi bi-people"></i><span>キャラクター管理</span></a>
-        <a class="quick-link" href="/projects/{{ project_id }}/world"><i class="bi bi-globe2"></i><span>世界観設定</span></a>
-        {% endif %}
-        <a class="quick-link" href="/projects/{{ project_id }}/live-chat"><i class="bi bi-chat-dots"></i><span>ライブチャット</span></a>
-      </div>
-    </section>
-  </div>
+  </section>
+  {% endif %}
 </section>
 {% endblock %}
 {% block scripts %}
@@ -106,146 +66,35 @@
 (() => {
   const projectId = Number({{ project_id }});
   const canManageProject = {{ "true" if can_manage_project else "false" }};
-  const editToggleButton = document.getElementById("projectEditToggleButton");
-  const quickEditButton = document.getElementById("projectQuickEditButton");
-  const editCancelButton = document.getElementById("projectEditCancelButton");
-  const editForm = document.getElementById("projectEditForm");
-  const titleInput = document.getElementById("projectTitleInput");
-  const summaryInput = document.getElementById("projectSummaryInput");
-  const projectStatusSelect = document.getElementById("projectStatusSelect");
   const signboardPreview = document.getElementById("worldSignboardPreview");
   const signboardUploadForm = document.getElementById("worldSignboardUploadForm");
   const signboardDropzone = document.getElementById("worldSignboardDropzone");
   const signboardFileInput = signboardUploadForm?.querySelector('[name="file"]');
   const signboardGenerateButton = document.getElementById("worldSignboardGenerateButton");
-  const params = new URLSearchParams(window.location.search);
-
-  function setEditVisible(visible) {
-    if (!canManageProject || !editForm || !editToggleButton) return;
-    editForm.hidden = !visible;
-    editToggleButton.textContent = visible ? "編集中" : "ワールド情報を編集";
-    if (visible) {
-      titleInput?.focus();
-      titleInput?.select();
-    }
-  }
-
-  function normalizeProjectStatus(status) {
-    return status === "published" || status === "active" ? "published" : "draft";
-  }
-
-  function statusLabel(status) {
-    return normalizeProjectStatus(status) === "published" ? "公開" : "下書き";
-  }
-
-  function renderMetaChips(project) {
-    const chips = [`ステータス: ${statusLabel(project?.status)}`];
-    document.getElementById("projectMetaChips").innerHTML = chips
-      .map((item) => `<span class="soft-code">${NovelUI.escape(item)}</span>`)
-      .join("");
-  }
 
   function renderSignboard(project) {
-    if (!signboardPreview) return;
     const asset = project?.thumbnail_asset;
     if (asset?.media_url) {
       signboardPreview.innerHTML = `
-        <img src="${asset.media_url}" alt="${NovelUI.escape(project?.title || "ワールド看板")}" class="world-signboard-image">
-        <div class="small text-secondary mt-2">${NovelUI.escape(asset.file_name || "看板画像")}</div>
+        <img src="${NovelUI.escape(asset.media_url)}" alt="${NovelUI.escape(project?.title || "ワールド看板")}" class="world-home-signboard-image">
       `;
       return;
     }
     signboardPreview.innerHTML = `
-      <div class="empty-panel mb-0">
-        看板画像はまだ登録されていません。アップロードするか、世界観設定から生成してください。
+      <div class="world-home-signboard-empty">
+        <i class="bi bi-image"></i>
+        <span>看板画像なし</span>
       </div>
     `;
   }
 
   async function loadOverview() {
-    const [project, characters, sessions] = await Promise.all([
-      NovelUI.api(`/api/v1/projects/${projectId}`),
-      NovelUI.api(`/api/v1/projects/${projectId}/characters`),
-      NovelUI.api(`/api/v1/chat/sessions?project_id=${projectId}`),
-    ]);
-
-    const characterList = Array.isArray(characters) ? characters : [];
-    const sessionList = Array.isArray(sessions) ? sessions : [];
-
+    const project = await NovelUI.api(`/api/v1/projects/${projectId}`);
+    const summary = project?.summary || "ワールドの説明はまだありません。";
     document.getElementById("projectHomeTitle").textContent = project?.title || "Untitled";
-    document.getElementById("projectHomeSummary").textContent =
-      project?.summary || "キャラクターとライブチャットを楽しむためのワールドホームです。";
-    renderMetaChips(project);
+    document.getElementById("projectHomeSummary").textContent = summary;
     renderSignboard(project);
-
-    if (canManageProject) {
-      titleInput.value = project?.title || "";
-      summaryInput.value = project?.summary || "";
-      projectStatusSelect.value = normalizeProjectStatus(project?.status);
-    }
-
-    document.getElementById("projectStatsRow").innerHTML = [
-      ["キャラクター", characterList.length],
-      ["ライブチャット", sessionList.length],
-      ["ステータス", statusLabel(project?.status)],
-    ].map(([label, value]) => `
-      <article class="metric-card"><div class="metric-label">${NovelUI.escape(label)}</div><div class="metric-value">${NovelUI.escape(String(value))}</div></article>
-    `).join("");
-
-    const recentList = sessionList
-      .slice()
-      .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
-      .slice(0, 5);
-
-    document.getElementById("recentLiveChatList").innerHTML = recentList.length ? recentList.map((item) => `
-      <a class="list-row" href="/projects/${projectId}/live-chat/${item.id}">
-        <div>
-          <div class="list-title">${NovelUI.escape(item.title || "ライブチャットセッション")}</div>
-          <div class="list-subtitle">${NovelUI.escape(item.last_message_text || "まだ会話メッセージがありません。")}</div>
-        </div>
-        <span class="soft-code">${NovelUI.escape(String(item.message_count || 0))} messages</span>
-      </a>
-      `).join("") : `<div class="empty-panel">まだライブチャットセッションがありません。</div>`;
   }
-
-  editToggleButton?.addEventListener("click", () => {
-    setEditVisible(editForm.hidden);
-  });
-
-  quickEditButton?.addEventListener("click", () => {
-    setEditVisible(true);
-  });
-
-  editCancelButton?.addEventListener("click", () => {
-    setEditVisible(false);
-  });
-
-  editForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const body = {
-      title: titleInput.value.trim(),
-      summary: summaryInput.value.trim(),
-      status: projectStatusSelect.value,
-    };
-
-    if (!body.title) {
-      NovelUI.toast("作品名を入力してください。", "warning");
-      titleInput.focus();
-      return;
-    }
-
-    try {
-      await NovelUI.api(`/api/v1/projects/${projectId}`, { method: "PATCH", body });
-      setEditVisible(false);
-      params.delete("edit");
-      const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`;
-      window.history.replaceState({}, "", nextUrl);
-      await loadOverview();
-      NovelUI.toast("ワールド情報を更新しました。");
-    } catch (error) {
-      NovelUI.toast(error.message || "ワールド情報の更新に失敗しました。", "danger");
-    }
-  });
 
   function setSignboardDropzoneActive(active) {
     signboardDropzone?.classList.toggle("is-dragover", active);
@@ -304,7 +153,7 @@
         body: { size: "1536x1024" },
       });
       renderSignboard(project);
-      NovelUI.toast("世界観からワールド看板画像を生成しました。");
+      NovelUI.toast("ワールド看板画像を生成しました。");
     } catch (error) {
       NovelUI.toast(error.message || "ワールド看板画像の生成に失敗しました。", "danger");
     } finally {
@@ -349,11 +198,7 @@
     await uploadSignboard(event.dataTransfer?.files?.[0]);
   });
 
-  loadOverview().then(() => {
-    if (canManageProject && params.get("edit") === "1") {
-      setEditVisible(true);
-    }
-  }).catch((error) => {
+  loadOverview().catch((error) => {
     NovelUI.toast(error.message || "ワールドホームの読み込みに失敗しました。", "danger");
   });
 })();

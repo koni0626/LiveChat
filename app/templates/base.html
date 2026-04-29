@@ -69,9 +69,9 @@
           </div>
           <div class="topbar-actions">
             {% if project_id %}
-            <a class="btn btn-outline-light btn-sm" href="{{ url_for('ui.live_chat_sessions_page', project_id=project_id) }}">
-              <i class="bi bi-chat-dots"></i>
-              <span>ライブチャット</span>
+            <a class="btn btn-outline-light btn-sm" href="{{ url_for('ui.story_session_list_page', project_id=project_id) }}">
+              <i class="bi bi-dice-5"></i>
+              <span>セッション</span>
             </a>
             {% endif %}
             {% if current_user_role in ["superuser", "project_user"] %}

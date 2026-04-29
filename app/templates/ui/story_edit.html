@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-grid" data-project-id="{{ project_id }}" data-story-id="{{ story_id or '' }}">
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <h3>{{ "ストーリー編集" if story_id else "ストーリー作成" }}</h3>
+        <p class="section-copy mb-0">Markdownで物語設定を書き、セッションの元になるストーリーを作成します。</p>
+      </div>
+      <a class="btn btn-sm btn-outline-dark" href="{{ url_for('ui.story_list_page', project_id=project_id) }}">一覧へ戻る</a>
+    </div>
+    <form id="storyEditForm" class="row g-3">
+      <div class="col-md-8">
+        <label class="form-label" for="storyTitleInput">タイトル</label>
+        <input class="form-control" id="storyTitleInput" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="storyStatusSelect">状態</label>
+        <select class="form-select" id="storyStatusSelect">
+          <option value="draft">下書き</option>
+          <option value="published">公開</option>
+          <option value="archived">アーカイブ</option>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="storyCharacterSelect">メインキャラクター</label>
+        <select class="form-select" id="storyCharacterSelect" required></select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="storyModeSelect">モード</label>
+        <select class="form-select" id="storyModeSelect">
+          <option value="free_chat">自由会話</option>
+          <option value="dungeon_trpg">ダンジョン探索</option>
+          <option value="romance_adventure">恋愛アドベンチャー</option>
+          <option value="romantic_comedy">ラブコメ</option>
+          <option value="comedy_adventure">コメディ冒険</option>
+          <option value="daily_comedy">日常ドタバタ</option>
+          <option value="school_mystery">学園ミステリー</option>
+          <option value="horror_trpg">怪異・ホラー</option>
+          <option value="escape_game">脱出ゲーム</option>
+          <option value="isekai_adventure">異世界冒険</option>
+          <option value="buddy_mission">バディ任務</option>
+          <option value="mystery_trpg">ミステリー攻略</option>
+          <option value="event_trpg">イベント重視</option>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="storyMaxTurnsInput">終了ターン数</label>
+        <input class="form-control" id="storyMaxTurnsInput" type="number" min="5" max="20" step="1" value="10">
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="storyDescriptionInput">説明</label>
+        <textarea class="form-control" id="storyDescriptionInput" rows="2"></textarea>
+      </div>
+      <div class="col-lg-6">
+        <label class="form-label" for="storyMarkdownInput">Markdown設定</label>
+        <textarea class="form-control story-markdown-input" id="storyMarkdownInput" rows="18" placeholder="# 忘却回廊&#10;&#10;## 概要&#10;ノアと一緒に地下迷宮を探索する。"></textarea>
+      </div>
+      <div class="col-lg-6">
+        <label class="form-label" for="storyMarkdownPreview">Markdownプレビュー</label>
+        <div class="markdown-preview story-markdown-preview" id="storyMarkdownPreview"></div>
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button class="btn btn-dark" type="submit">保存</button>
+        <button class="btn btn-outline-dark" type="button" id="storyDraftButton">Markdown自動作成</button>
+        <button class="btn btn-outline-dark" type="button" id="storyOpeningImageButton">オープニング画像を作成</button>
+        <label class="btn btn-outline-dark mb-0" for="storyOpeningImageUploadInput">オープニング画像をアップロード</label>
+        <input class="d-none" id="storyOpeningImageUploadInput" type="file" accept="image/*">
+      </div>
+    </form>
+  </section>
+  <section class="panel-card">
+    <div class="panel-head">
+      <h3>オープニング画像</h3>
+    </div>
+    <div class="mb-3" id="storyOpeningImagePreview"></div>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/markdown_editor.js') }}"></script>
+<script>
+(() => {
+  const projectId = Number({{ project_id }});
+  let storyId = "{{ story_id or '' }}" ? Number("{{ story_id or 0 }}") : null;
+  let currentStory = null;
+
+  const form = document.getElementById("storyEditForm");
+  const draftButton = document.getElementById("storyDraftButton");
+  const openingImageButton = document.getElementById("storyOpeningImageButton");
+  const openingImageUploadInput = document.getElementById("storyOpeningImageUploadInput");
+  const openingImagePreview = document.getElementById("storyOpeningImagePreview");
+  const markdownInput = document.getElementById("storyMarkdownInput");
+  const markdownPreview = document.getElementById("storyMarkdownPreview");
+
+  function readMaxTurns() {
+    const value = Number(document.getElementById("storyMaxTurnsInput").value || 10);
+    return Math.max(5, Math.min(20, Number.isFinite(value) ? Math.round(value) : 10));
+  }
+
+  async function loadCharacters() {
+    const characters = await NovelUI.api(`/api/v1/projects/${projectId}/characters`);
+    const select = document.getElementById("storyCharacterSelect");
+    select.innerHTML = characters.map((character) => `<option value="${character.id}">${NovelUI.escape(character.name)}</option>`).join("");
+  }
+
+  function readPayload() {
+    return {
+      title: document.getElementById("storyTitleInput").value.trim(),
+      description: document.getElementById("storyDescriptionInput").value.trim(),
+      status: document.getElementById("storyStatusSelect").value,
+      character_id: Number(document.getElementById("storyCharacterSelect").value),
+      story_mode: document.getElementById("storyModeSelect").value || "free_chat",
+      max_turns: readMaxTurns(),
+      config_markdown: markdownInput.value,
+    };
+  }
+
+  function renderMarkdownPreview() {
+    markdownPreview.innerHTML = window.MarkdownEditor.markdownToHtml(markdownInput.value);
+  }
+
+  function extractMarkdownTitle(markdown) {
+    const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+    const titleLine = lines.find((line) => line.trim().startsWith("# "));
+    return titleLine ? titleLine.trim().replace(/^#\s+/, "").trim() : "";
+  }
+
+  function renderOpeningImage(asset) {
+    if (!openingImagePreview) return;
+    const mediaUrl = asset?.media_url;
+    openingImagePreview.innerHTML = mediaUrl
+      ? `
+        <figure class="costume-create-image-card">
+          <img src="${NovelUI.escape(mediaUrl)}" alt="オープニング画像">
+          <figcaption>オープニング画像 / 1536x1024</figcaption>
+        </figure>
+      `
+      : '<div class="empty-panel mb-0">オープニング画像はまだありません。</div>';
+  }
+
+  function fillForm(story) {
+    currentStory = story;
+    document.getElementById("storyTitleInput").value = story.title || "";
+    document.getElementById("storyDescriptionInput").value = story.description || "";
+    document.getElementById("storyStatusSelect").value = story.status || "draft";
+    document.getElementById("storyCharacterSelect").value = story.character_id || "";
+    const modeSelect = document.getElementById("storyModeSelect");
+    const mode = story.story_mode || "free_chat";
+    if ([...modeSelect.options].some((option) => option.value === mode)) {
+      modeSelect.value = mode;
+    } else {
+      modeSelect.value = "free_chat";
+    }
+    const maxTurns = story.config_json?.max_turns || story.initial_state_json?.goal_state?.max_turns || 10;
+    document.getElementById("storyMaxTurnsInput").value = Math.max(5, Math.min(20, Number(maxTurns) || 10));
+    markdownInput.value = story.config_markdown || "";
+    renderMarkdownPreview();
+    renderOpeningImage(story.opening_image_asset);
+  }
+
+  async function loadStory() {
+    if (!storyId) return;
+    const story = await NovelUI.api(`/api/v1/stories/${storyId}`);
+    fillForm(story);
+  }
+
+  async function saveStory() {
+    const payload = readPayload();
+    if (!payload.title || !payload.character_id) {
+      NovelUI.toast("タイトルとメインキャラクターを入力してください。", "warning");
+      return null;
+    }
+    const saved = storyId
+      ? await NovelUI.api(`/api/v1/stories/${storyId}`, { method: "PATCH", body: payload })
+      : await NovelUI.api(`/api/v1/projects/${projectId}/stories`, { method: "POST", body: payload });
+    storyId = saved.id;
+    fillForm(saved);
+    NovelUI.toast("ストーリーを保存しました。");
+    if (!window.location.pathname.endsWith(`/stories/${storyId}/edit`)) {
+      history.replaceState(null, "", `/projects/${projectId}/stories/${storyId}/edit`);
+    }
+    return saved;
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveStory();
+  });
+
+  draftButton.addEventListener("click", async () => {
+    const title = document.getElementById("storyTitleInput").value.trim();
+    const characterId = Number(document.getElementById("storyCharacterSelect").value);
+    draftButton.disabled = true;
+    draftButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>作成中...';
+    try {
+      const draft = await NovelUI.api(`/api/v1/projects/${projectId}/stories/draft-markdown`, {
+        method: "POST",
+        body: {
+          title,
+          character_id: characterId,
+          story_mode: document.getElementById("storyModeSelect").value || "dungeon_trpg",
+          max_turns: readMaxTurns(),
+        },
+      });
+      markdownInput.value = draft.config_markdown || "";
+      const generatedTitle = extractMarkdownTitle(markdownInput.value);
+      if (generatedTitle) {
+        document.getElementById("storyTitleInput").value = generatedTitle;
+      }
+      renderMarkdownPreview();
+      if (draft.story_mode) {
+        document.getElementById("storyModeSelect").value = draft.story_mode;
+      }
+      if (draft.max_turns) {
+        document.getElementById("storyMaxTurnsInput").value = draft.max_turns;
+      }
+      NovelUI.toast("Markdown設定を自動作成しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "Markdown設定の自動作成に失敗しました。", "danger");
+    } finally {
+      draftButton.disabled = false;
+      draftButton.innerHTML = "Markdown自動作成";
+    }
+  });
+
+  markdownInput.addEventListener("input", renderMarkdownPreview);
+
+  openingImageButton.addEventListener("click", async () => {
+    openingImageButton.disabled = true;
+    openingImageButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>生成中...';
+    try {
+      if (!storyId) {
+        const saved = await saveStory();
+        if (!saved) return;
+      }
+      openingImagePreview.innerHTML = '<div class="empty-panel mb-0"><span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>オープニング画像を生成しています...</div>';
+      const result = await NovelUI.api(`/api/v1/stories/${storyId}/opening-image`, {
+        method: "POST",
+        body: {},
+      });
+      if (result.story) {
+        fillForm(result.story);
+      } else {
+        renderOpeningImage(result.asset);
+      }
+      NovelUI.toast("オープニング画像を生成しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "オープニング画像の生成に失敗しました。", "danger");
+    } finally {
+      openingImageButton.disabled = false;
+      openingImageButton.innerHTML = "オープニング画像を作成";
+    }
+  });
+
+  openingImageUploadInput.addEventListener("change", async () => {
+    const file = openingImageUploadInput.files?.[0];
+    if (!file) return;
+    try {
+      if (!storyId) {
+        const saved = await saveStory();
+        if (!saved) return;
+      }
+      const body = new FormData();
+      body.append("file", file);
+      openingImagePreview.innerHTML = '<div class="empty-panel mb-0"><span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>オープニング画像をアップロードしています...</div>';
+      const response = await fetch(`/api/v1/stories/${storyId}/opening-image/upload`, {
+        method: "POST",
+        body,
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      const result = payload?.data || payload;
+      if (!response.ok) {
+        throw new Error(result?.message || payload?.message || `HTTP ${response.status}`);
+      }
+      if (result.story) {
+        fillForm(result.story);
+      } else {
+        renderOpeningImage(result.asset);
+      }
+      NovelUI.toast("オープニング画像をアップロードしました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "オープニング画像のアップロードに失敗しました。", "danger");
+    } finally {
+      openingImageUploadInput.value = "";
+    }
+  });
+
+  renderOpeningImage(null);
+  Promise.all([loadCharacters()]).then(loadStory).catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
+})();
+</script>
+{% endblock %}

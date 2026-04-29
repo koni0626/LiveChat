@@ -19,6 +19,8 @@ from .blueprints.admin import admin_bp
 from .blueprints.settings import settings_bp
 from .blueprints.letters import letters_bp
 from .blueprints.feed import feed_bp
+from .blueprints.stories import stories_bp
+from .blueprints.studio import studio_bp
 
 
 def _ensure_runtime_directories(app: Flask):
@@ -83,6 +85,8 @@ def create_app(config_object=Config):
     app.register_blueprint(settings_bp, url_prefix="/api/v1")
     app.register_blueprint(letters_bp, url_prefix="/api/v1")
     app.register_blueprint(feed_bp, url_prefix="/api/v1")
+    app.register_blueprint(stories_bp, url_prefix="/api/v1")
+    app.register_blueprint(studio_bp, url_prefix="/api/v1")
 
     @app.route("/", methods=["GET"])
     def index():
