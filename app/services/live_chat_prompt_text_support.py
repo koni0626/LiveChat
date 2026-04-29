@@ -385,6 +385,10 @@ def build_opening_prompt(context: dict) -> str:
         lines.append(f"Session objective: {session_objective}")
     if context["world"].get("overview"):
         lines.append(f"World overview: {context['world']['overview']}")
+    world_map_context = (context.get("world_map") or {}).get("prompt_context")
+    if world_map_context:
+        lines.append("Known world map locations. Use these as concrete places the character may mention or invite the player to:")
+        lines.append(world_map_context)
     if relationship_state:
         lines.append("Relationship state:")
         for name, metrics in relationship_state.items():
@@ -468,6 +472,10 @@ def build_player_proxy_message_prompt(context: dict) -> str:
     )
     if context["world"].get("overview"):
         lines.append(f"World overview: {context['world']['overview']}")
+    world_map_context = (context.get("world_map") or {}).get("prompt_context")
+    if world_map_context:
+        lines.append("Known world map locations. Prefer these names when moving the scene or suggesting destinations:")
+        lines.append(world_map_context)
     if scene_progression:
         lines.append(f"Current scene phase: {scene_progression.get('scene_phase') or ''}")
         lines.append(f"Current location: {scene_progression.get('location') or ''}")
@@ -723,6 +731,10 @@ def build_input_intent_prompt(context: dict, user_message_text: str) -> str:
         f"Current scene: {scene_progression.get('focus_summary') or state_json.get('focus_summary') or ''}",
         "Recent conversation:",
     ]
+    world_map_context = (context.get("world_map") or {}).get("prompt_context")
+    if world_map_context:
+        lines.append("Known world map locations. If the input suggests movement, match it to one of these places when natural:")
+        lines.append(world_map_context)
     for message in context["messages"][-6:]:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
     lines.append(f"Latest input: {user_message_text}")
@@ -807,6 +819,10 @@ def build_narration_scene_prompt(context: dict, user_message_text: str, intent: 
         f"Current background: {state_json.get('background') or scene_progression.get('background') or ''}",
         "Characters:",
     ]
+    world_map_context = (context.get("world_map") or {}).get("prompt_context")
+    if world_map_context:
+        lines.append("Known world map locations. Create choices that use these destinations when the latest line implies movement:")
+        lines.append(world_map_context)
     for character in context["characters"]:
         lines.append(
             f"- {character.get('name')}: appearance={character.get('appearance_summary') or ''}, personality={character.get('personality') or ''}"
@@ -916,6 +932,10 @@ def build_scene_choice_prompt(context: dict, speaker_name: str, message_text: st
         f"Displayed image summary: {displayed_image.get('short_summary') or ''}",
         "Characters:",
     ]
+    world_map_context = (context.get("world_map") or {}).get("prompt_context")
+    if world_map_context:
+        lines.append("Known world map locations. Use them to resolve destination/background when relevant:")
+        lines.append(world_map_context)
     for character in context["characters"]:
         lines.append(
             f"- {character.get('name')}: personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, ng_rules={character.get('ng_rules') or ''}"
@@ -1311,6 +1331,10 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
         f"Current focus: {scene_progression.get('focus_summary') or ''}",
         f"Next topic: {scene_progression.get('next_topic') or ''}",
     ]
+    world_map_context = (context.get("world_map") or {}).get("prompt_context")
+    if world_map_context:
+        lines.append("Known world map locations. The director may use them for concrete location moves, incidents, secrets, or invitations:")
+        lines.append(world_map_context)
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
     if relationship_state:

@@ -26,6 +26,7 @@ from .story_dice_service import StoryDiceService
 from .story_service import StoryService
 from .story_state_service import StoryStateService
 from .user_setting_service import UserSettingService
+from .world_map_service import WorldMapService
 
 
 class StorySessionService:
@@ -45,6 +46,7 @@ class StorySessionService:
         user_setting_service: UserSettingService | None = None,
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
+        world_map_service: WorldMapService | None = None,
     ):
         self._repo = repository or StorySessionRepository()
         self._message_repo = message_repository or StoryMessageRepository()
@@ -60,6 +62,7 @@ class StorySessionService:
         self._user_setting_service = user_setting_service or UserSettingService()
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
+        self._world_map_service = world_map_service or WorldMapService()
 
     def list_sessions(self, project_id: int, *, owner_user_id: int | None = None):
         return self._repo.list_by_project(project_id, owner_user_id=owner_user_id)
@@ -828,11 +831,21 @@ class StorySessionService:
             "story": self._story_service.serialize_story(story) if story else None,
             "story_snapshot": snapshot,
             "character": self._serialize_character_for_prompt(character),
+            "world_map": self._world_map_context(session.project_id),
             "state": state_json,
             "current_goal": str(current_goal or "").strip(),
             "clear_conditions": goal_state.get("clear_conditions") or config_json.get("clear_conditions") or [],
             "recent_messages": messages[-10:],
         }
+
+    def _world_map_context(self, project_id: int):
+        try:
+            return {
+                "locations": self._world_map_service.list_locations(project_id)[:20],
+                "prompt_context": self._world_map_service.location_prompt_context(project_id, limit=20),
+            }
+        except Exception:
+            return {"locations": [], "prompt_context": ""}
 
     def _serialize_character_for_prompt(self, character):
         if not character:
@@ -1032,6 +1045,8 @@ class StorySessionService:
                 json_util.dumps(turn_plan),
                 "Clear conditions:",
                 json_util.dumps(context.get("clear_conditions") or []),
+                "World map locations:",
+                json_util.dumps((context.get("world_map") or {}).get("locations") or []),
                 "Story JSON:",
                 json_util.dumps(context.get("story") or {}),
                 "Session state:",
@@ -1454,6 +1469,8 @@ class StorySessionService:
                 json_util.dumps(context.get("session") or {}),
                 "Session state:",
                 json_util.dumps(context.get("state") or {}),
+                "World map locations:",
+                json_util.dumps((context.get("world_map") or {}).get("locations") or []),
                 "GM result:",
                 json_util.dumps(context.get("gm_result") or {}),
                 "Recent messages:",
@@ -1483,6 +1500,8 @@ class StorySessionService:
                 json_util.dumps(context.get("session") or {}),
                 "Session state:",
                 json_util.dumps(context.get("state") or {}),
+                "World map locations:",
+                json_util.dumps((context.get("world_map") or {}).get("locations") or []),
                 "Recent messages:",
                 json_util.dumps(context.get("recent_messages") or []),
                 "Optional user hint:",
@@ -1868,6 +1887,8 @@ class StorySessionService:
                 json_util.dumps(character),
                 "Session state:",
                 json_util.dumps(state),
+                "World map locations:",
+                json_util.dumps((context.get("world_map") or {}).get("locations") or []),
                 "Visible items:",
                 json_util.dumps(visible_items),
                 "Recent messages:",

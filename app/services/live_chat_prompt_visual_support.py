@@ -159,6 +159,9 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
         f"画風・スタイル指定: {visual_style}",
         "登場キャラクター:",
     ]
+    world_map_context = (context.get("world_map") or {}).get("prompt_context")
+    if world_map_context:
+        lines.extend(["ワールドマップ登録施設:", world_map_context])
     for character in active[:20]:
         nickname = character.get("nickname")
         label = f"{character['name']} / あだ名: {nickname}" if nickname else character["name"]

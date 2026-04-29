@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-grid" data-world-map-page="{{ project_id }}" data-can-manage="{{ 'true' if can_manage_project else 'false' }}">
+  <section class="panel-card world-map-hero">
+    <div class="panel-head">
+      <div>
+        <h3>ワールドマップ</h3>
+        <p class="section-copy mb-0">施設と全体像を管理します。ユーザーは閲覧でき、編集はプロジェクトユーザーと管理者だけができます。</p>
+      </div>
+      {% if can_manage_project %}
+      <button class="btn btn-sunrise btn-sm" type="button" id="worldMapGenerateButton">
+        <i class="bi bi-stars"></i>
+        <span>俯瞰図を生成</span>
+      </button>
+      <label class="btn btn-sunrise btn-sm mb-0">
+        <i class="bi bi-upload"></i>
+        <span>俯瞰図をアップロード</span>
+        <input class="d-none" type="file" id="worldMapUploadInput" accept="image/png,image/jpeg,image/webp">
+      </label>
+      {% endif %}
+    </div>
+    <div class="world-map-main">
+      <div class="world-map-image-frame" id="worldMapImageFrame">
+        <div class="empty-panel mb-0">ワールドマップを読み込んでいます...</div>
+      </div>
+      <div class="world-map-image-list" id="worldMapImageList"></div>
+    </div>
+  </section>
+
+  {% if can_manage_project %}
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <h3>施設を追加</h3>
+        <p class="section-copy mb-0">予備校、村、避暑地、研究所など、世界ごとの「場所」を登録できます。</p>
+      </div>
+    </div>
+    <form id="worldLocationForm" class="world-location-form">
+      <input type="hidden" name="location_id">
+      <div class="row g-3">
+        <div class="col-md-5">
+          <label class="form-label">施設名</label>
+          <input class="form-control" name="name" required placeholder="例: 菩提樹ガーデン">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">種別</label>
+          <input class="form-control" name="location_type" placeholder="例: 避暑地 / 予備校 / 寺院">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">地域</label>
+          <input class="form-control" name="region" placeholder="例: 中央区 / 菩提樹エリア">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">所有者</label>
+          <select class="form-select" name="owner_character_id">
+            <option value="">なし</option>
+          </select>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">タグ</label>
+          <input class="form-control" name="tags_text" placeholder="例: デート, 金融, 危険, 夜景">
+        </div>
+          <div class="col-12">
+            <label class="form-label">説明</label>
+            <textarea class="form-control" name="description" rows="4" placeholder="施設の雰囲気、用途、誰が集まるか、物語で使えそうな特徴など"></textarea>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">表示順</label>
+            <input class="form-control" name="sort_order" type="number" value="0">
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">出典メモ</label>
+          <input class="form-control" name="source_note" placeholder="例: Feed 44 / チャットログ / 手入力">
+        </div>
+      </div>
+      <div class="action-row mt-3">
+        <button class="btn btn-sunrise" type="submit">
+          <i class="bi bi-check2-circle"></i>
+          <span id="worldLocationSubmitLabel">施設を追加</span>
+        </button>
+        <button class="btn btn-outline-light" type="button" id="worldLocationResetButton">入力をクリア</button>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <h3>施設一覧</h3>
+        <p class="section-copy mb-0">登録済みの施設を確認します。</p>
+      </div>
+      {% if can_manage_project %}
+      <button class="btn btn-outline-light btn-sm" type="button" id="worldLocationCandidatesButton">
+        <i class="bi bi-magic"></i>
+        <span>候補抽出</span>
+      </button>
+      {% endif %}
+    </div>
+    <div class="world-location-filter-row">
+      <input class="form-control" id="worldLocationSearchInput" placeholder="施設名・説明・タグで検索">
+      <select class="form-select" id="worldLocationRegionFilter">
+        <option value="">全地域</option>
+      </select>
+      <select class="form-select" id="worldLocationTypeFilter">
+        <option value="">全種別</option>
+      </select>
+      <input class="form-control" id="worldLocationTagFilter" placeholder="タグ">
+    </div>
+    {% if can_manage_project %}
+    <div class="world-location-candidate-list d-none" id="worldLocationCandidateList"></div>
+    {% endif %}
+    <div class="project-card-grid entity-card-grid-two world-location-grid" id="worldLocationList">
+      <div class="empty-panel">施設を読み込んでいます...</div>
+    </div>
+  </section>
+</section>
+
+<div class="modal fade" id="worldLocationImageModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content world-location-image-modal">
+      <div class="modal-header">
+        <div>
+          <div class="eyebrow">Location Image</div>
+          <h5 class="modal-title" id="worldLocationImageModalTitle">施設画像</h5>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <img alt="施設画像" id="worldLocationImageModalImage">
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/world_map_page.js') }}"></script>
+{% endblock %}

@@ -12,6 +12,7 @@ from .session_gift_event_service import SessionGiftEventService
 from .session_image_service import SessionImageService
 from .session_state_service import SessionStateService
 from .world_service import WorldService
+from .world_map_service import WorldMapService
 
 
 class LiveChatContextService:
@@ -28,6 +29,7 @@ class LiveChatContextService:
         project_service: ProjectService,
         live_chat_room_service: LiveChatRoomService,
         world_service: WorldService,
+        world_map_service: WorldMapService | None = None,
         serializer: LiveChatSerializer,
         media_service: LiveChatMediaService,
         gift_event_serializer,
@@ -42,6 +44,7 @@ class LiveChatContextService:
         self._project_service = project_service
         self._live_chat_room_service = live_chat_room_service
         self._world_service = world_service
+        self._world_map_service = world_map_service or WorldMapService()
         self._serializer = serializer
         self._media_service = media_service
         self._gift_event_serializer = gift_event_serializer
@@ -124,6 +127,7 @@ class LiveChatContextService:
             selected_image = scene_images[0]
         characters = self._select_characters(session_id)
         world = self._world_service.get_world(session.project_id)
+        world_map_context = self._world_map_context(session.project_id)
         if not messages and characters:
             opening_context = {
                 "project": {
@@ -137,6 +141,7 @@ class LiveChatContextService:
                     "overview": getattr(world, "overview", None) if world else None,
                     "tone": getattr(world, "tone", None) if world else None,
                 },
+                "world_map": world_map_context,
                 "session": self._serializer.serialize_session(session),
                 "messages": [],
                 "state": self._serializer.serialize_state(state),
@@ -157,6 +162,7 @@ class LiveChatContextService:
                 "overview": getattr(world, "overview", None) if world else None,
                 "tone": getattr(world, "tone", None) if world else None,
             },
+            "world_map": world_map_context,
             "session": self._serializer.serialize_session(session),
             "room": self._live_chat_room_service.serialize_room(room) if room else None,
             "messages": [self._serializer.serialize_message(item) for item in messages],
@@ -168,3 +174,13 @@ class LiveChatContextService:
             "gift_events": [self._gift_event_serializer(item) for item in gift_events],
             "selected_image": self._media_service.serialize_session_image(selected_image) if selected_image else None,
         }
+
+    def _world_map_context(self, project_id: int):
+        try:
+            locations = self._world_map_service.list_locations(project_id)
+            return {
+                "locations": locations[:20],
+                "prompt_context": self._world_map_service.location_prompt_context(project_id, limit=20),
+            }
+        except Exception:
+            return {"locations": [], "prompt_context": ""}

@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-grid">
-  <section class="toolbar-panel">
-    <form class="row g-3 align-items-end" id="characterSearchForm">
-      <div class="{{ 'col-md-8' if can_manage_project else 'col-md-10' }}">
+  <section class="toolbar-panel span-12 character-search-panel">
+    <form class="character-search-form" id="characterSearchForm">
+      <div class="character-search-field">
         <label class="form-label" for="characterSearchInput">キャラクター検索</label>
         <input class="form-control" id="characterSearchInput" name="search" placeholder="名前、あだ名、外見で検索">
       </div>
-      <div class="{{ 'col-md-4' if can_manage_project else 'col-md-2' }} d-flex gap-2">
-        <button class="btn btn-dark w-100" type="submit">検索</button>
+      <div class="character-search-actions">
+        <button class="btn btn-dark" type="submit">検索</button>
         {% if can_manage_project %}
-        <a class="btn btn-sunrise w-100" href="/projects/{{ project_id }}/characters/new">追加</a>
+        <a class="btn btn-sunrise" href="/projects/{{ project_id }}/characters/new">追加</a>
         {% endif %}
       </div>
     </form>

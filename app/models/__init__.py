@@ -23,6 +23,8 @@ from .usage_log import UsageLog
 from .user import User
 from .user_setting import UserSetting
 from .world import World
+from .world_location import WorldLocation
+from .world_map_image import WorldMapImage
 
 __all__ = [
     "db",
@@ -49,4 +51,6 @@ __all__ = [
     "User",
     "UserSetting",
     "World",
+    "WorldLocation",
+    "WorldMapImage",
 ]

@@ -22,10 +22,13 @@ def _project_nav(project_id: int | None, current_user: User | None = None):
     ]
     if can_manage_project:
         links.append({"label": "世界観", "icon": "bi-globe2", "href": url_for("ui.world_page", project_id=project_id)})
+        links.append({"label": "ワールドマップ", "icon": "bi-map", "href": url_for("ui.world_map_page", project_id=project_id)})
         links.append({"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)})
         links.append({"label": "ルーム", "icon": "bi-chat-square-heart", "href": url_for("ui.live_chat_rooms_page", project_id=project_id)})
         links.append({"label": "ストーリー", "icon": "bi-journal-richtext", "href": url_for("ui.story_list_page", project_id=project_id)})
         links.append({"label": "スタジオ", "icon": "bi-palette", "href": url_for("ui.studio_page", project_id=project_id)})
+    else:
+        links.append({"label": "ワールドマップ", "icon": "bi-map", "href": url_for("ui.world_map_page", project_id=project_id)})
     links.append({"label": "チャットルーム", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)})
     links.append({"label": "セッション", "icon": "bi-dice-5", "href": url_for("ui.story_session_list_page", project_id=project_id)})
     return links
@@ -155,6 +158,11 @@ def character_edit_page(project_id: int, character_id: int):
 @ui_bp.route("/projects/<int:project_id>/world", methods=["GET"])
 def world_page(project_id: int):
     return _render("ui/world_edit.html", title="世界観設定", screen_id="world-edit", project_id=project_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/world-map", methods=["GET"])
+def world_map_page(project_id: int):
+    return _render("ui/world_map.html", title="ワールドマップ", screen_id="world-map", project_id=project_id)
 
 
 @ui_bp.route("/projects/<int:project_id>/stories", methods=["GET"])

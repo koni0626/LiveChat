@@ -19,6 +19,7 @@ from .session_gift_event_service import SessionGiftEventService
 from .session_image_service import SessionImageService
 from .session_state_service import SessionStateService
 from .world_service import WorldService
+from .world_map_service import WorldMapService
 
 
 class LiveChatService:
@@ -35,6 +36,7 @@ class LiveChatService:
         live_chat_room_service: LiveChatRoomService | None = None,
         letter_service: LetterService | None = None,
         world_service: WorldService | None = None,
+        world_map_service: WorldMapService | None = None,
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
     ):
@@ -49,6 +51,7 @@ class LiveChatService:
         self._live_chat_room_service = live_chat_room_service or LiveChatRoomService()
         self._letter_service = letter_service or LetterService()
         self._world_service = world_service or WorldService()
+        self._world_map_service = world_map_service or WorldMapService()
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
         self._serializer = LiveChatSerializer(asset_service=self._asset_service)
@@ -71,6 +74,7 @@ class LiveChatService:
             project_service=self._project_service,
             live_chat_room_service=self._live_chat_room_service,
             world_service=self._world_service,
+            world_map_service=self._world_map_service,
             serializer=self._serializer,
             media_service=self._media_service,
             gift_event_serializer=self._serialize_gift_event,
