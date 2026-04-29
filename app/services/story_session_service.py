@@ -1700,12 +1700,20 @@ class StorySessionService:
         refined = prompt_support.normalize_first_person_visual_prompt(original_prompt)
         refined = prompt_support.apply_visual_style(refined, visual_context)
         refined = prompt_support.forbid_text_in_image(refined)
-        safety_rewrite = text_support.rewrite_image_prompt_for_safety(
-            self._text_ai_client,
-            visual_context,
-            refined,
-            purpose=str(payload.get("visual_type") or "story_scene"),
-        )
+        safety_mode = str(current_app.config.get("IMAGE_PROMPT_SAFETY_MODE", "both")).strip().lower()
+        if safety_mode in {"both", "preflight"}:
+            safety_rewrite = text_support.rewrite_image_prompt_for_safety(
+                self._text_ai_client,
+                visual_context,
+                refined,
+                purpose=str(payload.get("visual_type") or "story_scene"),
+            )
+        else:
+            safety_rewrite = {
+                "rewritten_prompt": refined,
+                "changed": False,
+                "safety_reason": f"preflight safety rewrite disabled by IMAGE_PROMPT_SAFETY_MODE={safety_mode}",
+            }
         refined = safety_rewrite.get("rewritten_prompt") or refined
         refined = prompt_support.apply_visual_style(refined, visual_context)
         refined = prompt_support.forbid_text_in_image(refined)

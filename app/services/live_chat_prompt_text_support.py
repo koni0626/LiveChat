@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 
@@ -1067,9 +1068,11 @@ def build_image_prompt_safety_rewrite_prompt(context: dict, prompt: str, purpose
         "If the prompt might be classified as sexual, especially due to beach/swimwear/young-looking/body/wet/close-up wording, rewrite it into safer visual language without changing the requested outfit category.",
         "Do not use a fixed template. Preserve the user's scene intent, character identity, story context, outfit direction, mood, and visual appeal.",
         "Preserve any instruction that says to keep the reference/base image art style. Do not remove style-lock instructions about linework, coloring, lighting, rendering texture, face design, or same-series consistency.",
-        "Avoid explicit or policy-triggering wording such as bikini, revealing, sexy, sensual, erotic, wet skin, chest, hips, body emphasis, young girl, 20 years old, close-up body framing.",
+        "Do not flatten adult glamour into generic modest clothing. Tasteful adult decollete, a glamorous neckline, confident romantic appeal, stylish swimwear, and fashion-model sensuality are allowed when the character is clearly adult and the scene stays non-explicit.",
+        "Avoid explicit or policy-triggering wording such as nipples, areola, genitals, topless, naked, nude, sexual acts, hands on breasts/genitals, fetish framing, transparent clothing emphasis, young girl, schoolgirl erotic framing, childlike body wording, 20 years old, close-up body framing.",
         "If the original requests explicit sexual contact, touching breasts/chest, nudity, undressing, or sexual acts, do not refuse and do not keep those explicit details. Convert it into the closest safe compromise image: romantic tension, intimate distance, a hand near the shoulder/upper arm/hair/cheek, a protective embrace, suggestive eye contact, elegant clothing slightly adjusted but still clearly worn, warm lighting, and a tasteful visual novel event CG mood.",
-        "For Japanese requests such as 胸を触る, 裸になる, 脱ぐ, 抱く, エッチ, 性的, rewrite them as non-explicit romantic staging while preserving the emotional intent: closeness, temptation, trust, nervousness, affection, or playful adult romance.",
+        "For Japanese requests such as 胸を出す, 胸を見せる, 胸元を強調, 谷間, セクシー, 色っぽい, rewrite them as safe adult fashion language: 胸元の開いた上品な衣装, グラマラスなネックライン, 大人っぽい華やかさ, confident adult glamour. Do not erase the appeal; remove only explicit nudity or sexual wording.",
+        "For Japanese requests such as 胸を触る, 裸になる, 全裸, 乳首, 局部, 脱ぐ, 抱く, エッチ, 性交, セックス, 性的, rewrite them as non-explicit romantic staging while preserving the emotional intent: closeness, temptation, trust, nervousness, affection, or playful adult romance.",
         "The result should feel commercially appealing for an indie romance visual novel, but must stay non-explicit: no nudity, no sexual act, no hands on breasts/genitals, no fetish framing, no transparent clothing emphasis.",
         "If the original asks for swimwear, keep swimwear: prefer one-piece swimsuit, stylish resort swimwear, sporty two-piece swim set, coordinated swim set with skirted bottom, beach cover-up as an accessory, or water-ready beachwear. Do not downgrade it to generic summer clothes.",
         "For a prompt like 'summer sea, happily playing in swimwear', the rewritten prompt must still depict the character at the summer sea, happily playing, wearing clearly recognizable stylish swimwear.",
@@ -1100,9 +1103,15 @@ def fallback_image_prompt_safety_rewrite(prompt: str) -> dict:
     risky_terms = (
         "胸を触",
         "胸に触",
-        "胸",
+        "胸を揉",
+        "胸を出",
+        "胸を見せ",
+        "乳首",
+        "乳輪",
+        "局部",
         "裸",
         "全裸",
+        "トップレス",
         "脱ぐ",
         "脱が",
         "エッチ",
@@ -1116,18 +1125,49 @@ def fallback_image_prompt_safety_rewrite(prompt: str) -> dict:
         "sex",
         "sexual",
         "breast",
-        "chest",
+        "nipple",
+        "areola",
+        "genitals",
+        "topless",
         "touching her body",
     )
     if any(term in lowered or term in value for term in risky_terms):
+        converted_intent = value
+        replacements = (
+            ("胸を触る", "肩先や髪にそっと手を添える"),
+            ("胸に触れる", "肩先や髪にそっと手を添える"),
+            ("胸を揉む", "抱き寄せる直前の親密な距離感"),
+            ("胸を出すような", "胸元の開いた上品な"),
+            ("胸を見せるような", "グラマラスなネックラインの"),
+            ("胸を出す", "胸元の開いた上品な衣装"),
+            ("胸を見せる", "グラマラスなネックラインの衣装"),
+            ("全裸", "衣装をきちんと着用した姿"),
+            ("トップレス", "胸元の開いた上品な衣装"),
+            ("乳首", "上品なネックライン"),
+            ("乳輪", "上品なネックライン"),
+            ("局部", "衣装のシルエット"),
+            ("脱ぐ", "衣装を少し整える仕草"),
+            ("脱が", "衣装を少し整える仕草"),
+            ("性交", "親密なロマンチックな雰囲気"),
+            ("セックス", "親密なロマンチックな雰囲気"),
+            ("裸", "衣装をきちんと着用した姿"),
+            ("エッチ", "大人の恋愛らしい甘い緊張感"),
+            ("性的", "ロマンチック"),
+        )
+        replacement_lookup = {source: target for source, target in replacements}
+        pattern = re.compile(
+            "|".join(re.escape(source) for source, _target in sorted(replacements, key=lambda item: len(item[0]), reverse=True))
+        )
+        converted_intent = pattern.sub(lambda match: replacement_lookup.get(match.group(0), match.group(0)), converted_intent)
         return {
             "rewritten_prompt": (
                 "成人女性キャラクターとのロマンチックなノベルゲーム風イベントCG。"
                 "露骨な性的接触や裸体は描かず、親密な距離感、頬や髪や肩先にそっと手を添える仕草、"
                 "少し照れた表情、誘惑的だが上品な視線、暖かい光、衣装はきちんと着用したまま、"
+                "胸元の開いた上品な衣装、グラマラスなネックライン、成熟した華やかさはファッションとして表現してよい。"
                 "大人の恋愛らしい緊張感と甘さを表現する。"
-                "裸体、性的行為、胸部や局部への接触、過度な身体強調、透け表現、文字、ロゴ、字幕は禁止。"
-                f"\n\n元の意図を安全に変換した内容:\n{value}"
+                "裸体、乳首、局部、性的行為、胸部や局部への接触、過度な身体強調、透け表現、文字、ロゴ、字幕は禁止。"
+                f"\n\n元の意図を安全に変換した内容:\n{converted_intent}"
             ),
             "changed": True,
             "safety_reason": "Explicit sexual wording was converted into a non-explicit romantic visual novel scene.",

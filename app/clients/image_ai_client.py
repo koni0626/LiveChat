@@ -91,8 +91,11 @@ class ImageAIClient:
     def _prompt_has_sexual_safety_risk(self, prompt: str) -> bool:
         lowered = str(prompt or "").lower()
         explicit_terms = (
-            "裸", "全裸", "脱ぐ", "脱が", "胸を触", "胸に触", "エッチ", "性交", "セックス",
-            "nude", "naked", "undress", "sex", "sexual act", "touch her breast", "touching her breast",
+            "裸", "全裸", "トップレス", "脱ぐ", "脱が", "胸を触", "胸に触", "胸を揉",
+            "胸を出", "胸を見せ",
+            "乳首", "乳輪", "局部", "エッチ", "性交", "セックス",
+            "nude", "naked", "topless", "undress", "sex", "sexual act", "nipple",
+            "areola", "genitals", "touch her breast", "touching her breast",
         )
         if any(term in lowered for term in explicit_terms):
             return True
@@ -101,10 +104,10 @@ class ImageAIClient:
             "beach", "pool", "splash", "water", "wet",
         )
         risk_terms = (
-            "セクシー", "エロ", "性的", "誘惑", "挑発", "露出", "濡れ", "胸", "胸元",
+            "エロ", "性的", "露骨", "濡れた肌", "濡れ肌",
             "谷間", "腰", "ヒップ", "太もも", "肌", "20歳前後", "若い", "少女",
-            "sexy", "sensual", "erotic", "seductive", "revealing", "young", "girl",
-            "20 years old", "body", "chest", "hips", "wet skin", "close-up", "full body",
+            "erotic", "explicit", "revealing", "young", "girl",
+            "20 years old", "body", "hips", "wet skin", "close-up", "full body",
         )
         return any(term in lowered for term in swim_terms) and any(term in lowered for term in risk_terms)
 
@@ -112,56 +115,79 @@ class ImageAIClient:
         if not force and not self._prompt_has_sexual_safety_risk(prompt):
             return prompt
         text = str(prompt or "")
-        replacements = {
-            "セクシー": "華やかで大人っぽい",
-            "エロ": "ロマンティック",
-            "性的": "ロマンティック",
-            "誘惑的": "魅力的",
-            "挑発的": "自信のある",
-            "露出": "衣装のシルエット",
-            "濡れた肌": "水しぶきと夏の日差し",
-            "濡れ肌": "水しぶきと夏の日差し",
-            "濡れ": "水辺の雰囲気",
-            "胸元": "上品なネックライン",
-            "胸": "衣装のシルエット",
-            "谷間": "上品なネックライン",
-            "太もも": "脚のライン",
-            "強調": "自然に表現",
-            "裸": "肌を見せすぎない衣装",
-            "下着": "インナー風ではない衣装",
-            "ランジェリー": "ドレス風の衣装",
-            "水着": "上品で華やかなワンピース型スイムウェアまたはスポーティなツーピースのスイムセット",
-            "ビキニ": "リゾート向けのスポーティなツーピースのスイムセット",
-            "swimsuit": "tasteful one-piece swimsuit or sporty two-piece swim set",
-            "bikini": "sporty two-piece swim set with tasteful styling",
-            "sexy": "glamorous and elegant",
-            "erotic": "romantic and elegant",
-            "seductive": "charming and confident",
-            "revealing": "well-styled",
-            "cleavage": "elegant neckline",
-            "lingerie": "dress-like fashion outfit",
-            "underwear": "fashion outfit",
-            "nude": "fully clothed",
-            "naked": "fully clothed",
-            "裸": "衣装をきちんと着用した親密なロマンチックシーン",
-            "全裸": "衣装をきちんと着用した親密なロマンチックシーン",
-            "脱ぐ": "衣装を少し整える仕草",
-            "脱が": "衣装を少し整える仕草",
-            "胸を触る": "肩先や頬や髪にそっと手を添える",
-            "胸に触れる": "肩先や頬や髪にそっと手を添える",
-            "胸": "上品な衣装のシルエット",
-            "エッチ": "大人の恋愛らしい甘い緊張感",
-            "性的": "ロマンチック",
-            "セックス": "親密なロマンチックな雰囲気",
-        }
-        for source, target in replacements.items():
-            text = text.replace(source, target)
+        replacements = (
+            ("胸を触る", "肩先や頬や髪にそっと手を添える"),
+            ("胸に触れる", "肩先や頬や髪にそっと手を添える"),
+            ("胸を揉む", "抱き寄せる直前の親密な距離感"),
+            ("胸を出すような", "胸元の開いた上品な"),
+            ("胸を見せるような", "グラマラスなネックラインの"),
+            ("胸を出す", "胸元の開いた上品な衣装"),
+            ("胸を見せる", "グラマラスなネックラインの衣装"),
+            ("トップレス", "胸元の開いた上品な衣装"),
+            ("全裸", "衣装をきちんと着用した親密なロマンチックシーン"),
+            ("乳首", "上品なネックライン"),
+            ("乳輪", "上品なネックライン"),
+            ("局部", "衣装のシルエット"),
+            ("脱ぐ", "衣装を少し整える仕草"),
+            ("脱が", "衣装を少し整える仕草"),
+            ("セックス", "親密なロマンチックな雰囲気"),
+            ("性交", "親密なロマンチックな雰囲気"),
+            ("胸元", "胸元の開いた上品な衣装"),
+            ("谷間", "グラマラスなネックライン"),
+            ("胸", "胸元の開いた上品な衣装のシルエット"),
+            ("裸", "衣装をきちんと着用した親密なロマンチックシーン"),
+            ("エッチ", "大人の恋愛らしい甘い緊張感"),
+            ("性的", "ロマンティック"),
+            ("セクシー", "華やかで大人っぽい"),
+            ("エロ", "ロマンティック"),
+            ("誘惑的", "魅力的"),
+            ("挑発的", "自信のある"),
+            ("露骨", "上品"),
+            ("露出", "大人っぽい衣装のシルエット"),
+            ("濡れた肌", "水しぶきと夏の日差し"),
+            ("濡れ肌", "水しぶきと夏の日差し"),
+            ("濡れ", "水辺の雰囲気"),
+            ("太もも", "脚のライン"),
+            ("強調", "自然に表現"),
+            ("下着", "インナー風ではない衣装"),
+            ("ランジェリー", "ドレス風の衣装"),
+            ("水着", "上品で華やかなワンピース型スイムウェアまたはスポーティなツーピースのスイムセット"),
+            ("ビキニ", "リゾート向けのスポーティなツーピースのスイムセット"),
+            ("touching her breast", "hand near her shoulder or hair"),
+            ("touch her breast", "hand near her shoulder or hair"),
+            ("sexual act", "romantic tension"),
+            ("swimsuit", "tasteful one-piece swimsuit or sporty two-piece swim set"),
+            ("bikini", "sporty two-piece swim set with tasteful styling"),
+            ("sexy", "glamorous and elegant"),
+            ("erotic", "romantic and elegant"),
+            ("seductive", "charming and confident"),
+            ("revealing", "glamorous neckline with tasteful coverage"),
+            ("cleavage", "glamorous neckline"),
+            ("lingerie", "dress-like fashion outfit"),
+            ("underwear", "fashion outfit"),
+            ("topless", "wearing a glamorous neckline outfit"),
+            ("nipple", "glamorous neckline"),
+            ("areola", "glamorous neckline"),
+            ("genitals", "covered outfit silhouette"),
+            ("undress", "adjusting her outfit slightly"),
+            ("nude", "fully clothed"),
+            ("naked", "fully clothed"),
+            ("sex", "romantic tension"),
+        )
+        replacement_lookup = {source: target for source, target in replacements}
+        replacement_lookup.update({source.lower(): target for source, target in replacements})
+        pattern = re.compile(
+            "|".join(re.escape(source) for source, _target in sorted(replacements, key=lambda item: len(item[0]), reverse=True)),
+            flags=re.IGNORECASE,
+        )
+        text = pattern.sub(lambda match: replacement_lookup.get(match.group(0), replacement_lookup.get(match.group(0).lower(), match.group(0))), text)
         text = re.sub(r"20\s*歳\s*前後", "mid-20s adult woman", text)
         text = re.sub(r"20\s*years?\s*old", "mid-20s adult woman", text, flags=re.IGNORECASE)
         return (
             "Safety-conscious image prompt for a visual novel style scene. "
             "Preserve the same character identity, scene intent, emotional mood, and fashion direction, "
-            "but avoid wording that emphasizes exposure, explicit sexual contact, nudity, or body parts. "
+            "but avoid wording that emphasizes explicit sexual contact, nudity, nipples, genitals, or fetishized body-part focus. "
+            "Do not flatten tasteful adult glamour into generic modest clothing: keep a glamorous neckline, elegant decollete, mature romantic appeal, stylish swimwear, and confident adult fashion when requested. "
             "If the original prompt requested nudity, undressing, touching breasts/chest, or sexual acts, convert it into a safe compromise: "
             "romantic tension, intimate distance, hand near shoulder/upper arm/hair/cheek, protective embrace, suggestive eye contact, "
             "elegant clothing clearly worn, warm lighting, and tasteful visual novel event CG staging. "
@@ -169,14 +195,21 @@ class ImageAIClient:
             "tasteful one-piece swimsuit, sporty two-piece swim set, coordinated beachwear, resort cover-up, sunlit ocean, "
             "joyful expression, energetic movement, bright atmosphere, sparkling water, and non-sexual editorial fashion. "
             "The character must be clearly an adult woman in her mid-20s or older, confident and wholesome, not young-looking. "
-            "Do not use bikini/revealing/sexy/sensual/wet-skin/chest/hips/body-emphasis/close-up wording. "
-            "Avoid nudity, explicit sexual content, fetish framing, transparent clothing emphasis, suggestive camera angles, "
+            "Avoid nude/topless/nipple/genital/explicit sexual act wording, hands on breasts/genitals, fetish framing, transparent clothing emphasis, and body-only close-up framing. "
+            "Avoid childlike or young-looking wording, suggestive camera angles, "
             "captions, speech bubbles, text, logos, and watermarks.\n\n"
             f"Rewritten scene and costume direction:\n{text}"
         )
 
     def _rewrite_prompt_for_safety_retry(self, prompt: str) -> str:
         return self._rewrite_prompt_for_image_safety(prompt, force=True)
+
+    def _safety_mode(self) -> str:
+        mode = str(os.getenv("IMAGE_PROMPT_SAFETY_MODE") or "both").strip().lower()
+        return mode if mode in {"both", "preflight", "retry", "off"} else "both"
+
+    def _allow_safety_retry(self) -> bool:
+        return self._safety_mode() in {"both", "retry"}
 
     def _normalize_choice(
         self,
@@ -468,6 +501,15 @@ class ImageAIClient:
 
     def _call_xai_image_edits_api(self, payload: dict[str, Any], image_paths: list[str]) -> dict[str, Any]:
         request_payload = dict(payload)
+        prompt = str(request_payload.get("prompt") or "")
+        if image_paths and "Keep the reference outfit unchanged" not in prompt:
+            request_payload["prompt"] = (
+                "Keep the reference outfit unchanged: preserve the exact clothing design, colors, silhouette, fabric, "
+                "accessories, hairstyle, face, body impression, and art style from the reference image. "
+                "Do not redesign, simplify, recolor, modernize, or subtly alter the outfit unless the prompt explicitly asks for a costume change. "
+                "Only change pose, expression, camera, lighting, and background.\n\n"
+                f"{prompt}"
+            )
         image_items = [
             {"type": "image_url", "url": self._image_path_to_data_uri(image_path)}
             for image_path in image_paths[:5]
@@ -572,7 +614,7 @@ class ImageAIClient:
                     else self._call_xai_images_api(xai_payload)
                 )
             except RuntimeError as exc:
-                if not self._is_sexual_safety_rejection(exc):
+                if not self._allow_safety_retry() or not self._is_sexual_safety_rejection(exc):
                     raise
                 safety_retry = True
                 normalized_prompt = self._rewrite_prompt_for_safety_retry(prompt_before_retry)
@@ -621,7 +663,7 @@ class ImageAIClient:
             try:
                 response_json = self._call_openai_image_edits_api(data, normalized_input_paths)
             except RuntimeError as exc:
-                if not self._is_sexual_safety_rejection(exc):
+                if not self._allow_safety_retry() or not self._is_sexual_safety_rejection(exc):
                     raise
                 safety_retry = True
                 normalized_prompt = self._rewrite_prompt_for_safety_retry(prompt_before_retry)
@@ -666,7 +708,7 @@ class ImageAIClient:
         try:
             response_json = self._call_openai_images_api(payload)
         except RuntimeError as exc:
-            if not self._is_sexual_safety_rejection(exc):
+            if not self._allow_safety_retry() or not self._is_sexual_safety_rejection(exc):
                 raise
             safety_retry = True
             normalized_prompt = self._rewrite_prompt_for_safety_retry(prompt_before_retry)

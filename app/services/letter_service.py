@@ -16,6 +16,7 @@ from .asset_service import AssetService
 from .character_service import CharacterService
 from .chat_session_service import ChatSessionService
 from .live_chat_room_service import LiveChatRoomService
+from .user_setting_service import UserSettingService
 
 
 class LetterService:
@@ -26,6 +27,7 @@ class LetterService:
         character_service: CharacterService | None = None,
         chat_session_service: ChatSessionService | None = None,
         live_chat_room_service: LiveChatRoomService | None = None,
+        user_setting_service: UserSettingService | None = None,
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
     ):
@@ -34,6 +36,7 @@ class LetterService:
         self._character_service = character_service or CharacterService()
         self._chat_session_service = chat_session_service or ChatSessionService()
         self._live_chat_room_service = live_chat_room_service or LiveChatRoomService()
+        self._user_setting_service = user_setting_service or UserSettingService()
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
 
@@ -468,10 +471,23 @@ NGルール: {character.get("ng_rules") or ""}
             if asset and getattr(asset, "file_path", None) and os.path.exists(asset.file_path):
                 reference_paths.append(asset.file_path)
                 reference_asset_ids.append(asset.id)
+        image_options = {}
+        try:
+            image_options = self._user_setting_service.apply_image_generation_settings(
+                getattr(session, "owner_user_id", None),
+                {"size": "1536x1024", "quality": current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium")},
+            )
+        except Exception:
+            image_options = {
+                "size": "1536x1024",
+                "quality": current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium"),
+            }
         result = self._image_ai_client.generate_image(
             prompt,
-            size="1536x1024",
-            quality=current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium"),
+            size=image_options.get("size") or "1536x1024",
+            quality=image_options.get("quality") or current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium"),
+            model=image_options.get("model"),
+            provider=image_options.get("provider"),
             input_image_paths=reference_paths,
             input_fidelity="high" if reference_paths else None,
         )
@@ -496,6 +512,11 @@ NGルール: {character.get("ng_rules") or ""}
                 "metadata_json": json_util.dumps(
                     {
                         "source": "letter",
+                        "provider": result.get("provider"),
+                        "model": result.get("model"),
+                        "quality": result.get("quality") or image_options.get("quality"),
+                        "size": image_options.get("size") or "1536x1024",
+                        "aspect_ratio": result.get("aspect_ratio"),
                         "prompt": prompt,
                         "revised_prompt": result.get("revised_prompt"),
                         "reference_asset_ids": reference_asset_ids,

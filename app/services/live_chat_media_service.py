@@ -230,12 +230,20 @@ class LiveChatMediaService:
             prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
             prompt = prompt_support.apply_visual_style(prompt, context)
             prompt = prompt_support.forbid_text_in_image(prompt)
-            safety_rewrite = text_support.rewrite_image_prompt_for_safety(
-                self._text_ai_client,
-                context,
-                prompt,
-                purpose=str(payload.get("image_type") or "live_scene"),
-            )
+            safety_mode = str(current_app.config.get("IMAGE_PROMPT_SAFETY_MODE", "both")).strip().lower()
+            if safety_mode in {"both", "preflight"}:
+                safety_rewrite = text_support.rewrite_image_prompt_for_safety(
+                    self._text_ai_client,
+                    context,
+                    prompt,
+                    purpose=str(payload.get("image_type") or "live_scene"),
+                )
+            else:
+                safety_rewrite = {
+                    "rewritten_prompt": prompt,
+                    "changed": False,
+                    "safety_reason": f"preflight safety rewrite disabled by IMAGE_PROMPT_SAFETY_MODE={safety_mode}",
+                }
             prompt = safety_rewrite.get("rewritten_prompt") or prompt
             prompt = prompt_support.apply_visual_style(prompt, context)
             prompt = prompt_support.forbid_text_in_image(prompt)
