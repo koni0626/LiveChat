@@ -14,6 +14,7 @@ from ..models.chat_session import ChatSession
 from ..models.session_image import SessionImage
 from ..models.story_image import StoryImage
 from ..models.story_session import StorySession
+from ..models.outing_session import OutingSession
 from ..utils import json_util
 from .asset_service import AssetService
 
@@ -31,6 +32,7 @@ class StudioService:
         images = []
         images.extend(self._list_chat_images(project_id, owner_user_id))
         images.extend(self._list_story_images(project_id, owner_user_id))
+        images.extend(self._list_outing_images(project_id, owner_user_id))
         images.extend(self._list_studio_images(project_id, owner_user_id))
         return sorted(images, key=lambda item: item.get("created_at") or "", reverse=True)
 
@@ -168,6 +170,46 @@ class StudioService:
             if int(metadata.get("owner_user_id") or 0) != int(owner_user_id):
                 continue
             items.append(self._serialize_studio_asset(asset))
+        return items
+
+    def _list_outing_images(self, project_id: int, owner_user_id: int):
+        assets = Asset.query.filter(
+            Asset.project_id == project_id,
+            Asset.asset_type == "outing_image",
+            Asset.deleted_at.is_(None),
+        ).order_by(Asset.id.desc()).all()
+        items = []
+        outing_cache = {}
+        for asset in assets:
+            metadata = self._load_json(asset.metadata_json) or {}
+            outing_id = int(metadata.get("outing_id") or 0)
+            if not outing_id:
+                continue
+            if outing_id not in outing_cache:
+                outing_cache[outing_id] = OutingSession.query.filter(
+                    OutingSession.id == outing_id,
+                    OutingSession.project_id == project_id,
+                    OutingSession.user_id == owner_user_id,
+                    OutingSession.deleted_at.is_(None),
+                ).first()
+            outing = outing_cache.get(outing_id)
+            if not outing:
+                continue
+            items.append(
+                self._serialize_image(
+                    asset,
+                    source="outing",
+                    source_label="おでかけ",
+                    source_image_id=asset.id,
+                    prompt_text=metadata.get("prompt") or metadata.get("revised_prompt"),
+                    image_type="outing_image",
+                    quality=metadata.get("quality"),
+                    size=metadata.get("size"),
+                    created_at=asset.created_at,
+                    return_url=f"/projects/{project_id}/outings",
+                    metadata=metadata,
+                )
+            )
         return items
 
     def _serialize_studio_asset(self, asset):

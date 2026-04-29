@@ -10,6 +10,7 @@ from .feed_post import FeedPost
 from .live_chat_room import LiveChatRoom
 from .letter import Letter
 from .project import Project
+from .outing_session import OutingSession
 from .session_image import SessionImage
 from .session_gift_event import SessionGiftEvent
 from .session_state import SessionState
@@ -37,6 +38,7 @@ __all__ = [
     "FeedPost",
     "LiveChatRoom",
     "Letter",
+    "OutingSession",
     "Project",
     "SessionImage",
     "SessionGiftEvent",

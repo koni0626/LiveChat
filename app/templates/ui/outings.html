@@ -1,0 +1,417 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-grid outing-page">
+  <section class="panel-card outing-hero">
+    <div>
+      <div class="eyebrow">Outing</div>
+      <h2>キャラクターと施設へ出かける</h2>
+      <p>今日はどこへ寄り道しよう。街の空気、相手の表情、そこでしか起きない小さな時間。</p>
+    </div>
+    <button class="btn btn-outline-light btn-sm" type="button" id="outingRefreshButton">
+      <i class="bi bi-arrow-clockwise"></i>
+      更新
+    </button>
+  </section>
+
+  <section class="outing-layout">
+    <aside class="panel-card outing-start-panel">
+      <div class="panel-head">
+        <h3>誘う</h3>
+        <span class="soft-code">mini event</span>
+      </div>
+      <form id="outingStartForm" class="stacked-form">
+        <label class="form-label" for="outingCharacterSelect">キャラクター</label>
+        <select class="form-select" id="outingCharacterSelect" name="character_id" required></select>
+
+        <label class="form-label mt-3" for="outingLocationSelect">行き先</label>
+        <select class="form-select" id="outingLocationSelect" name="location_id" required></select>
+
+        <label class="form-label mt-3" for="outingMoodInput">雰囲気</label>
+        <input class="form-control" id="outingMoodInput" name="mood" maxlength="100" placeholder="例: 放課後の寄り道、静かなデート、少し照れた雰囲気">
+
+        <button class="btn btn-sunrise w-100 mt-4" type="submit" id="outingStartButton">
+          <i class="bi bi-signpost-split"></i>
+          誘う
+        </button>
+      </form>
+    </aside>
+
+    <section class="panel-card outing-main-panel">
+      <div class="panel-head">
+        <h3 id="outingTitle">おでかけ</h3>
+        <span class="soft-code" id="outingStatus">standby</span>
+      </div>
+      <div class="outing-loading d-none" id="outingLoading" role="status" aria-live="polite">
+        <div class="spinner-border spinner-border-sm" aria-hidden="true"></div>
+        <div>
+          <strong id="outingLoadingTitle">準備中</strong>
+          <p id="outingLoadingText">おでかけの場面を作っています。</p>
+        </div>
+      </div>
+      <div id="outingCurrent"></div>
+    </section>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head">
+      <h3>おでかけギャラリー</h3>
+      <span class="soft-code" id="outingGalleryCount">0 images</span>
+    </div>
+    <div class="outing-gallery-grid" id="outingGallery"></div>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head">
+      <h3>思い出</h3>
+      <span class="soft-code" id="outingHistoryCount">0 outings</span>
+    </div>
+    <div class="outing-history-grid" id="outingHistory"></div>
+  </section>
+</section>
+
+<div class="modal fade" id="outingImageModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content outing-image-modal">
+      <div class="modal-header">
+        <div>
+          <div class="eyebrow">Outing CG</div>
+          <h5 class="modal-title" id="outingImageModalTitle">おでかけ画像</h5>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <img id="outingImageModalImage" alt="">
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const projectId = document.body.dataset.projectId;
+  const form = document.getElementById("outingStartForm");
+  const characterSelect = document.getElementById("outingCharacterSelect");
+  const locationSelect = document.getElementById("outingLocationSelect");
+  const moodInput = document.getElementById("outingMoodInput");
+  const startButton = document.getElementById("outingStartButton");
+  const refreshButton = document.getElementById("outingRefreshButton");
+  const currentHost = document.getElementById("outingCurrent");
+  const loadingBox = document.getElementById("outingLoading");
+  const loadingTitle = document.getElementById("outingLoadingTitle");
+  const loadingText = document.getElementById("outingLoadingText");
+  const titleLabel = document.getElementById("outingTitle");
+  const statusLabel = document.getElementById("outingStatus");
+  const historyHost = document.getElementById("outingHistory");
+  const historyCount = document.getElementById("outingHistoryCount");
+  const galleryHost = document.getElementById("outingGallery");
+  const galleryCount = document.getElementById("outingGalleryCount");
+  const imageModalElement = document.getElementById("outingImageModal");
+  document.body.appendChild(imageModalElement);
+  const imageModal = new bootstrap.Modal(imageModalElement);
+  const imageModalTitle = document.getElementById("outingImageModalTitle");
+  const imageModalImage = document.getElementById("outingImageModalImage");
+  let currentOuting = null;
+  let isBusy = false;
+
+  function setLoading(active, title = "準備中", text = "おでかけの場面を作っています。") {
+    isBusy = Boolean(active);
+    loadingTitle.textContent = title;
+    loadingText.textContent = text;
+    loadingBox.classList.toggle("d-none", !active);
+    form.classList.toggle("is-busy", active);
+    startButton.disabled = active || !characterSelect.value || !locationSelect.value;
+    refreshButton.disabled = active;
+    currentHost.querySelectorAll("[data-choice-id]").forEach((button) => {
+      button.disabled = active;
+    });
+  }
+
+  function imageForCharacter(character) {
+    return character?.thumbnail_asset?.media_url || character?.base_asset?.media_url || "";
+  }
+
+  function imageForLocation(location) {
+    return location?.image_asset?.media_url || "";
+  }
+
+  function optionLabel(item, fallback) {
+    const meta = [item?.region, item?.location_type].filter(Boolean).join(" / ");
+    return `${item?.name || fallback}${meta ? ` - ${meta}` : ""}`;
+  }
+
+  function renderSelects(data) {
+    const characters = Array.isArray(data?.characters) ? data.characters : [];
+    const locations = Array.isArray(data?.locations) ? data.locations : [];
+    characterSelect.innerHTML = characters.length
+      ? characters.map((item) => `<option value="${item.id}">${NovelUI.escape(item.name || "Character")}</option>`).join("")
+      : `<option value="">キャラクターがありません</option>`;
+    locationSelect.innerHTML = locations.length
+      ? locations.map((item) => `<option value="${item.id}">${NovelUI.escape(optionLabel(item, "施設"))}</option>`).join("")
+      : `<option value="">施設がありません</option>`;
+    startButton.disabled = isBusy || !characters.length || !locations.length;
+  }
+
+  function renderHistoryLoading() {
+    historyHost.innerHTML = `
+      <div class="empty-panel outing-loading-panel">
+        <div class="spinner-border spinner-border-sm" aria-hidden="true"></div>
+        <div>
+          <strong>読み込み中</strong>
+          <p>おでかけの候補と思い出を集めています。</p>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderEmptyCurrent(message = "まだ約束はありません。") {
+    titleLabel.textContent = "おでかけ";
+    statusLabel.textContent = "standby";
+    currentHost.innerHTML = `
+      <div class="empty-panel outing-empty">
+        <i class="bi bi-signpost-2"></i>
+        <div>
+          <strong>待ち合わせ前です。</strong>
+          <p>${NovelUI.escape(message)}</p>
+        </div>
+      </div>
+    `;
+    renderGallery(null);
+  }
+
+  function renderCurrent(outing) {
+    currentOuting = outing;
+    titleLabel.textContent = outing?.title || "おでかけ";
+    statusLabel.textContent = outing?.status === "completed" ? "completed" : `step ${Number(outing?.current_step || 0) + 1}/${outing?.max_steps || 3}`;
+    const steps = Array.isArray(outing?.steps) ? outing.steps : [];
+    const step = steps[steps.length - 1];
+    if (!step) {
+      renderEmptyCurrent();
+      return;
+    }
+    const characterImage = imageForCharacter(outing.character);
+    const locationImage = imageForLocation(outing.location);
+    const sceneImage = step.image_asset?.media_url || "";
+    const choices = Array.isArray(outing.choices) ? outing.choices : [];
+    currentHost.innerHTML = `
+      <div class="outing-scene">
+        <div class="outing-visuals">
+          ${sceneImage ? `
+            <button class="outing-visual outing-scene-visual outing-image-open" type="button" data-image-url="${NovelUI.escape(sceneImage)}" data-image-title="${NovelUI.escape(step.scene_title || outing.title || "おでかけ画像")}">
+              <img src="${NovelUI.escape(sceneImage)}" alt="">
+            </button>
+          ` : `
+            <button class="outing-visual outing-location-visual outing-image-open" type="button" data-image-url="${NovelUI.escape(locationImage)}" data-image-title="${NovelUI.escape(outing.location?.name || "施設画像")}" ${locationImage ? "" : "disabled"}>
+              ${locationImage ? `<img src="${NovelUI.escape(locationImage)}" alt="">` : `<i class="bi bi-building"></i>`}
+            </button>
+            <button class="outing-visual outing-character-visual outing-image-open" type="button" data-image-url="${NovelUI.escape(characterImage)}" data-image-title="${NovelUI.escape(outing.character?.name || "キャラクター画像")}" ${characterImage ? "" : "disabled"}>
+              ${characterImage ? `<img src="${NovelUI.escape(characterImage)}" alt="">` : `<i class="bi bi-person-heart"></i>`}
+            </button>
+          `}
+        </div>
+        <div class="outing-scene-copy">
+          <div class="eyebrow">${NovelUI.escape(outing.location?.name || "Location")}</div>
+          <h4>${NovelUI.escape(step.scene_title || outing.title || "おでかけ")}</h4>
+          <p class="outing-narration">${NovelUI.escape(step.narration || "")}</p>
+          <div class="outing-line">${NovelUI.escape(step.character_line || "")}</div>
+          ${step.location_note ? `<div class="outing-note">${NovelUI.escape(step.location_note)}</div>` : ""}
+          ${outing.status === "completed" ? renderMemory(outing) : renderChoices(choices)}
+        </div>
+      </div>
+    `;
+    renderGallery(outing);
+  }
+
+  function renderGallery(outing) {
+    const steps = Array.isArray(outing?.steps) ? outing.steps : [];
+    const images = steps
+      .map((step, index) => ({
+        index,
+        title: step.scene_title || `Step ${index + 1}`,
+        url: step.image_asset?.media_url || "",
+      }))
+      .filter((item) => item.url);
+    galleryCount.textContent = `${images.length} images`;
+    if (!images.length) {
+      galleryHost.innerHTML = `
+        <div class="empty-panel">
+          <i class="bi bi-images"></i>
+          <div>
+            <strong>このおでかけの画像はまだありません。</strong>
+            <p>おでかけを進めると、生成されたイベントCGがここに並びます。</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    galleryHost.innerHTML = images.map((image) => `
+      <button class="outing-gallery-card" type="button" data-image-url="${NovelUI.escape(image.url)}" data-image-title="${NovelUI.escape(image.title)}">
+        <img src="${NovelUI.escape(image.url)}" alt="">
+        <span>${NovelUI.escape(image.title)}</span>
+      </button>
+    `).join("");
+  }
+
+  function renderChoices(choices) {
+    if (!choices.length) return "";
+    return `
+      <div class="outing-choice-list">
+        ${choices.map((choice) => `
+          <button class="outing-choice-button" type="button" data-choice-id="${NovelUI.escape(choice.id)}">
+            <span>${NovelUI.escape(choice.label)}</span>
+            <i class="bi bi-chevron-right"></i>
+          </button>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function renderMemory(outing) {
+    return `
+      <div class="outing-memory-box">
+        <div class="eyebrow">Memory</div>
+        <strong>${NovelUI.escape(outing.memory_title || "今日の思い出")}</strong>
+        <p>${NovelUI.escape(outing.memory_summary || "おでかけの思い出が残りました。")}</p>
+      </div>
+    `;
+  }
+
+  function renderHistory(outings) {
+    const list = Array.isArray(outings) ? outings : [];
+    historyCount.textContent = `${list.length} outings`;
+    if (!list.length) {
+      historyHost.innerHTML = `
+        <div class="empty-panel">
+          <i class="bi bi-journal-heart"></i>
+          <div>
+            <strong>思い出はまだありません。</strong>
+            <p>最初の寄り道を待っています。</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    historyHost.innerHTML = list.map((outing) => `
+      <article class="outing-history-card" data-outing-id="${outing.id}">
+        <div class="outing-history-thumb">
+          ${imageForLocation(outing.location) ? `<img src="${NovelUI.escape(imageForLocation(outing.location))}" alt="">` : `<i class="bi bi-signpost"></i>`}
+        </div>
+        <div>
+          <div class="outing-history-meta">
+            <span>${NovelUI.escape(outing.character?.name || "Character")}</span>
+            <span>${NovelUI.escape(outing.status || "")}</span>
+          </div>
+          <h4>${NovelUI.escape(outing.memory_title || outing.title || "おでかけ")}</h4>
+          <p>${NovelUI.escape(outing.memory_summary || outing.summary || "")}</p>
+        </div>
+      </article>
+    `).join("");
+  }
+
+  async function loadOptions() {
+    renderHistoryLoading();
+    setLoading(true, "読み込み中", "キャラクター、施設、思い出を準備しています。");
+    const data = await NovelUI.api(`/api/v1/projects/${projectId}/outings/options`);
+    renderSelects(data);
+    renderHistory(data.recent_outings || []);
+    if (!currentOuting) renderEmptyCurrent();
+    setLoading(false);
+  }
+
+  async function refreshHistory() {
+    const outings = await NovelUI.api(`/api/v1/projects/${projectId}/outings`);
+    renderHistory(outings);
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setLoading(true, "おでかけ準備中", "最初の場面とイベントCGを生成しています。画像生成が入るため少し時間がかかります。");
+    try {
+      const outing = await NovelUI.api(`/api/v1/projects/${projectId}/outings`, {
+        method: "POST",
+        body: {
+          character_id: Number(characterSelect.value),
+          location_id: Number(locationSelect.value),
+          mood: moodInput.value.trim(),
+        },
+      });
+      renderCurrent(outing);
+      await refreshHistory();
+      NovelUI.toast("おでかけを開始しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "おでかけを開始できませんでした。", "danger");
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  currentHost.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-choice-id]");
+    if (!button || !currentOuting || isBusy) return;
+    setLoading(true, "次の場面へ", "選択に合わせて本文とイベントCGを更新しています。");
+    try {
+      const outing = await NovelUI.api(`/api/v1/outings/${currentOuting.id}/choose`, {
+        method: "POST",
+        body: { choice_id: button.dataset.choiceId },
+      });
+      renderCurrent(outing);
+      await refreshHistory();
+      if (outing.status === "completed") {
+        NovelUI.refreshLetterBadge?.();
+        NovelUI.toast("おでかけの余韻がメールに届きました。");
+      }
+    } catch (error) {
+      NovelUI.toast(error.message || "選択肢を進められませんでした。", "danger");
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  currentHost.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-image-url]");
+    if (!button || !button.dataset.imageUrl) return;
+    imageModalTitle.textContent = button.dataset.imageTitle || "おでかけ画像";
+    imageModalImage.src = button.dataset.imageUrl;
+    imageModalImage.alt = button.dataset.imageTitle || "";
+    imageModal.show();
+  });
+
+  galleryHost.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-image-url]");
+    if (!button || !button.dataset.imageUrl) return;
+    imageModalTitle.textContent = button.dataset.imageTitle || "おでかけ画像";
+    imageModalImage.src = button.dataset.imageUrl;
+    imageModalImage.alt = button.dataset.imageTitle || "";
+    imageModal.show();
+  });
+
+  historyHost.addEventListener("click", async (event) => {
+    const card = event.target.closest("[data-outing-id]");
+    if (!card || isBusy) return;
+    setLoading(true, "思い出を開いています", "保存されたおでかけを読み込んでいます。");
+    try {
+      const outing = await NovelUI.api(`/api/v1/outings/${card.dataset.outingId}`);
+      renderCurrent(outing);
+    } catch (error) {
+      NovelUI.toast(error.message || "おでかけを開けませんでした。", "danger");
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  refreshButton.addEventListener("click", () => {
+    loadOptions().catch((error) => {
+      setLoading(false);
+      NovelUI.toast(error.message || "読み込みに失敗しました。", "danger");
+    });
+  });
+
+  loadOptions().catch((error) => {
+    setLoading(false);
+    renderEmptyCurrent("読み込みに失敗しました。");
+    NovelUI.toast(error.message || "おでかけ情報を読み込めませんでした。", "danger");
+  });
+})();
+</script>
+{% endblock %}
