@@ -76,6 +76,70 @@ window.NovelUI = (() => {
     });
   }
 
+  function truncateText(value, maxLength = 120) {
+    const text = String(value || "").replace(/\s+/g, " ").trim();
+    if (!text) return "";
+    return text.length > maxLength ? `${text.slice(0, maxLength).trimEnd()}...` : text;
+  }
+
+  function formatDateTime(value, locale = "ja-JP") {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString(locale, {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function statusLabel(value) {
+    if (value === "published" || value === "active") return "公開";
+    if (value === "archived") return "アーカイブ";
+    return "下書き";
+  }
+
+  function renderHistoryRows(items, options = {}) {
+    const actionLabel = options.actionLabel || "開く";
+    return (Array.isArray(items) ? items : []).map((item) => {
+      const href = typeof options.href === "function" ? options.href(item) : "#";
+      const title = typeof options.title === "function" ? options.title(item) : (item?.title || "");
+      const meta = typeof options.meta === "function" ? options.meta(item) : "";
+      return `
+        <a class="list-row text-decoration-none" href="${escapeHtml(href)}">
+          <div>
+            <strong>${escapeHtml(title || "履歴")}</strong>
+            ${meta ? `<div class="small text-secondary">${escapeHtml(meta)}</div>` : ""}
+          </div>
+          <span class="soft-code">${escapeHtml(actionLabel)}</span>
+        </a>
+      `;
+    }).join("");
+  }
+
+  async function toggleLazyList(options = {}) {
+    const container = typeof options.container === "string" ? document.querySelector(options.container) : options.container;
+    if (!container) return { opened: false, loaded: false };
+    const button = typeof options.button === "string" ? document.querySelector(options.button) : options.button;
+    const openLabel = options.openLabel || "履歴を閉じる";
+    const closedLabel = options.closedLabel || "履歴";
+    if (container.dataset.loaded === "true") {
+      const nextOpen = container.classList.contains("is-hidden");
+      container.classList.toggle("is-hidden", !nextOpen);
+      if (button) button.textContent = nextOpen ? openLabel : closedLabel;
+      return { opened: nextOpen, loaded: true };
+    }
+    container.classList.remove("is-hidden");
+    container.innerHTML = options.loadingHtml || '<div class="empty-panel">読み込み中...</div>';
+    const items = await options.load();
+    container.dataset.loaded = "true";
+    if (button) button.textContent = openLabel;
+    const list = Array.isArray(items) ? items : [];
+    container.innerHTML = list.length ? options.render(list) : (options.emptyHtml || '<div class="empty-panel">履歴はまだありません。</div>');
+    return { opened: true, loaded: false, items: list };
+  }
+
   async function logout() {
     try {
       await api("/api/v1/auth/logout", { method: "POST", allowUnauthorized: true });
@@ -109,5 +173,17 @@ window.NovelUI = (() => {
   refreshLetterBadge();
   window.setInterval(refreshLetterBadge, 60000);
 
-  return { api, toast, fillForm, escape: escapeHtml, logout, refreshLetterBadge };
+  return {
+    api,
+    toast,
+    fillForm,
+    escape: escapeHtml,
+    logout,
+    refreshLetterBadge,
+    truncateText,
+    formatDateTime,
+    statusLabel,
+    renderHistoryRows,
+    toggleLazyList,
+  };
 })();
