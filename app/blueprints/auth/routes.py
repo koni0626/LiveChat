@@ -1,6 +1,7 @@
 from flask import Blueprint, request, session
 from ...api import json_response
 from app.services.auth_service import AuthService
+from ...security import check_login_rate_limit, clear_login_failures, login_rate_limit_key, record_login_failure
 
 auth_bp = Blueprint("auth", __name__)
 auth_service = AuthService()
@@ -20,14 +21,18 @@ def login():
     payload = request.get_json(silent=True) or {}
     email = payload.get("email")
     password = payload.get("password")
+    rate_key = login_rate_limit_key(email)
 
     try:
+        check_login_rate_limit(rate_key)
         result = auth_service.login(email=email, password=password)
     except ValueError as exc:
         return json_response({"message": str(exc)}, status=400)
     except PermissionError:
+        record_login_failure(rate_key)
         return json_response({"message": "invalid credentials"}, status=401)
 
+    clear_login_failures(rate_key)
     _set_session_user(result["user"]["id"])
     return json_response(result)
 

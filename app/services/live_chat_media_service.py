@@ -586,7 +586,12 @@ class LiveChatMediaService:
         self._session_image_service.select_session_image(row.id)
         return self.serialize_session_image(row)
 
-    def select_image(self, session_image_id: int, *, update_observation: bool = True):
+    def select_image(self, session_image_id: int, *, update_observation: bool = True, session_id: int | None = None):
+        existing = self._session_image_service.get_session_image(session_image_id)
+        if not existing:
+            return None
+        if session_id is not None and int(existing.session_id) != int(session_id):
+            return None
         row = self._session_image_service.select_session_image(session_image_id)
         if not row:
             return None

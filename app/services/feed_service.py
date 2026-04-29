@@ -3,14 +3,16 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import ipaddress
 import mimetypes
 import os
 import re
+import socket
 import uuid
 from datetime import datetime
 from html import unescape
 from html.parser import HTMLParser
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from flask import current_app
 import requests
@@ -296,7 +298,7 @@ class FeedService:
         return value
 
     def _fetch_url_html(self, url: str):
-        response = requests.get(
+        response = self._safe_get(
             url,
             headers={
                 "User-Agent": (
@@ -366,7 +368,7 @@ class FeedService:
         parsed = urlparse(image_url)
         if parsed.scheme not in {"http", "https"}:
             return None
-        response = requests.get(
+        response = self._safe_get(
             image_url,
             headers={"User-Agent": "Mozilla/5.0", "Accept": "image/*,*/*;q=0.8"},
             timeout=20,
@@ -377,12 +379,15 @@ class FeedService:
         mime_type = (response.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
         if not mime_type.startswith("image/"):
             return None
+        max_bytes = int(current_app.config.get("FEED_IMPORT_IMAGE_MAX_BYTES", 10 * 1024 * 1024))
+        content_length = response.headers.get("content-length")
+        if content_length and int(content_length) > max_bytes:
+            raise ValueError("image is too large")
         raw_bytes = response.content
         if not raw_bytes:
             return None
-        max_bytes = int(current_app.config.get("FEED_IMPORT_IMAGE_MAX_BYTES", 10 * 1024 * 1024))
         if len(raw_bytes) > max_bytes:
-            raise ValueError("画像サイズが大きすぎるため取り込めません。")
+            raise ValueError("image is too large")
         extension = mimetypes.guess_extension(mime_type) or ".jpg"
         storage_root = current_app.config.get("STORAGE_ROOT") or os.path.join(os.getcwd(), "storage")
         output_dir = os.path.join(storage_root, "projects", str(project_id), "assets", "feed_import")
@@ -409,6 +414,47 @@ class FeedService:
                 ),
             },
         )
+
+    def _safe_get(self, url: str, *, headers: dict, timeout: int, stream: bool = False):
+        current_url = url
+        for _ in range(4):
+            self._validate_public_http_url(current_url)
+            response = requests.get(
+                current_url,
+                headers=headers,
+                timeout=timeout,
+                stream=stream,
+                allow_redirects=False,
+            )
+            if response.is_redirect or response.is_permanent_redirect:
+                location = response.headers.get("location")
+                if not location:
+                    return response
+                current_url = urljoin(current_url, location)
+                continue
+            return response
+        raise ValueError("too many redirects")
+
+    def _validate_public_http_url(self, url: str):
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("httpまたはhttpsのURLを入力してください。")
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        try:
+            addresses = socket.getaddrinfo(parsed.hostname, port)
+        except socket.gaierror as exc:
+            raise ValueError("URLの名前解決に失敗しました。") from exc
+        for address in addresses:
+            ip = ipaddress.ip_address(address[4][0])
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_multicast
+                or ip.is_reserved
+                or ip.is_unspecified
+            ):
+                raise ValueError("このURLは取り込めません。")
 
     def upload_post_image(self, post_id: int, upload_file):
         post = self._repo.get_post(post_id)

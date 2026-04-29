@@ -18,6 +18,8 @@ class User(db.Model, TimestampMixin, SoftDeleteMixin):
     def set_password(self, password: str):
         if password is None or str(password) == "":
             raise ValueError("password is required")
+        if len(str(password)) < 8:
+            raise ValueError("password must be at least 8 characters")
         self.password_hash = generate_password_hash(password)
 
     def verify_password(self, password: str) -> bool:

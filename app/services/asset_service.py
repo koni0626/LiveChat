@@ -1,8 +1,10 @@
 import hashlib
+import io
 import os
 import uuid
 
 from flask import current_app
+from PIL import Image
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
@@ -41,6 +43,7 @@ class AssetService:
         file_bytes = upload_file.read()
         if not file_bytes:
             raise ValueError("file is required")
+        self._validate_upload_file(file_bytes, upload_file.mimetype)
 
         with open(file_path, "wb") as file_handle:
             file_handle.write(file_bytes)
@@ -53,6 +56,22 @@ class AssetService:
         normalized["checksum"] = hashlib.sha256(file_bytes).hexdigest()
         normalized.pop("upload_file", None)
         return normalized
+
+    def _validate_upload_file(self, file_bytes: bytes, mime_type: str | None):
+        max_bytes = int(current_app.config.get("ASSET_MAX_UPLOAD_BYTES", 10 * 1024 * 1024))
+        if len(file_bytes) > max_bytes:
+            raise ValueError("file is too large")
+
+        allowed_types = set(current_app.config.get("ASSET_ALLOWED_IMAGE_MIME_TYPES") or set())
+        normalized_mime = str(mime_type or "").split(";", 1)[0].strip().lower()
+        if normalized_mime not in allowed_types:
+            raise ValueError("unsupported image type")
+
+        try:
+            with Image.open(io.BytesIO(file_bytes)) as image:
+                image.verify()
+        except Exception as exc:
+            raise ValueError("invalid image file") from exc
 
     def list_assets(self, project_id: int, include_deleted: bool = False, asset_type: str | None = None):
         return self._repo.list_by_project(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import Blueprint, render_template, session, url_for
+from flask import Blueprint, redirect, render_template, session, url_for
 
 from ...models import User
 from ...services.authorization_service import AuthorizationService
@@ -34,8 +34,24 @@ def _project_nav(project_id: int | None, current_user: User | None = None):
 def _render(template_name: str, *, title: str, screen_id: str, project_id: int | None = None, **context):
     user_id = session.get("user_id")
     current_user = User.query.get(user_id) if user_id else None
+    if screen_id not in {"login", "register"} and not current_user:
+        return redirect(url_for("ui.login_page"))
     current_project = project_service.get_project(project_id) if project_id else None
     can_manage_project = authorization_service.can_manage_project(current_user, current_project)
+    if project_id and not authorization_service.can_view_project(current_user, current_project):
+        return redirect(url_for("ui.project_list_page"))
+    if screen_id in {
+        "character-list",
+        "character-create",
+        "character-edit",
+        "world-edit",
+        "story-edit",
+        "live-chat-rooms",
+        "live-chat-room-edit",
+    } and not can_manage_project:
+        return redirect(url_for("ui.project_home_page", project_id=project_id))
+    if screen_id in {"settings", "admin-users"} and not authorization_service.is_superuser(current_user):
+        return redirect(url_for("ui.dashboard_page"))
     global_nav_links = [
         {"label": "ダッシュボード", "icon": "bi-house-door", "href": url_for("ui.dashboard_page")},
     ]

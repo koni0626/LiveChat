@@ -8,6 +8,9 @@ from .api import ApiError, error_response
 from .config import Config
 from .extensions import db, migrate, session
 from .models import User
+from .security import ensure_csrf_token, validate_csrf_request, validate_secret_key
+from .services.authorization_service import AuthorizationService
+from .services.project_service import ProjectService
 from .blueprints.ui import ui_bp
 from .blueprints.auth import auth_bp
 from .blueprints.chat import chat_bp
@@ -66,6 +69,7 @@ def _register_cli_commands(app: Flask):
 def create_app(config_object=Config):
     app = Flask(__name__)
     app.config.from_object(config_object)
+    validate_secret_key(app)
     _ensure_runtime_directories(app)
 
     db.init_app(app)
@@ -73,6 +77,8 @@ def create_app(config_object=Config):
     session.init_app(app)
     migrate.init_app(app, db)
     _register_cli_commands(app)
+    authorization_service = AuthorizationService()
+    project_service = ProjectService()
 
     app.register_blueprint(ui_bp)
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
@@ -88,6 +94,22 @@ def create_app(config_object=Config):
     app.register_blueprint(stories_bp, url_prefix="/api/v1")
     app.register_blueprint(studio_bp, url_prefix="/api/v1")
 
+    @app.before_request
+    def enforce_csrf_protection():
+        validate_csrf_request()
+
+    @app.context_processor
+    def inject_security_context():
+        return {"csrf_token": ensure_csrf_token()}
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        return response
+
     @app.route("/", methods=["GET"])
     def index():
         user_id = flask_session.get("user_id")
@@ -100,24 +122,38 @@ def create_app(config_object=Config):
 
     @app.route("/media/<path:relative_path>", methods=["GET"])
     def media_file(relative_path: str):
-        return send_from_directory(app.config["STORAGE_ROOT"], relative_path)
+        parts = [part for part in relative_path.replace("\\", "/").split("/") if part]
+        if parts[:1] == ["projects"] and len(parts) >= 2:
+            try:
+                project_id = int(parts[1])
+            except (TypeError, ValueError):
+                return error_response("not_found", status=404, code="not_found")
+            user_id = flask_session.get("user_id")
+            user = User.query.get(user_id) if user_id else None
+            project = project_service.get_project(project_id)
+            if not authorization_service.can_view_project(user, project):
+                return error_response("not_found", status=404, code="not_found")
+        else:
+            user_id = flask_session.get("user_id")
+            user = User.query.get(user_id) if user_id else None
+            if not user or not user.is_active_user:
+                return error_response("unauthorized", status=401, code="unauthorized")
+        response = send_from_directory(app.config["STORAGE_ROOT"], relative_path)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        return response
 
     @app.route("/health", methods=["GET"])
     def health_check():
         database_status = {"ok": True}
         try:
             db.session.execute(text("SELECT 1"))
-        except Exception as exc:
-            database_status = {"ok": False, "error": str(exc)}
+        except Exception:
+            database_status = {"ok": False}
 
         return jsonify(
             {
                 "status": "ok" if database_status["ok"] else "degraded",
                 "database": database_status,
-                "config": {
-                    "database_url": app.config.get("SQLALCHEMY_DATABASE_URI"),
-                    "storage_root": app.config.get("STORAGE_ROOT"),
-                },
             }
         )
 

@@ -18,10 +18,13 @@ class AuthService:
             raise ValueError("email is required")
         return value
 
-    def _validate_password(self, password: Optional[str]) -> str:
+    def _validate_password(self, password: Optional[str], *, enforce_strength: bool = False) -> str:
         if password is None or password == "":
             raise ValueError("password is required")
-        return password
+        value = str(password)
+        if enforce_strength and len(value) < 8:
+            raise ValueError("password must be at least 8 characters")
+        return value
 
     def _validate_display_name(self, display_name: Optional[str]) -> str:
         if display_name is None:
@@ -89,7 +92,7 @@ class AuthService:
     def register(self, email: Optional[str], display_name: Optional[str], password: Optional[str]) -> dict[str, Any]:
         normalized_email = self._normalize_email(email)
         validated_display_name = self._validate_display_name(display_name)
-        validated_password = self._validate_password(password)
+        validated_password = self._validate_password(password, enforce_strength=True)
 
         existing_user = self._get_user_by_email(normalized_email)
         if existing_user is not None:
@@ -117,7 +120,7 @@ class AuthService:
     def create_superuser(self, email: Optional[str], display_name: Optional[str], password: Optional[str]) -> dict[str, Any]:
         normalized_email = self._normalize_email(email)
         validated_display_name = self._validate_display_name(display_name)
-        validated_password = self._validate_password(password)
+        validated_password = self._validate_password(password, enforce_strength=True)
         existing_user = self._get_user_by_email(normalized_email)
         if existing_user is not None:
             raise ValueError("email already exists")

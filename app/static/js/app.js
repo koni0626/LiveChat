@@ -1,4 +1,37 @@
 window.NovelUI = (() => {
+  const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+  const nativeFetch = window.fetch.bind(window);
+
+  function csrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || "";
+  }
+
+  function shouldAttachCsrf(resource, init = {}) {
+    const method = String(init.method || "GET").toUpperCase();
+    if (!UNSAFE_METHODS.has(method)) return false;
+    const url = typeof resource === "string" ? resource : resource?.url;
+    if (!url) return true;
+    try {
+      const parsed = new URL(url, window.location.href);
+      return parsed.origin === window.location.origin;
+    } catch (error) {
+      return true;
+    }
+  }
+
+  window.fetch = (resource, init = {}) => {
+    const config = { ...init };
+    if (shouldAttachCsrf(resource, config)) {
+      const headers = new Headers(config.headers || {});
+      const token = csrfToken();
+      if (token && !headers.has("X-CSRFToken")) {
+        headers.set("X-CSRFToken", token);
+      }
+      config.headers = headers;
+    }
+    return nativeFetch(resource, config);
+  };
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replaceAll("&", "&amp;")

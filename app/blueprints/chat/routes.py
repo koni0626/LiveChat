@@ -446,7 +446,7 @@ def upload_chat_gift(session_id: int):
 @chat_bp.route("/chat/sessions/<int:session_id>/images/<int:image_id>/select", methods=["POST"])
 def select_chat_image(session_id: int, image_id: int):
     _require_session(session_id, for_manage=True)
-    result = live_chat_service.select_image(image_id)
+    result = live_chat_service.select_image(image_id, session_id=session_id)
     if not result:
         raise NotFoundError()
     return json_response(result)

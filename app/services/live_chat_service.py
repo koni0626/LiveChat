@@ -231,8 +231,12 @@ class LiveChatService:
     def generate_costume(self, session_id: int, payload: dict | None = None):
         return self._media_service.generate_costume(session_id, payload)
 
-    def select_image(self, session_image_id: int, *, update_observation: bool = True):
-        return self._media_service.select_image(session_image_id, update_observation=update_observation)
+    def select_image(self, session_image_id: int, *, update_observation: bool = True, session_id: int | None = None):
+        return self._media_service.select_image(
+            session_image_id,
+            update_observation=update_observation,
+            session_id=session_id,
+        )
 
     def set_reference_image(self, session_id: int, session_image_id: int, is_reference: bool):
         return self._media_service.set_reference_image(session_id, session_image_id, is_reference)
