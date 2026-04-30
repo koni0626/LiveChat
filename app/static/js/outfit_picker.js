@@ -57,8 +57,7 @@
       if (selectedValue && rows.some((item) => String(item.id) === selectedValue)) {
         this.value = selectedValue;
       } else {
-        const defaultOutfit = rows.find((item) => item.is_default) || rows[0];
-        this.value = defaultOutfit ? String(defaultOutfit.id) : "";
+        this.value = "";
       }
       this.picker.innerHTML = rows.length
         ? rows.map((item) => this._renderCard(item)).join("")
@@ -82,7 +81,7 @@
     _renderCard(item) {
       const mediaUrl = item.thumbnail_asset?.media_url || item.asset?.media_url || "";
       const isSelected = String(item.id) === String(this.value);
-      const label = item.is_default ? "Default" : (item.source_type === "character_base" ? "base" : (item.usage_scene || "outfit"));
+      const label = item.source_type === "character_base" ? "base" : (item.usage_scene || "outfit");
       return `
         <button class="room-outfit-card ${isSelected ? "selected" : ""}" type="button" data-outfit-id="${escapeHtml(item.id)}">
           <span class="room-outfit-thumb">

@@ -77,7 +77,6 @@
             <div class="live-chat-closet-body">
               <div class="live-chat-closet-meta">
                 <span>${NovelUI.escape(outfit.usage_scene || "outfit")}</span>
-                ${outfit.is_default ? "<span>Default</span>" : ""}
               </div>
               <h4>${NovelUI.escape(outfit.name || "衣装")}</h4>
               <details>

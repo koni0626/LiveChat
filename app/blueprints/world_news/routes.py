@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 
-from ...api import json_response
+from ...api import NotFoundError, json_response
 from ...services.world_news_service import WorldNewsService
 from ..access import require_project_manage, require_project_view
 
@@ -28,3 +28,11 @@ def generate_world_news(project_id: int):
     _project, user = require_project_manage(project_id)
     payload = request.get_json(silent=True) or {}
     return json_response(world_news_service.generate_manual(project_id, user.id, payload), status=201)
+
+
+@world_news_bp.route("/projects/<int:project_id>/world-news/<int:news_id>", methods=["DELETE"])
+def delete_world_news(project_id: int, news_id: int):
+    require_project_manage(project_id)
+    if not world_news_service.delete_news(project_id, news_id):
+        raise NotFoundError()
+    return json_response({"news_id": news_id, "deleted": True})

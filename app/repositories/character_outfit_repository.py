@@ -17,7 +17,6 @@ class CharacterOutfitRepository:
             order_fields.append(CharacterOutfit.character_id.asc())
         order_fields.extend(
             [
-                CharacterOutfit.is_default.desc(),
                 source_rank.asc(),
                 CharacterOutfit.id.desc(),
             ]

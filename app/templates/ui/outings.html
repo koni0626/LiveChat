@@ -28,7 +28,8 @@
 
         <label class="form-label mt-3" for="outingOutfitSelect">衣装</label>
         <select class="form-select" id="outingOutfitSelect" name="outfit_id">
-          <option value="">デフォルト衣装</option>
+          <option value="auto">おまかせ</option>
+          <option value="base">基準画像</option>
         </select>
 
         <label class="form-label mt-3" for="outingMoodInput">雰囲気</label>
@@ -120,18 +121,40 @@
   const imageModalImage = document.getElementById("outingImageModalImage");
   let currentOuting = null;
   let isBusy = false;
+  let outingNovelPageState = { pages: [], pageIndex: 0 };
 
   function setLoading(active, title = "準備中", text = "おでかけの場面を作っています。") {
     isBusy = Boolean(active);
     loadingTitle.textContent = title;
     loadingText.textContent = text;
-    loadingBox.classList.toggle("d-none", !active);
     form.classList.toggle("is-busy", active);
     startButton.disabled = active || !characterSelect.value || !locationSelect.value;
     refreshButton.disabled = active;
+    const stageFrame = currentHost.querySelector(".outing-stage-frame");
+    if (stageFrame) {
+      stageFrame.classList.toggle("is-loading", active);
+      stageFrame.dataset.loadingLabel = active ? title : "";
+    } else if (active && !currentOuting) {
+      renderLoadingStage(title);
+    }
     currentHost.querySelectorAll("[data-choice-id]").forEach((button) => {
       button.disabled = active;
     });
+    loadingBox.classList.toggle("d-none", !active || Boolean(currentHost.querySelector(".outing-stage-frame")));
+  }
+
+  function renderLoadingStage(title = "Loading") {
+    currentHost.innerHTML = `
+      <div class="outing-chat-stage">
+        <div class="live-chat-image-panel outing-image-panel">
+          <div class="live-chat-stage-frame outing-stage-frame is-loading" data-loading-label="${NovelUI.escape(title)}">
+            <div class="outing-stage-placeholder">
+              <i class="bi bi-image"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   function imageForCharacter(character) {
@@ -165,8 +188,8 @@
     const characterId = Number(characterSelect.value || 0);
     const filtered = outfits.filter((item) => Number(item.character_id) === characterId);
     outfitSelect.dataset.outfits = JSON.stringify(outfits);
-    outfitSelect.innerHTML = '<option value="">デフォルト衣装</option>' + filtered.map((item) => {
-      const label = `${item.name || "衣装"}${item.is_default ? " / default" : ""}`;
+    outfitSelect.innerHTML = '<option value="auto">おまかせ</option><option value="base">基準画像</option>' + filtered.map((item) => {
+      const label = item.name || "衣装";
       return `<option value="${item.id}">${NovelUI.escape(label)}</option>`;
     }).join("");
   }
@@ -200,7 +223,7 @@
 
   function renderCurrent(outing) {
     currentOuting = outing;
-    titleLabel.textContent = outing?.title || "おでかけ";
+    titleLabel.textContent = outing?.title || "Outing";
     statusLabel.textContent = outing?.status === "completed" ? "completed" : `step ${Number(outing?.current_step || 0) + 1}/${outing?.max_steps || 3}`;
     const steps = Array.isArray(outing?.steps) ? outing.steps : [];
     const step = steps[steps.length - 1];
@@ -208,38 +231,168 @@
       renderEmptyCurrent();
       return;
     }
-    const characterImage = imageForCharacter(outing.character);
-    const locationImage = imageForLocation(outing.location);
     const sceneImage = step.image_asset?.media_url || "";
     const choices = Array.isArray(outing.choices) ? outing.choices : [];
+    const sceneTitle = step.scene_title || outing.title || "Outing";
+    const speaker = outing.character?.name || "Character";
+    const novelText = [step.narration || "", step.character_line || ""].filter(Boolean).join("\n\n");
     currentHost.innerHTML = `
-      <div class="outing-scene">
-        <div class="outing-visuals">
-          ${sceneImage ? `
-            <button class="outing-visual outing-scene-visual outing-image-open" type="button" data-image-url="${NovelUI.escape(sceneImage)}" data-image-title="${NovelUI.escape(step.scene_title || outing.title || "おでかけ画像")}">
-              <img src="${NovelUI.escape(sceneImage)}" alt="">
-            </button>
-          ` : `
-            <button class="outing-visual outing-location-visual outing-image-open" type="button" data-image-url="${NovelUI.escape(locationImage)}" data-image-title="${NovelUI.escape(outing.location?.name || "施設画像")}" ${locationImage ? "" : "disabled"}>
-              ${locationImage ? `<img src="${NovelUI.escape(locationImage)}" alt="">` : `<i class="bi bi-building"></i>`}
-            </button>
-            <button class="outing-visual outing-character-visual outing-image-open" type="button" data-image-url="${NovelUI.escape(characterImage)}" data-image-title="${NovelUI.escape(outing.character?.name || "キャラクター画像")}" ${characterImage ? "" : "disabled"}>
-              ${characterImage ? `<img src="${NovelUI.escape(characterImage)}" alt="">` : `<i class="bi bi-person-heart"></i>`}
-            </button>
-          `}
-        </div>
-        <div class="outing-scene-copy">
-          <div class="eyebrow">${NovelUI.escape(outing.location?.name || "Location")}</div>
-          <h4>${NovelUI.escape(step.scene_title || outing.title || "おでかけ")}</h4>
-          ${outing.selected_outfit ? `<div class="outing-note">衣装: ${NovelUI.escape(outing.selected_outfit.name || "衣装")}</div>` : ""}
-          <p class="outing-narration">${NovelUI.escape(step.narration || "")}</p>
-          <div class="outing-line">${NovelUI.escape(step.character_line || "")}</div>
-          ${step.location_note ? `<div class="outing-note">${NovelUI.escape(step.location_note)}</div>` : ""}
-          ${outing.status === "completed" ? renderMemory(outing) : renderChoices(choices)}
+      <div class="outing-chat-stage">
+        <div class="live-chat-image-panel outing-image-panel">
+          <div class="live-chat-stage-frame outing-stage-frame">
+            ${sceneImage ? `
+              <button class="outing-stage-image-button" type="button" data-image-url="${NovelUI.escape(sceneImage)}" data-image-title="${NovelUI.escape(sceneTitle)}">
+                <img class="live-chat-stage-image outing-stage-image" src="${NovelUI.escape(sceneImage)}" alt="">
+              </button>
+            ` : `
+              <div class="outing-stage-placeholder">
+                <i class="bi bi-image"></i>
+              </div>
+            `}
+            <div class="outing-stage-title">${NovelUI.escape(sceneTitle)}</div>
+            <div class="live-chat-novel-box outing-novel-box">
+              <div class="live-chat-novel-speaker">${NovelUI.escape(speaker)}</div>
+              <div class="live-chat-novel-text outing-novel-text">${NovelUI.escape(novelText)}</div>
+              ${outing.status === "completed" ? renderMemory(outing) : renderChoices(choices)}
+              <div class="live-chat-novel-footer outing-novel-footer">
+                <div class="live-chat-novel-continue outing-novel-continue"></div>
+                <div class="live-chat-novel-pager outing-novel-pager" aria-label="Outing text pages">
+                  <button class="live-chat-novel-page-button" type="button" data-outing-page="prev">Prev</button>
+                  <button class="live-chat-novel-page-button" type="button" data-outing-page="next">Next</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     `;
+    setupOutingNovelPagination(novelText);
     renderGallery(outing);
+  }
+
+  function ensureOutingTextMeasurer(sourceElement) {
+    let measurer = document.getElementById("outingNovelTextMeasure");
+    if (!measurer) {
+      measurer = document.createElement("div");
+      measurer.id = "outingNovelTextMeasure";
+      measurer.className = "live-chat-novel-text live-chat-novel-text-measure outing-novel-text";
+      document.body.appendChild(measurer);
+    }
+    const style = window.getComputedStyle(sourceElement);
+    measurer.style.width = `${sourceElement.clientWidth}px`;
+    measurer.style.font = style.font;
+    measurer.style.lineHeight = style.lineHeight;
+    measurer.style.letterSpacing = style.letterSpacing;
+    measurer.style.whiteSpace = style.whiteSpace;
+    return measurer;
+  }
+
+  function fitOutingPageBreak(text, start, end) {
+    if (end >= text.length) return end;
+    const min = Math.max(start + 1, start + Math.floor((end - start) * 0.6));
+    for (let index = end; index > min; index -= 1) {
+      const pair = text.slice(index - 1, index + 1);
+      const ch = text[index - 1];
+      if (pair === "\n\n") return index;
+      if (" \n、。！？,.!?）)]」』".includes(ch)) return index;
+    }
+    return end;
+  }
+
+  function paginateOutingNovelText(text) {
+    const novelBox = currentHost.querySelector(".outing-novel-box");
+    const novelText = currentHost.querySelector(".outing-novel-text");
+    const novelSpeaker = currentHost.querySelector(".live-chat-novel-speaker");
+    const choiceList = currentHost.querySelector(".outing-choice-list");
+    const memoryBox = currentHost.querySelector(".outing-memory-box");
+    const footer = currentHost.querySelector(".outing-novel-footer");
+    const normalized = String(text || "").replace(/\r\n/g, "\n").trim();
+    if (!novelBox || !novelText || !novelSpeaker || !normalized) return [normalized || ""];
+    const measurer = ensureOutingTextMeasurer(novelText);
+    const boxStyle = window.getComputedStyle(novelBox);
+    const paddingTop = parseFloat(boxStyle.paddingTop || "0");
+    const paddingBottom = parseFloat(boxStyle.paddingBottom || "0");
+    const gap = parseFloat(boxStyle.gap || "0");
+    const choiceReserve = choiceList ? Math.min(choiceList.scrollHeight || 0, 132) : 0;
+    const memoryReserve = memoryBox ? Math.min(memoryBox.scrollHeight || 0, 128) : 0;
+    const footerReserve = footer ? Math.max(footer.offsetHeight, 28) : 28;
+    const availableHeight = Math.max(
+      48,
+      novelBox.clientHeight - paddingTop - paddingBottom - novelSpeaker.offsetHeight - gap - footerReserve - choiceReserve - memoryReserve
+    );
+    const pages = [];
+    let start = 0;
+    while (start < normalized.length) {
+      let low = start + 1;
+      let high = normalized.length;
+      let best = low;
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        measurer.textContent = normalized.slice(start, mid).trim();
+        if (measurer.scrollHeight <= availableHeight) {
+          best = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      let end = fitOutingPageBreak(normalized, start, best);
+      if (end <= start) end = Math.min(normalized.length, start + 1);
+      pages.push(normalized.slice(start, end).trim());
+      start = end;
+      while (start < normalized.length && /\s/.test(normalized[start])) start += 1;
+    }
+    return pages.length ? pages : [normalized];
+  }
+
+  function renderOutingNovelPage() {
+    const novelText = currentHost.querySelector(".outing-novel-text");
+    const choiceList = currentHost.querySelector(".outing-choice-list");
+    const footer = currentHost.querySelector(".outing-novel-footer");
+    const cue = currentHost.querySelector(".outing-novel-continue");
+    const pager = currentHost.querySelector(".outing-novel-pager");
+    const prevButton = currentHost.querySelector('[data-outing-page="prev"]');
+    const nextButton = currentHost.querySelector('[data-outing-page="next"]');
+    const pages = outingNovelPageState.pages || [""];
+    const pageIndex = Math.max(0, Math.min(outingNovelPageState.pageIndex || 0, pages.length - 1));
+    outingNovelPageState.pageIndex = pageIndex;
+    if (novelText) novelText.textContent = pages[pageIndex] || "";
+    const showPager = pages.length > 1;
+    if (footer) footer.hidden = !showPager;
+    if (pager) pager.hidden = !showPager;
+    if (cue) {
+      cue.hidden = !showPager;
+      cue.textContent = showPager ? `${pageIndex + 1} / ${pages.length}` : "";
+    }
+    if (prevButton) {
+      prevButton.hidden = !showPager;
+      prevButton.disabled = !showPager || pageIndex <= 0;
+    }
+    if (nextButton) {
+      nextButton.hidden = !showPager;
+      nextButton.disabled = !showPager || pageIndex >= pages.length - 1;
+    }
+    if (choiceList) choiceList.hidden = showPager && pageIndex < pages.length - 1;
+  }
+
+  function setupOutingNovelPagination(text) {
+    const choiceList = currentHost.querySelector(".outing-choice-list");
+    if (choiceList) choiceList.hidden = false;
+    outingNovelPageState = {
+      pages: paginateOutingNovelText(text),
+      pageIndex: 0,
+    };
+    renderOutingNovelPage();
+  }
+
+  function moveOutingNovelPage(delta) {
+    const pages = outingNovelPageState.pages || [];
+    if (!pages.length) return false;
+    const nextIndex = Math.max(0, Math.min((outingNovelPageState.pageIndex || 0) + delta, pages.length - 1));
+    if (nextIndex === outingNovelPageState.pageIndex) return false;
+    outingNovelPageState.pageIndex = nextIndex;
+    renderOutingNovelPage();
+    return true;
   }
 
   function renderGallery(outing) {
@@ -275,13 +428,16 @@
   function renderChoices(choices) {
     if (!choices.length) return "";
     return `
-      <div class="outing-choice-list">
-        ${choices.map((choice) => `
-          <button class="outing-choice-button" type="button" data-choice-id="${NovelUI.escape(choice.id)}">
-            <span>${NovelUI.escape(choice.label)}</span>
-            <i class="bi bi-chevron-right"></i>
-          </button>
-        `).join("")}
+      <div class="live-chat-novel-choice-list outing-choice-list">
+        <div class="live-chat-novel-choice-copy">Choice</div>
+        <div class="live-chat-novel-choice-buttons">
+          ${choices.map((choice) => `
+            <button class="live-chat-novel-choice-button outing-choice-button" type="button" data-choice-id="${NovelUI.escape(choice.id)}">
+              <span>${NovelUI.escape(choice.label)}</span>
+              <i class="bi bi-chevron-right"></i>
+            </button>
+          `).join("")}
+        </div>
       </div>
     `;
   }
@@ -352,7 +508,8 @@
         body: {
           character_id: Number(characterSelect.value),
           location_id: Number(locationSelect.value),
-          outfit_id: outfitSelect.value ? Number(outfitSelect.value) : null,
+          outfit_id: /^\d+$/.test(outfitSelect.value) ? Number(outfitSelect.value) : null,
+          outfit_mode: outfitSelect.value === "base" ? "base" : outfitSelect.value === "auto" ? "auto" : "selected",
           mood: moodInput.value.trim(),
         },
       });
@@ -367,6 +524,11 @@
   });
 
   currentHost.addEventListener("click", async (event) => {
+    const pageButton = event.target.closest("[data-outing-page]");
+    if (pageButton) {
+      moveOutingNovelPage(pageButton.dataset.outingPage === "prev" ? -1 : 1);
+      return;
+    }
     const button = event.target.closest("[data-choice-id]");
     if (!button || !currentOuting || isBusy) return;
     setLoading(true, "次の場面へ", "選択に合わせて本文とイベントCGを更新しています。");

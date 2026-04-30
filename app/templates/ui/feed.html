@@ -47,6 +47,10 @@
         <h3>Broadcast Composer</h3>
         <p class="section-copy mb-0">キャラクター名義でFeedへ投稿します。</p>
       </div>
+      <button class="btn btn-sm btn-outline-light" type="button" id="feedAutoGenerateButton">
+        <i class="bi bi-magic"></i>
+        <span>自動生成</span>
+      </button>
     </div>
     <form class="vstack gap-3" id="feedComposerForm">
       <div class="row g-3">
@@ -174,6 +178,7 @@
   const composerImageInput = document.getElementById("feedComposerImageInput");
   const attachButton = document.getElementById("feedAttachButton");
   const importUrlButton = document.getElementById("feedImportUrlButton");
+  const autoGenerateButton = document.getElementById("feedAutoGenerateButton");
   const attachmentPreview = document.getElementById("feedAttachmentPreview");
   const rankingList = document.getElementById("feedRankingList");
   const reloadButton = document.getElementById("feedReloadButton");
@@ -482,6 +487,33 @@
     }
   }
 
+  async function autoGenerateFeed() {
+    const projectId = Number(composerProject?.value || projectFilter.value);
+    if (!projectId) {
+      NovelUI.toast("ワールドを選択してください。", "warning");
+      return;
+    }
+    const originalHtml = autoGenerateButton.innerHTML;
+    autoGenerateButton.disabled = true;
+    autoGenerateButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>生成中...';
+    try {
+      await NovelUI.api(`/api/v1/projects/${projectId}/feed/generate`, {
+        method: "POST",
+        body: { count: 1 },
+      });
+      NovelUI.toast("画像付きFeedを自動生成しました。");
+      if (projectFilter.value && Number(projectFilter.value) !== projectId) {
+        projectFilter.value = String(projectId);
+        await loadCharactersForProject(projectId, { target: characterFilter });
+      }
+      await loadFeed();
+      await loadRanking();
+    } finally {
+      autoGenerateButton.disabled = false;
+      autoGenerateButton.innerHTML = originalHtml;
+    }
+  }
+
   async function toggleLike(button) {
     const postId = Number(button.dataset.postId);
     const liked = button.dataset.liked === "true";
@@ -638,6 +670,9 @@
     attachButton?.addEventListener("click", () => composerImageInput?.click());
     importUrlButton?.addEventListener("click", () => {
       importFromUrl().catch((error) => NovelUI.toast(error.message || "URL取り込みに失敗しました。", "danger"));
+    });
+    autoGenerateButton?.addEventListener("click", () => {
+      autoGenerateFeed().catch((error) => NovelUI.toast(error.message || "Feed自動生成に失敗しました。", "danger"));
     });
     composerImageInput?.addEventListener("change", () => setComposerImage(composerImageInput.files?.[0]));
     composerDropzone?.addEventListener("dragenter", (event) => {

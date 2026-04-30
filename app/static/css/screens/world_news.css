@@ -1,0 +1,145 @@
+.world-news-page {
+  gap: 1rem;
+}
+
+.world-news-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.world-news-hero h2 {
+  margin: 0 0 0.45rem;
+  font-size: 1.55rem;
+}
+
+.world-news-hero p {
+  max-width: 46rem;
+  margin: 0;
+  color: rgba(223, 246, 255, 0.72);
+}
+
+.world-news-actions {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.world-news-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.world-news-card {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1rem;
+  border: 1px solid rgba(84, 177, 255, 0.16);
+  border-radius: 0.8rem;
+  background:
+    linear-gradient(180deg, rgba(7, 20, 36, 0.86), rgba(5, 15, 28, 0.78)),
+    radial-gradient(circle at top right, rgba(255, 92, 157, 0.1), transparent 42%);
+}
+
+.world-news-image {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(84, 177, 255, 0.2);
+  border-radius: 0.65rem;
+  background: rgba(0, 0, 0, 0.26);
+}
+
+.world-news-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.world-news-image figcaption {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.48rem 0.65rem;
+  background: linear-gradient(90deg, rgba(3, 12, 22, 0.9), rgba(6, 18, 32, 0.62));
+  color: #eafaff;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.world-news-image figcaption span:first-child {
+  color: #8df7ff;
+}
+
+.world-news-card-head,
+.world-news-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.world-news-card-head {
+  justify-content: space-between;
+}
+
+.world-news-type {
+  padding: 0.24rem 0.55rem;
+  border: 1px solid rgba(0, 245, 212, 0.24);
+  border-radius: 999px;
+  color: #a8fbff;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.world-news-card h4 {
+  margin: 0;
+  font-size: 1.12rem;
+}
+
+.world-news-card p {
+  margin: 0;
+  color: rgba(223, 246, 255, 0.78);
+  line-height: 1.75;
+}
+
+.world-news-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  color: rgba(223, 246, 255, 0.68);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.world-news-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.world-news-card-actions .btn:first-child {
+  margin-right: auto;
+}
+
+.world-news-loading {
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .world-news-list {
+    grid-template-columns: 1fr;
+  }
+}

@@ -14,6 +14,7 @@ class WorldNewsItem(db.Model, TimestampMixin, SoftDeleteMixin):
     title = db.Column(db.String(255), nullable=False)
     body = db.Column(db.Text, nullable=False)
     summary = db.Column(db.Text)
+    image_asset_id = db.Column(db.Integer, db.ForeignKey("asset.id"), index=True)
     importance = db.Column(db.Integer, nullable=False, default=3)
     source_type = db.Column(db.String(80), nullable=False, default="manual_ai", index=True)
     source_ref_type = db.Column(db.String(80))

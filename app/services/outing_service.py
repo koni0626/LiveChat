@@ -3,11 +3,14 @@ from __future__ import annotations
 import os
 import base64
 import binascii
+import random
+import threading
 import uuid
 from datetime import datetime
 
 from flask import current_app
 
+from ..extensions import db
 from ..clients.text_ai_client import TextAIClient
 from ..clients.image_ai_client import ImageAIClient
 from ..repositories.asset_repository import AssetRepository
@@ -76,7 +79,12 @@ class OutingService:
         character_id = int(payload.get("character_id") or 0)
         location_id = int(payload.get("location_id") or 0)
         mood = str(payload.get("mood") or "おまかせ").strip()[:100]
-        outfit_id = int(payload.get("outfit_id") or 0) or None
+        outfit_mode = str(payload.get("outfit_mode") or "auto").strip().lower()
+        raw_outfit_id = payload.get("outfit_id")
+        try:
+            outfit_id = int(raw_outfit_id or 0) or None
+        except (TypeError, ValueError):
+            outfit_id = None
         max_steps = max(2, min(5, int(payload.get("max_steps") or 3)))
         character = self._characters.get(character_id)
         location = self._locations.get(location_id)
@@ -85,9 +93,10 @@ class OutingService:
         if not location or location.project_id != project_id:
             raise ValueError("施設を選択してください。")
 
-        outfit = self._closet_service.resolve_outfit(character.id, outfit_id)
+        outfit, resolved_outfit_mode = self._resolve_outing_outfit(character, location, mood, outfit_id, outfit_mode)
         if outfit and outfit.project_id != project_id:
             outfit = None
+            resolved_outfit_mode = "base"
 
         state = {
             "steps": [],
@@ -95,6 +104,7 @@ class OutingService:
             "memory_notes": [],
             "selected_choices": [],
             "selected_outfit_id": outfit.id if outfit else None,
+            "selected_outfit_mode": resolved_outfit_mode,
         }
         title = f"{character.name}と{location.name}へ"
         row = self._outings.create(
@@ -167,8 +177,7 @@ class OutingService:
             )
         row = self._outings.update(row.id, updates)
         if is_final:
-            self._send_completion_letter(row, character, location, state, step)
-            self._create_completion_news(row, character, location, state)
+            self._schedule_completion_artifacts(row.id, step)
         return self.serialize_outing(row)
 
     def serialize_outing(self, row, *, compact: bool = False) -> dict:
@@ -348,6 +357,55 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
     def _fallback_memory_summary(self, row, character, location, state: dict) -> str:
         return f"{character.name}と{location.name}へ出かけた。{row.mood or '自然な流れ'}の雰囲気で過ごし、施設の空気と二人の距離感が少しだけ特別な記憶として残った。"
 
+    def _resolve_outing_outfit(self, character, location, mood: str, outfit_id: int | None, outfit_mode: str):
+        if outfit_id:
+            outfit = self._closet_service.resolve_outfit(character.id, outfit_id)
+            if outfit:
+                return outfit, "selected"
+        if outfit_mode == "base":
+            return None, "base"
+        candidates = [
+            outfit
+            for outfit in self._closet_service._outfits.list_by_character(character.id)
+            if getattr(outfit, "source_type", None) != "character_base" and getattr(outfit, "asset_id", None)
+        ]
+        if not candidates:
+            return None, "base"
+        context = " ".join(
+            [
+                str(getattr(location, "name", "") or ""),
+                str(getattr(location, "location_type", "") or ""),
+                str(getattr(location, "description", "") or ""),
+                str(mood or ""),
+            ]
+        ).lower()
+        weighted = []
+        for outfit in candidates:
+            score = 3
+            outfit_text = " ".join(
+                [
+                    str(getattr(outfit, "name", "") or ""),
+                    str(getattr(outfit, "usage_scene", "") or ""),
+                    str(getattr(outfit, "season", "") or ""),
+                    str(getattr(outfit, "tags_json", "") or ""),
+                    str(getattr(outfit, "description", "") or ""),
+                ]
+            ).lower()
+            water_context = any(keyword in context for keyword in ("プール", "水族館", "海", "夏", "water", "pool", "aquarium"))
+            if water_context and any(keyword in outfit_text for keyword in ("水着", "swim", "summer", "夏")):
+                score += 8
+            if not water_context and any(keyword in outfit_text for keyword in ("水着", "swim")):
+                score -= 2
+            if any(keyword in context for keyword in ("古書", "図書", "書堂", "式", "夜", "formal")):
+                if any(keyword in outfit_text for keyword in ("formal", "daily", "制服", "学生服", "ワンピース")):
+                    score += 4
+            if "date" in outfit_text:
+                score += 2
+            if any(keyword in outfit_text for keyword in ("daily", "all", "普段")):
+                score += 1
+            weighted.extend([outfit] * max(1, score))
+        return random.choice(weighted), "auto"
+
     def _attach_step_image(
         self,
         row,
@@ -366,11 +424,11 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
             reference_paths, reference_asset_ids = self._step_reference_paths(character, location, outfit=outfit)
             image_options = self._user_setting_service.apply_image_generation_settings(
                 user_id,
-                {"size": "1024x1536", "quality": current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium")},
+                {"size": "1536x1024", "quality": current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium")},
             )
             result = self._image_ai_client.generate_image(
                 prompt,
-                size=image_options.get("size") or "1024x1536",
+                size=image_options.get("size") or "1536x1024",
                 quality=image_options.get("quality") or current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium"),
                 model=image_options.get("model"),
                 provider=image_options.get("provider"),
@@ -400,7 +458,7 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
                             "provider": result.get("provider"),
                             "model": result.get("model"),
                             "quality": result.get("quality") or image_options.get("quality"),
-                            "size": image_options.get("size") or "1024x1536",
+                            "size": image_options.get("size") or "1536x1024",
                             "aspect_ratio": result.get("aspect_ratio"),
                             "prompt": prompt,
                             "revised_prompt": result.get("revised_prompt"),
@@ -427,7 +485,7 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
         return "\n".join(
             [
                 "Create a polished visual novel event CG for an independent outing mini event.",
-                "Use portrait visual novel event CG framing, 1024x1536 vertical composition, no text, no captions, no UI, no logos.",
+                "Use landscape visual novel event CG framing, 1536x1024 horizontal composition, no text, no captions, no UI, no logos.",
                 "Show the selected world-map facility as a recognizable place, not a generic background.",
                 "Include the selected character naturally in the scene when a character reference is provided.",
                 "Use the character face reference image as the highest-priority identity reference when it is provided.",
@@ -457,9 +515,8 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
         pairs = []
         seen_asset_ids = set()
         for asset_id in (
-            getattr(character, "thumbnail_asset_id", None),
-            getattr(character, "base_asset_id", None),
             getattr(outfit, "asset_id", None),
+            getattr(character, "base_asset_id", None),
             getattr(location, "image_asset_id", None),
         ):
             if not asset_id:
@@ -511,8 +568,65 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
     def _create_completion_news(self, row, character, location, state: dict) -> None:
         try:
             self._world_news_service.create_for_outing_completed(row, character, location, state)
-        except Exception:
+        except Exception as exc:
+            current_app.logger.warning(
+                "outing completion news creation failed for outing_id=%s: %s",
+                getattr(row, "id", None),
+                exc,
+            )
             return
+
+    def _schedule_completion_artifacts(self, outing_id: int, final_step: dict) -> bool:
+        try:
+            app = current_app._get_current_object()
+        except RuntimeError:
+            self._run_completion_letter_job(outing_id, final_step)
+            self._run_completion_news_job(outing_id)
+            return False
+
+        def letter_worker():
+            with app.app_context():
+                try:
+                    self._run_completion_letter_job(outing_id, final_step)
+                except Exception:
+                    app.logger.exception("outing completion letter generation failed")
+                finally:
+                    db.session.remove()
+
+        def news_worker():
+            with app.app_context():
+                try:
+                    self._run_completion_news_job(outing_id)
+                except Exception:
+                    app.logger.exception("outing completion news generation failed")
+                finally:
+                    db.session.remove()
+
+        threading.Thread(target=letter_worker, name=f"outing-letter-{outing_id}", daemon=True).start()
+        threading.Thread(target=news_worker, name=f"outing-news-{outing_id}", daemon=True).start()
+        return True
+
+    def _run_completion_letter_job(self, outing_id: int, final_step: dict) -> None:
+        row = self._outings.get(outing_id)
+        if not row:
+            return
+        character = self._characters.get(row.character_id)
+        location = self._locations.get(row.location_id)
+        if not character or not location:
+            return
+        state = self._load_state(row.state_json)
+        self._send_completion_letter(row, character, location, state, final_step or {})
+
+    def _run_completion_news_job(self, outing_id: int) -> None:
+        row = self._outings.get(outing_id)
+        if not row:
+            return
+        character = self._characters.get(row.character_id)
+        location = self._locations.get(row.location_id)
+        if not character or not location:
+            return
+        state = self._load_state(row.state_json)
+        self._create_completion_news(row, character, location, state)
 
     def _build_completion_letter_content(self, row, character, location, state: dict, final_step: dict) -> dict:
         try:

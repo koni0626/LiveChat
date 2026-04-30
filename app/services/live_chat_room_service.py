@@ -46,7 +46,7 @@ class LiveChatRoomService:
         base_asset = self._serialize_asset_summary(getattr(character, "base_asset_id", None) if character else None)
         default_outfit = self._closet_service.serialize_outfit(
             self._closet_service.resolve_outfit(room.character_id, getattr(room, "default_outfit_id", None))
-        )
+        ) if getattr(room, "default_outfit_id", None) else None
         payload = {
             "id": room.id,
             "project_id": room.project_id,
@@ -151,7 +151,7 @@ class LiveChatRoomService:
         character = self._character_service.get_character(room.character_id)
         default_outfit = self._closet_service.serialize_outfit(
             self._closet_service.resolve_outfit(room.character_id, getattr(room, "default_outfit_id", None))
-        )
+        ) if getattr(room, "default_outfit_id", None) else None
         return {
             "room_id": room.id,
             "room_title": room.title,

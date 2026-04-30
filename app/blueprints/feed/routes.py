@@ -94,6 +94,20 @@ def create_post(project_id: int):
     return json_response(feed_service.serialize_post(post, can_manage=True), status=201)
 
 
+@feed_bp.route("/projects/<int:project_id>/feed/generate", methods=["POST"])
+def generate_feed_posts(project_id: int):
+    _, user = require_project_manage(project_id)
+    payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
+    try:
+        posts = feed_service.generate_posts(project_id=project_id, user_id=user.id, payload=payload)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    return json_response([feed_service.serialize_post(post, can_manage=True) for post in posts], status=201)
+
+
 @feed_bp.route("/projects/<int:project_id>/feed/import-url", methods=["POST"])
 def import_feed_url(project_id: int):
     require_project_manage(project_id)

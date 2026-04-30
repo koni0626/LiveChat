@@ -145,26 +145,11 @@ class LiveChatMediaService:
             add_asset(selected_costume.asset_id)
             if reference_paths:
                 return reference_paths, reference_asset_ids
-        outfit = self._default_outfit_for_active_characters(active_characters)
-        if outfit:
-            add_asset(outfit.asset_id)
-            if reference_paths:
-                return reference_paths, reference_asset_ids
         for character in active_characters or []:
             add_asset((character or {}).get("base_asset_id") or ((character or {}).get("base_asset") or {}).get("id"))
         if reference_paths:
             return reference_paths, reference_asset_ids
         return image_support.collect_reference_assets(active_characters, limit=limit)
-
-    def _default_outfit_for_active_characters(self, active_characters: list[dict]):
-        for character in active_characters or []:
-            character_id = int((character or {}).get("id") or 0)
-            if not character_id:
-                continue
-            outfit = self._closet_service.get_default_outfit(character_id)
-            if outfit:
-                return outfit
-        return None
 
     def _selected_outfit_for_session(self, session_id: int, active_characters: list[dict]):
         selected_costume = self._session_image_service.get_selected_costume(session_id)
@@ -176,7 +161,7 @@ class LiveChatMediaService:
                 outfit = self._closet_service.resolve_outfit(character_id, outfit_id) if character_id else None
                 if outfit and int(outfit.id) == outfit_id:
                     return outfit
-        return self._default_outfit_for_active_characters(active_characters)
+        return None
 
     def ensure_initial_costume(self, session_id: int):
         session = self._chat_session_service.get_session(session_id)

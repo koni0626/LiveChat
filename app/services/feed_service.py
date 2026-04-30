@@ -211,6 +211,42 @@ class FeedService:
         self.refresh_character_feed_profile(character_id)
         return post
 
+    def generate_posts(self, *, project_id: int, user_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        count = max(1, min(5, int(payload.get("count") or 1)))
+        candidates = self._generate_feed_candidates(project_id, count=count)
+        created = []
+        for candidate in candidates[:count]:
+            character_id = int(candidate.get("character_id") or 0)
+            character = self._character_service.get_character(character_id)
+            if not character or character.project_id != project_id:
+                continue
+            body = str(candidate.get("body") or "").strip()
+            if not body:
+                continue
+            post = self._repo.create_post(
+                {
+                    "project_id": project_id,
+                    "character_id": character.id,
+                    "created_by_user_id": user_id,
+                    "body": body[:10000],
+                    "status": "published",
+                    "generation_state_json": json_util.dumps(
+                        {
+                            "source": "feed_auto_generate",
+                            "generated_at": datetime.utcnow().isoformat(),
+                            "candidate": candidate,
+                        }
+                    ),
+                }
+            )
+            post = self.generate_post_image(post.id, payload) or post
+            self.refresh_character_feed_profile(character.id)
+            created.append(post)
+        if not created:
+            raise RuntimeError("feed auto generation did not create any posts")
+        return created
+
     def update_post(self, post_id: int, payload: dict):
         normalized = {}
         current_post = self._repo.get_post(post_id)
@@ -536,6 +572,72 @@ class FeedService:
             },
         )
         return post
+
+    def _generate_feed_candidates(self, project_id: int, *, count: int):
+        project = self._project_service.get_project(project_id)
+        world = self._world_service.get_world(project_id)
+        characters = self._character_service.list_characters(project_id)[:20]
+        if not characters:
+            raise ValueError("character is required to generate Feed posts")
+        recent_posts = self._repo.list_posts(project_id=project_id, statuses=["published"], limit=20)
+        prompt = f"""
+Return only JSON.
+Create {count} public Feed posts for a Japanese character world app.
+Each item is a short official character post, not a news article and not a chat reply.
+
+Required shape:
+{{"items":[{{"character_id": 1, "body": "..."}}]}}
+
+Rules:
+- Japanese only.
+- Use only provided character IDs.
+- Keep each body 80-220 Japanese characters.
+- Match the selected character's personality and speech style.
+- Make the post feel like a public character broadcast: daily note, small discovery, place recommendation, mood, teaser, or social update.
+- Do not mention that AI generated the post.
+- Avoid duplicating recent posts.
+
+Project: {getattr(project, "title", "") or ""}
+Project summary: {getattr(project, "summary", "") or ""}
+World tone: {getattr(world, "tone", "") if world else ""}
+World overview: {getattr(world, "overview", "") if world else ""}
+Characters: {json_util.dumps([self._feed_character_context(character) for character in characters])}
+Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post.body} for post in recent_posts[:12]])}
+""".strip()
+        result = self._text_ai_client.generate_text(
+            prompt,
+            response_format={"type": "json_object"},
+            temperature=0.85,
+            max_tokens=1200,
+        )
+        parsed = self._text_ai_client._try_parse_json(result.get("text")) or {}
+        items = parsed.get("items") if isinstance(parsed, dict) else []
+        if isinstance(items, list) and items:
+            return [item for item in items if isinstance(item, dict)]
+        return self._fallback_feed_candidates(characters, count)
+
+    def _fallback_feed_candidates(self, characters, count: int):
+        items = []
+        for index in range(count):
+            character = characters[index % len(characters)]
+            name = getattr(character, "name", "") or "私"
+            items.append(
+                {
+                    "character_id": character.id,
+                    "body": f"{name}です。今日は街の空気が少し違って感じられました。気になる場所をひとつ見つけたので、また近いうちに話せたらうれしいです。",
+                }
+            )
+        return items
+
+    def _feed_character_context(self, character) -> dict:
+        return {
+            "id": character.id,
+            "name": character.name,
+            "nickname": character.nickname,
+            "personality": character.personality,
+            "speech_style": character.speech_style,
+            "appearance": character.appearance_summary,
+        }
 
     def _build_feed_image_prompt(self, post, character, project, world, payload: dict):
         override = str(payload.get("prompt") or "").strip()

@@ -72,15 +72,3 @@ def delete_outfit(outfit_id: int):
     require_project_view(outfit["project_id"])
     closet_service.delete_outfit(outfit_id)
     return json_response({"deleted": True})
-
-
-@closet_bp.route("/outfits/<int:outfit_id>/default", methods=["POST"])
-def set_default_outfit(outfit_id: int):
-    outfit = closet_service.get_outfit(outfit_id)
-    if not outfit:
-        raise NotFoundError()
-    require_project_view(outfit["project_id"])
-    updated = closet_service.set_default(outfit_id)
-    if not updated:
-        raise NotFoundError()
-    return json_response(updated)

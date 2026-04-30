@@ -355,6 +355,8 @@ class StorySessionService:
         selected_costume = self._selected_costume_image(session.id)
         if selected_costume:
             context["letter_reference_asset_ids"] = [selected_costume.asset_id]
+        elif ((story.get("default_outfit") or {}).get("asset") or {}).get("id"):
+            context["letter_reference_asset_ids"] = [((story.get("default_outfit") or {}).get("asset") or {}).get("id")]
         elif character.get("base_asset_id"):
             context["letter_reference_asset_ids"] = [character.get("base_asset_id")]
         context["room"] = {

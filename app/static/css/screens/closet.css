@@ -1,0 +1,298 @@
+.closet-page {
+  gap: 1rem;
+}
+
+.closet-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: linear-gradient(135deg, rgba(18, 28, 36, 0.96), rgba(49, 66, 60, 0.92));
+  color: #f8fafc;
+}
+
+.closet-hero p {
+  max-width: 52rem;
+  margin: 0.35rem 0 0;
+  color: rgba(248, 250, 252, 0.76);
+}
+
+.closet-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.closet-editor,
+.closet-main {
+  min-width: 0;
+}
+
+.closet-filter-row {
+  max-width: 22rem;
+  margin-bottom: 1rem;
+}
+
+.closet-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  color: var(--muted-text, #64748b);
+}
+
+.closet-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.closet-card {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.86);
+  color: #f8fafc;
+}
+
+.closet-card-image {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 2 / 3;
+  background: rgba(15, 23, 42, 0.94);
+}
+
+.closet-card-image-button {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.closet-card-image-button:focus-visible {
+  outline: 2px solid rgba(103, 232, 249, 0.85);
+  outline-offset: -3px;
+}
+
+.closet-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.closet-card-image i {
+  font-size: 2rem;
+  color: rgba(248, 250, 252, 0.45);
+}
+
+.closet-default-badge {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  padding: 0.22rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(250, 204, 21, 0.92);
+  color: #1f2937;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.closet-card-body {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem;
+}
+
+.closet-card-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: rgba(248, 250, 252, 0.62);
+  font-size: 0.76rem;
+}
+
+.closet-card h4 {
+  min-height: 2.5rem;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.closet-description {
+  min-height: 1.75rem;
+  color: rgba(248, 250, 252, 0.74);
+  font-size: 0.86rem;
+}
+
+.closet-description summary {
+  cursor: pointer;
+  color: rgba(248, 250, 252, 0.88);
+}
+
+.closet-description p {
+  margin: 0.5rem 0 0;
+}
+
+.closet-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-height: 1.5rem;
+}
+
+.closet-tags span {
+  padding: 0.18rem 0.45rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  color: rgba(248, 250, 252, 0.78);
+  font-size: 0.72rem;
+}
+
+.closet-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.closet-actions .btn {
+  white-space: nowrap;
+}
+
+.closet-generated-result {
+  margin-top: 1rem;
+}
+
+.closet-generated-card {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 0.75rem;
+}
+
+.closet-generated-image {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 12rem;
+  max-height: min(52vh, 28rem);
+  aspect-ratio: 2 / 3;
+  color: rgba(248, 250, 252, 0.48);
+}
+
+.closet-generated-image-button {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.closet-generated-image-button:focus-visible {
+  outline: 2px solid rgba(103, 232, 249, 0.85);
+  outline-offset: 2px;
+}
+
+.closet-generated-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.closet-detail-modal {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.closet-detail-modal .modal-header {
+  border-bottom-color: rgba(148, 163, 184, 0.18);
+}
+
+.closet-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(16rem, 24rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.closet-detail-preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.72);
+  min-height: 18rem;
+  max-height: min(72vh, 44rem);
+}
+
+.closet-detail-preview.is-generating::after {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  content: "騾包ｽｻ陷剃ｸ奇ｽ帝墓ｻ薙・闕ｳ・ｭ...";
+  background: rgba(2, 6, 23, 0.62);
+  color: #e0f7ff;
+  font-weight: 700;
+  letter-spacing: 0;
+  backdrop-filter: blur(2px);
+}
+
+.closet-detail-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.closet-detail-preview-empty {
+  padding: 1rem;
+  color: rgba(248, 250, 252, 0.58);
+  text-align: center;
+}
+
+@media (max-width: 767.98px) {
+  .closet-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .closet-detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .closet-detail-preview {
+    max-height: 52vh;
+  }
+}
+
+.closet-empty {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 991.98px) {
+  .closet-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .closet-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .closet-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .closet-grid {
+    grid-template-columns: 1fr;
+  }
+}

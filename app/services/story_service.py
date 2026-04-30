@@ -59,7 +59,7 @@ class StoryService:
         base_asset = self._serialize_asset_summary(getattr(character, "base_asset_id", None) if character else None)
         default_outfit = self._closet_service.serialize_outfit(
             self._closet_service.resolve_outfit(story.character_id, getattr(story, "default_outfit_id", None))
-        )
+        ) if getattr(story, "default_outfit_id", None) else None
         payload = {
             "id": story.id,
             "project_id": story.project_id,
@@ -328,7 +328,7 @@ class StoryService:
         character = self._character_service.get_character(story.character_id)
         default_outfit = self._closet_service.serialize_outfit(
             self._closet_service.resolve_outfit(story.character_id, getattr(story, "default_outfit_id", None))
-        )
+        ) if getattr(story, "default_outfit_id", None) else None
         return {
             "story_id": story.id,
             "story_title": story.title,

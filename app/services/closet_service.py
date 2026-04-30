@@ -86,7 +86,7 @@ class ClosetService:
                 "allowed_changes": None,
                 "ng_rules": None,
                 "prompt_notes": "Use this as the base character outfit reference.",
-                "is_default": not any(outfit.is_default for outfit in existing),
+                "is_default": False,
                 "status": "active",
             }
         )
@@ -94,15 +94,12 @@ class ClosetService:
     def get_outfit(self, outfit_id: int):
         return self.serialize_outfit(self._outfits.get(outfit_id))
 
-    def get_default_outfit(self, character_id: int):
-        return self._outfits.get_default(character_id)
-
     def resolve_outfit(self, character_id: int, outfit_id: int | None = None):
         if outfit_id:
             outfit = self._outfits.get(outfit_id)
             if outfit and outfit.character_id == character_id:
                 return outfit
-        return self._outfits.get_default(character_id)
+        return None
 
     def create_outfit(self, project_id: int, character_id: int, payload: dict, upload_file=None):
         character = self._characters.get(character_id)
@@ -243,9 +240,6 @@ class ClosetService:
                 )
         return self.serialize_outfit(updated)
 
-    def set_default(self, outfit_id: int):
-        return self.serialize_outfit(self._outfits.set_default(outfit_id))
-
     def delete_outfit(self, outfit_id: int) -> bool:
         return self._outfits.delete(outfit_id)
 
@@ -273,7 +267,7 @@ class ClosetService:
         seen = set()
         edit_existing = self._to_bool(payload.get("edit_existing"))
         reference_outfit_id = int(payload.get("reference_outfit_id") or 0)
-        reference_outfit = self._outfits.get(reference_outfit_id) if reference_outfit_id else self._outfits.get_default(character.id)
+        reference_outfit = self._outfits.get(reference_outfit_id) if reference_outfit_id else None
         asset_ids = [
             getattr(reference_outfit, "asset_id", None),
             getattr(character, "base_asset_id", None),
@@ -368,7 +362,7 @@ class ClosetService:
         if "tags" in payload or "tags_json" in payload or not partial:
             normalized["tags_json"] = self._normalize_tags(payload)
         if "is_default" in payload or not partial:
-            normalized["is_default"] = self._to_bool(payload.get("is_default"))
+            normalized["is_default"] = False
         return normalized
 
     def _normalize_tags(self, payload: dict) -> str | None:

@@ -39,6 +39,7 @@ class WorldNewsRepository:
             title=payload["title"],
             body=payload["body"],
             summary=payload.get("summary"),
+            image_asset_id=payload.get("image_asset_id"),
             importance=int(payload.get("importance") or 3),
             source_type=payload.get("source_type") or "manual_ai",
             source_ref_type=payload.get("source_ref_type"),

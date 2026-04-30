@@ -1,0 +1,116 @@
+body[data-screen="character-list"] .empty-panel {
+  min-height: 104px;
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  border-radius: 1.2rem;
+  border: 1px solid rgba(84, 177, 255, 0.2);
+  background:
+    linear-gradient(180deg, rgba(8, 17, 31, 0.94), rgba(8, 18, 35, 0.84)),
+    linear-gradient(135deg, rgba(0, 245, 212, 0.05), transparent 45%),
+    radial-gradient(circle at top right, rgba(189, 92, 255, 0.12), transparent 36%);
+  box-shadow:
+    0 18px 42px rgba(1, 6, 18, 0.34),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  color: #dff6ff;
+  font-weight: 600;
+}
+
+body[data-screen="character-list"] .character-search-panel {
+  width: 100%;
+}
+
+body[data-screen="character-list"] .character-search-form {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+body[data-screen="character-list"] .character-search-field {
+  min-width: 0;
+}
+
+body[data-screen="character-list"] .character-search-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+body[data-screen="character-list"] .character-search-actions .btn {
+  min-width: 5.5rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 575.98px) {
+  body[data-screen="character-list"] .character-search-form {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-screen="character-list"] .character-search-actions {
+    justify-content: flex-start;
+  }
+}
+
+body[data-screen="character-list"] .character-card h4 {
+  color: #f4fbff;
+}
+
+body[data-screen="character-list"] .character-list-card {
+  min-height: 0;
+  gap: 0.85rem;
+}
+
+body[data-screen="character-list"] .character-list-card.is-clickable {
+  cursor: pointer;
+}
+
+body[data-screen="character-list"] .character-card-image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 1rem;
+  border: 1px solid rgba(84, 177, 255, 0.16);
+  background: rgba(3, 8, 18, 0.65);
+}
+
+body[data-screen="character-list"] .character-card-placeholder {
+  display: grid;
+  place-items: center;
+  gap: 0.35rem;
+  color: rgba(223, 246, 255, 0.72);
+}
+
+
+body[data-screen="character-list"] .character-card-placeholder i {
+  font-size: 1.8rem;
+}
+
+body[data-screen="character-list"] .character-role-badge {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #c8efff;
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+
+body[data-screen="character-list"] .character-list-card h4 {
+  color: #f4fbff;
+  font-size: 1.18rem;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-screen="character-list"] .character-card .badge {
+  color: #dff6ff;
+  background: rgba(0, 245, 212, 0.08) !important;
+  border: 1px solid rgba(84, 177, 255, 0.18);
+}
+

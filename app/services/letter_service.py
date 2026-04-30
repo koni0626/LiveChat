@@ -200,6 +200,7 @@ class LetterService:
         character = self._resolve_sender_character(context)
         if not character:
             return None
+        self._apply_context_letter_references(context, character)
         messages = context.get("messages") or []
         if len(messages) < 6:
             return None
@@ -247,6 +248,28 @@ class LetterService:
             }
         )
         return self.serialize_letter(letter)
+
+    def _apply_context_letter_references(self, context: dict, character: dict) -> None:
+        if context.get("letter_reference_asset_ids"):
+            return
+        reference_asset_id = self._room_outfit_asset_id(context)
+        if not reference_asset_id:
+            reference_asset_id = self._selected_costume_asset_id(context)
+        if not reference_asset_id:
+            reference_asset_id = ((character or {}).get("base_asset") or {}).get("id") or (character or {}).get("base_asset_id")
+        if reference_asset_id:
+            context["letter_reference_asset_ids"] = [reference_asset_id]
+
+    def _room_outfit_asset_id(self, context: dict):
+        room = context.get("room") if isinstance(context.get("room"), dict) else {}
+        outfit = room.get("default_outfit") if isinstance(room.get("default_outfit"), dict) else {}
+        asset = outfit.get("asset") if isinstance(outfit.get("asset"), dict) else {}
+        return asset.get("id") or outfit.get("asset_id")
+
+    def _selected_costume_asset_id(self, context: dict):
+        costume = context.get("selected_costume") if isinstance(context.get("selected_costume"), dict) else {}
+        asset = costume.get("asset") if isinstance(costume.get("asset"), dict) else {}
+        return asset.get("id") or costume.get("asset_id")
 
     def generate_for_story_context(self, story_session, context: dict, *, trigger_type: str = "story_clear"):
         if not story_session or not getattr(story_session, "owner_user_id", None):
