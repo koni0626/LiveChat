@@ -26,6 +26,7 @@ from .user_setting import UserSetting
 from .world import World
 from .world_location import WorldLocation
 from .world_map_image import WorldMapImage
+from .world_news_item import WorldNewsItem
 
 __all__ = [
     "db",
@@ -55,4 +56,5 @@ __all__ = [
     "World",
     "WorldLocation",
     "WorldMapImage",
+    "WorldNewsItem",
 ]

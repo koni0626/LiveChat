@@ -20,6 +20,7 @@ from .asset_service import AssetService
 from .project_service import ProjectService
 from .user_setting_service import UserSettingService
 from .world_service import WorldService
+from .world_news_service import WorldNewsService
 
 
 class OutingService:
@@ -36,6 +37,7 @@ class OutingService:
         image_ai_client: ImageAIClient | None = None,
         asset_service: AssetService | None = None,
         user_setting_service: UserSettingService | None = None,
+        world_news_service: WorldNewsService | None = None,
     ):
         self._outings = outing_repository or OutingSessionRepository()
         self._characters = character_repository or CharacterRepository()
@@ -48,6 +50,7 @@ class OutingService:
         self._image_ai_client = image_ai_client or ImageAIClient()
         self._asset_service = asset_service or AssetService()
         self._user_setting_service = user_setting_service or UserSettingService()
+        self._world_news_service = world_news_service or WorldNewsService()
 
     def options(self, project_id: int, user_id: int) -> dict:
         return {
@@ -155,6 +158,7 @@ class OutingService:
         row = self._outings.update(row.id, updates)
         if is_final:
             self._send_completion_letter(row, character, location, state, step)
+            self._create_completion_news(row, character, location, state)
         return self.serialize_outing(row)
 
     def serialize_outing(self, row, *, compact: bool = False) -> dict:
@@ -481,6 +485,12 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
                     ),
                 }
             )
+        except Exception:
+            return
+
+    def _create_completion_news(self, row, character, location, state: dict) -> None:
+        try:
+            self._world_news_service.create_for_outing_completed(row, character, location, state)
         except Exception:
             return
 
