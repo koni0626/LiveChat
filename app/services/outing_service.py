@@ -17,6 +17,7 @@ from ..repositories.outing_session_repository import OutingSessionRepository
 from ..repositories.world_location_repository import WorldLocationRepository
 from ..utils import json_util
 from .asset_service import AssetService
+from .closet_service import ClosetService
 from .project_service import ProjectService
 from .user_setting_service import UserSettingService
 from .world_service import WorldService
@@ -38,6 +39,7 @@ class OutingService:
         asset_service: AssetService | None = None,
         user_setting_service: UserSettingService | None = None,
         world_news_service: WorldNewsService | None = None,
+        closet_service: ClosetService | None = None,
     ):
         self._outings = outing_repository or OutingSessionRepository()
         self._characters = character_repository or CharacterRepository()
@@ -51,11 +53,13 @@ class OutingService:
         self._asset_service = asset_service or AssetService()
         self._user_setting_service = user_setting_service or UserSettingService()
         self._world_news_service = world_news_service or WorldNewsService()
+        self._closet_service = closet_service or ClosetService()
 
     def options(self, project_id: int, user_id: int) -> dict:
         return {
             "characters": [self._serialize_character(character) for character in self._characters.list_by_project(project_id)],
             "locations": [self._serialize_location(location) for location in self._locations.list_by_project(project_id)],
+            "outfits": self._closet_service.list_project_outfits(project_id).get("outfits", []),
             "recent_outings": self.list_outings(project_id, user_id, limit=8),
         }
 
@@ -72,6 +76,7 @@ class OutingService:
         character_id = int(payload.get("character_id") or 0)
         location_id = int(payload.get("location_id") or 0)
         mood = str(payload.get("mood") or "おまかせ").strip()[:100]
+        outfit_id = int(payload.get("outfit_id") or 0) or None
         max_steps = max(2, min(5, int(payload.get("max_steps") or 3)))
         character = self._characters.get(character_id)
         location = self._locations.get(location_id)
@@ -80,11 +85,16 @@ class OutingService:
         if not location or location.project_id != project_id:
             raise ValueError("施設を選択してください。")
 
+        outfit = self._closet_service.resolve_outfit(character.id, outfit_id)
+        if outfit and outfit.project_id != project_id:
+            outfit = None
+
         state = {
             "steps": [],
             "choices": [],
             "memory_notes": [],
             "selected_choices": [],
+            "selected_outfit_id": outfit.id if outfit else None,
         }
         title = f"{character.name}と{location.name}へ"
         row = self._outings.create(
@@ -181,6 +191,9 @@ class OutingService:
             "memory_summary": row.memory_summary,
             "character": self._serialize_character(self._characters.get(row.character_id)),
             "location": self._serialize_location(self._locations.get(row.location_id)),
+            "selected_outfit": self._closet_service.serialize_outfit(
+                self._closet_service.resolve_outfit(row.character_id, state.get("selected_outfit_id"))
+            ),
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
             "completed_at": row.completed_at.isoformat() if row.completed_at else None,
@@ -347,8 +360,10 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
         is_final: bool = False,
     ) -> dict:
         try:
+            state = self._load_state(row.state_json)
+            outfit = self._closet_service.resolve_outfit(character.id, state.get("selected_outfit_id"))
             prompt = self._build_step_image_prompt(row, character, location, step, selected_choice=selected_choice, is_final=is_final)
-            reference_paths, reference_asset_ids = self._step_reference_paths(character, location)
+            reference_paths, reference_asset_ids = self._step_reference_paths(character, location, outfit=outfit)
             image_options = self._user_setting_service.apply_image_generation_settings(
                 user_id,
                 {"size": "1024x1536", "quality": current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium")},
@@ -390,6 +405,7 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
                             "prompt": prompt,
                             "revised_prompt": result.get("revised_prompt"),
                             "reference_asset_ids": reference_asset_ids,
+                            "outfit_id": getattr(outfit, "id", None),
                             "safety_retry": result.get("safety_retry"),
                         }
                     ),
@@ -406,6 +422,8 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
     def _build_step_image_prompt(self, row, character, location, step: dict, *, selected_choice: dict | None, is_final: bool) -> str:
         mood = row.mood or ""
         choice_label = (selected_choice or {}).get("label") or ""
+        state = self._load_state(row.state_json)
+        outfit = self._closet_service.resolve_outfit(character.id, state.get("selected_outfit_id"))
         return "\n".join(
             [
                 "Create a polished visual novel event CG for an independent outing mini event.",
@@ -414,6 +432,7 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
                 "Include the selected character naturally in the scene when a character reference is provided.",
                 "Use the character face reference image as the highest-priority identity reference when it is provided.",
                 "Preserve the exact character face identity, eye shape, facial proportions, hairstyle, hair accessories, body impression, outfit direction, colors, and art style from reference images.",
+                *self._closet_service.outfit_prompt_lines(outfit),
                 "If the scene asks for a bird's-eye view, use a gentle high-angle or three-quarter overhead composition where the face remains readable. Do not make the character so small or top-down that the face becomes generic.",
                 "If a facility reference image is provided, preserve the facility's recognizable architecture, mood, and visual identity.",
                 "The image should change pose, expression, camera, lighting, and local staging to match this step.",
@@ -434,12 +453,13 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
             ]
         )
 
-    def _step_reference_paths(self, character, location) -> tuple[list[str], list[int]]:
+    def _step_reference_paths(self, character, location, *, outfit=None) -> tuple[list[str], list[int]]:
         pairs = []
         seen_asset_ids = set()
         for asset_id in (
             getattr(character, "thumbnail_asset_id", None),
             getattr(character, "base_asset_id", None),
+            getattr(outfit, "asset_id", None),
             getattr(location, "image_asset_id", None),
         ):
             if not asset_id:

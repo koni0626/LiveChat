@@ -13,6 +13,7 @@ from . import live_chat_prompt_support as prompt_support
 from . import live_chat_text_support as text_support
 from .asset_service import AssetService
 from .chat_session_service import ChatSessionService
+from .closet_service import ClosetService
 from .session_image_service import SessionImageService
 from .session_state_service import SessionStateService
 
@@ -40,6 +41,7 @@ class LiveChatMediaService:
         self._image_ai_client = image_ai_client
         self._context_provider = context_provider
         self._select_characters = select_characters
+        self._closet_service = ClosetService()
 
     def _load_json(self, value):
         if value is None:
@@ -128,14 +130,53 @@ class LiveChatMediaService:
         selected_costume = self._session_image_service.get_selected_costume(session_id)
         reference_paths = []
         reference_asset_ids = []
-        if selected_costume:
-            asset = self._asset_service.get_asset(selected_costume.asset_id)
+        seen_asset_ids = set()
+
+        def add_asset(asset_id):
+            if not asset_id or asset_id in seen_asset_ids or len(reference_paths) >= limit:
+                return
+            asset = self._asset_service.get_asset(asset_id)
             if asset and getattr(asset, "file_path", None):
+                seen_asset_ids.add(asset.id)
                 reference_paths.append(asset.file_path)
                 reference_asset_ids.append(asset.id)
+
+        if selected_costume:
+            add_asset(selected_costume.asset_id)
+            if reference_paths:
+                return reference_paths, reference_asset_ids
+        outfit = self._default_outfit_for_active_characters(active_characters)
+        if outfit:
+            add_asset(outfit.asset_id)
+            if reference_paths:
+                return reference_paths, reference_asset_ids
+        for character in active_characters or []:
+            add_asset((character or {}).get("base_asset_id") or ((character or {}).get("base_asset") or {}).get("id"))
         if reference_paths:
             return reference_paths, reference_asset_ids
         return image_support.collect_reference_assets(active_characters, limit=limit)
+
+    def _default_outfit_for_active_characters(self, active_characters: list[dict]):
+        for character in active_characters or []:
+            character_id = int((character or {}).get("id") or 0)
+            if not character_id:
+                continue
+            outfit = self._closet_service.get_default_outfit(character_id)
+            if outfit:
+                return outfit
+        return None
+
+    def _selected_outfit_for_session(self, session_id: int, active_characters: list[dict]):
+        selected_costume = self._session_image_service.get_selected_costume(session_id)
+        state_json = self._load_json(getattr(selected_costume, "state_json", None)) if selected_costume else {}
+        outfit_id = int((state_json or {}).get("outfit_id") or 0)
+        if outfit_id:
+            for character in active_characters or []:
+                character_id = int((character or {}).get("id") or 0)
+                outfit = self._closet_service.resolve_outfit(character_id, outfit_id) if character_id else None
+                if outfit and int(outfit.id) == outfit_id:
+                    return outfit
+        return self._default_outfit_for_active_characters(active_characters)
 
     def ensure_initial_costume(self, session_id: int):
         session = self._chat_session_service.get_session(session_id)
@@ -253,7 +294,11 @@ class LiveChatMediaService:
         state_json["visual_state"] = visual_state
 
         active_characters = image_support.resolve_active_characters(context, state_json, conversation_prompt)
-        reference_paths, reference_asset_ids = self.collect_session_reference_assets(session_id, active_characters, limit=1)
+        outfit = self._selected_outfit_for_session(session_id, active_characters)
+        outfit_lines = self._closet_service.outfit_prompt_lines(outfit)
+        if outfit_lines:
+            prompt = "\n".join([prompt, *outfit_lines])
+        reference_paths, reference_asset_ids = self.collect_session_reference_assets(session_id, active_characters, limit=2)
         result = self._image_ai_client.generate_image(
             prompt,
             size=payload.get("size") or "1536x1024",
@@ -387,6 +432,19 @@ class LiveChatMediaService:
             serialized.append(data)
         return serialized
 
+    def list_closet_outfits(self, session_id: int):
+        keys = self._resolve_costume_library_keys(session_id)
+        character_id = int(keys.get("character_id") or 0)
+        if not character_id:
+            return {"character_id": None, "outfits": []}
+        selected = self._session_image_service.get_selected_costume(session_id)
+        selected_asset_id = int(selected.asset_id) if selected and selected.asset_id else None
+        outfits = self._closet_service.list_character_outfits(character_id)
+        for outfit in outfits:
+            asset_id = int((outfit.get("asset") or {}).get("id") or outfit.get("asset_id") or 0)
+            outfit["is_selected_for_session"] = bool(selected_asset_id and asset_id == selected_asset_id)
+        return {"character_id": character_id, "outfits": outfits}
+
     def select_costume(self, session_id: int, session_image_id: int):
         row = self._session_image_service.get_session_image(session_image_id)
         if not row or row.image_type not in {"costume_initial", "costume_reference"}:
@@ -404,6 +462,80 @@ class LiveChatMediaService:
                 return None
         selected = self._session_image_service.select_session_image(row.id)
         return self.serialize_session_image(selected)
+
+    def select_closet_outfit(self, session_id: int, outfit_id: int):
+        session = self._chat_session_service.get_session(session_id)
+        keys = self._resolve_costume_library_keys(session_id)
+        character_id = int(keys.get("character_id") or 0)
+        if not session or not character_id:
+            return None
+        outfit = self._closet_service.resolve_outfit(character_id, outfit_id)
+        if not outfit or int(outfit.id) != int(outfit_id) or not outfit.asset_id:
+            return None
+        existing = next(
+            (
+                row
+                for row in self._session_image_service.list_costumes(session_id)
+                if int(row.asset_id or 0) == int(outfit.asset_id or 0)
+            ),
+            None,
+        )
+        if existing:
+            selected = self._session_image_service.select_session_image(existing.id)
+            return self.serialize_session_image(selected)
+        session_image = self._session_image_service.create_session_image(
+            session_id,
+            {
+                "asset_id": outfit.asset_id,
+                **keys,
+                "image_type": "costume_reference",
+                "prompt_text": outfit.prompt_notes or outfit.name,
+                "state_json": {
+                    "source": "closet_outfit",
+                    "outfit_id": outfit.id,
+                    "outfit_name": outfit.name,
+                    "description": outfit.description or "",
+                    "usage_scene": outfit.usage_scene or "",
+                    "season": outfit.season or "",
+                },
+                "quality": "closet",
+                "size": "closet",
+                "is_selected": 0,
+            },
+        )
+        selected = self._session_image_service.select_session_image(session_image.id)
+        return self.serialize_session_image(selected)
+
+    def create_scene_from_selected_costume(self, session_id: int, *, reason: str | None = None):
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return None
+        selected_costume = self._session_image_service.get_selected_costume(session_id)
+        if not selected_costume:
+            self.ensure_initial_costume(session_id)
+            selected_costume = self._session_image_service.get_selected_costume(session_id)
+        if not selected_costume or not selected_costume.asset_id:
+            return None
+        state_json = {
+            "source": "initial_scene_fallback",
+            "costume_image_id": selected_costume.id,
+            "costume_asset_id": selected_costume.asset_id,
+            "reason": reason or "",
+        }
+        row = self._session_image_service.create_session_image(
+            session_id,
+            {
+                "asset_id": selected_costume.asset_id,
+                "image_type": "live_scene",
+                "prompt_text": "初期画像生成に失敗したため、選択中の衣装基準画像を表示しています。",
+                "state_json": state_json,
+                "quality": "fallback",
+                "size": selected_costume.size or "source",
+                "is_selected": 1,
+                "is_reference": 1,
+            },
+        )
+        return self.select_image(row.id, update_observation=False)
 
     def register_uploaded_costume(self, session_id: int, asset_id: int, payload: dict | None = None):
         payload = dict(payload or {})

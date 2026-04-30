@@ -26,6 +26,11 @@
         <label class="form-label mt-3" for="outingLocationSelect">行き先</label>
         <select class="form-select" id="outingLocationSelect" name="location_id" required></select>
 
+        <label class="form-label mt-3" for="outingOutfitSelect">衣装</label>
+        <select class="form-select" id="outingOutfitSelect" name="outfit_id">
+          <option value="">デフォルト衣装</option>
+        </select>
+
         <label class="form-label mt-3" for="outingMoodInput">雰囲気</label>
         <input class="form-control" id="outingMoodInput" name="mood" maxlength="100" placeholder="例: 放課後の寄り道、静かなデート、少し照れた雰囲気">
 
@@ -94,6 +99,7 @@
   const form = document.getElementById("outingStartForm");
   const characterSelect = document.getElementById("outingCharacterSelect");
   const locationSelect = document.getElementById("outingLocationSelect");
+  const outfitSelect = document.getElementById("outingOutfitSelect");
   const moodInput = document.getElementById("outingMoodInput");
   const startButton = document.getElementById("outingStartButton");
   const refreshButton = document.getElementById("outingRefreshButton");
@@ -144,13 +150,25 @@
   function renderSelects(data) {
     const characters = Array.isArray(data?.characters) ? data.characters : [];
     const locations = Array.isArray(data?.locations) ? data.locations : [];
+    const outfits = Array.isArray(data?.outfits) ? data.outfits : [];
     characterSelect.innerHTML = characters.length
       ? characters.map((item) => `<option value="${item.id}">${NovelUI.escape(item.name || "Character")}</option>`).join("")
       : `<option value="">キャラクターがありません</option>`;
     locationSelect.innerHTML = locations.length
       ? locations.map((item) => `<option value="${item.id}">${NovelUI.escape(optionLabel(item, "施設"))}</option>`).join("")
       : `<option value="">施設がありません</option>`;
+    renderOutfitOptions(outfits);
     startButton.disabled = isBusy || !characters.length || !locations.length;
+  }
+
+  function renderOutfitOptions(outfits) {
+    const characterId = Number(characterSelect.value || 0);
+    const filtered = outfits.filter((item) => Number(item.character_id) === characterId);
+    outfitSelect.dataset.outfits = JSON.stringify(outfits);
+    outfitSelect.innerHTML = '<option value="">デフォルト衣装</option>' + filtered.map((item) => {
+      const label = `${item.name || "衣装"}${item.is_default ? " / default" : ""}`;
+      return `<option value="${item.id}">${NovelUI.escape(label)}</option>`;
+    }).join("");
   }
 
   function renderHistoryLoading() {
@@ -213,6 +231,7 @@
         <div class="outing-scene-copy">
           <div class="eyebrow">${NovelUI.escape(outing.location?.name || "Location")}</div>
           <h4>${NovelUI.escape(step.scene_title || outing.title || "おでかけ")}</h4>
+          ${outing.selected_outfit ? `<div class="outing-note">衣装: ${NovelUI.escape(outing.selected_outfit.name || "衣装")}</div>` : ""}
           <p class="outing-narration">${NovelUI.escape(step.narration || "")}</p>
           <div class="outing-line">${NovelUI.escape(step.character_line || "")}</div>
           ${step.location_note ? `<div class="outing-note">${NovelUI.escape(step.location_note)}</div>` : ""}
@@ -333,6 +352,7 @@
         body: {
           character_id: Number(characterSelect.value),
           location_id: Number(locationSelect.value),
+          outfit_id: outfitSelect.value ? Number(outfitSelect.value) : null,
           mood: moodInput.value.trim(),
         },
       });
@@ -405,6 +425,11 @@
       setLoading(false);
       NovelUI.toast(error.message || "読み込みに失敗しました。", "danger");
     });
+  });
+
+  characterSelect.addEventListener("change", () => {
+    const outfits = JSON.parse(outfitSelect.dataset.outfits || "[]");
+    renderOutfitOptions(outfits);
   });
 
   loadOptions().catch((error) => {

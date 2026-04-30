@@ -8,6 +8,7 @@ from ..repositories.chat_session_repository import ChatSessionRepository
 from ..repositories.live_chat_room_repository import LiveChatRoomRepository
 from .asset_service import AssetService
 from .character_service import CharacterService
+from .closet_service import ClosetService
 from .project_service import ProjectService
 
 
@@ -21,12 +22,14 @@ class LiveChatRoomService:
         character_service: CharacterService | None = None,
         chat_session_repository: ChatSessionRepository | None = None,
         asset_service: AssetService | None = None,
+        closet_service: ClosetService | None = None,
     ):
         self._repo = repository or LiveChatRoomRepository()
         self._project_service = project_service or ProjectService()
         self._character_service = character_service or CharacterService()
         self._chat_session_repo = chat_session_repository or ChatSessionRepository()
         self._asset_service = asset_service or AssetService()
+        self._closet_service = closet_service or ClosetService()
 
     def list_rooms(self, project_id: int, *, include_unpublished: bool = False):
         status = None if include_unpublished else "published"
@@ -41,11 +44,16 @@ class LiveChatRoomService:
         character = self._character_service.get_character(room.character_id)
         thumbnail_asset = self._serialize_asset_summary(getattr(character, "thumbnail_asset_id", None) if character else None)
         base_asset = self._serialize_asset_summary(getattr(character, "base_asset_id", None) if character else None)
+        default_outfit = self._closet_service.serialize_outfit(
+            self._closet_service.resolve_outfit(room.character_id, getattr(room, "default_outfit_id", None))
+        )
         payload = {
             "id": room.id,
             "project_id": room.project_id,
             "created_by_user_id": room.created_by_user_id,
             "character_id": room.character_id,
+            "default_outfit_id": getattr(room, "default_outfit_id", None),
+            "default_outfit": default_outfit,
             "title": room.title,
             "description": room.description,
             "conversation_objective": room.conversation_objective,
@@ -125,7 +133,13 @@ class LiveChatRoomService:
         room = self.get_room(room_id)
         if not room:
             return None
-        normalized = self._normalize_payload(room.project_id, payload, created_by_user_id=room.created_by_user_id, require_all=False)
+        normalized = self._normalize_payload(
+            room.project_id,
+            payload,
+            created_by_user_id=room.created_by_user_id,
+            require_all=False,
+            current_character_id=room.character_id,
+        )
         if not normalized:
             raise ValueError("payload must not be empty")
         return self._repo.update(room_id, normalized)
@@ -135,6 +149,9 @@ class LiveChatRoomService:
 
     def build_room_snapshot(self, room):
         character = self._character_service.get_character(room.character_id)
+        default_outfit = self._closet_service.serialize_outfit(
+            self._closet_service.resolve_outfit(room.character_id, getattr(room, "default_outfit_id", None))
+        )
         return {
             "room_id": room.id,
             "room_title": room.title,
@@ -144,11 +161,21 @@ class LiveChatRoomService:
             "proxy_player_speech_style": getattr(room, "proxy_player_speech_style", None),
             "character_id": room.character_id,
             "character_name": character.name if character else None,
+            "default_outfit_id": getattr(room, "default_outfit_id", None),
+            "default_outfit_name": default_outfit.get("name") if isinstance(default_outfit, dict) else None,
             "status": room.status,
             "version_updated_at": room.updated_at.isoformat() if getattr(room, "updated_at", None) else None,
         }
 
-    def _normalize_payload(self, project_id: int, payload: dict, *, created_by_user_id: int, require_all: bool):
+    def _normalize_payload(
+        self,
+        project_id: int,
+        payload: dict,
+        *,
+        created_by_user_id: int,
+        require_all: bool,
+        current_character_id: int | None = None,
+    ):
         normalized = {}
         if require_all or "title" in payload:
             title = str(payload.get("title") or "").strip()
@@ -179,6 +206,21 @@ class LiveChatRoomService:
             if not character or character.project_id != project_id:
                 raise ValueError("character_id is invalid")
             normalized["character_id"] = character_id
+        effective_character_id = normalized.get("character_id") or current_character_id
+        if "default_outfit_id" in payload or require_all or "character_id" in normalized:
+            raw_outfit_id = payload.get("default_outfit_id")
+            try:
+                outfit_id = int(raw_outfit_id or 0)
+            except (TypeError, ValueError):
+                outfit_id = 0
+            if outfit_id:
+                character_id_for_outfit = normalized.get("character_id") or effective_character_id
+                outfit = self._closet_service.resolve_outfit(int(character_id_for_outfit or 0), outfit_id)
+                if not outfit or outfit.id != outfit_id or outfit.project_id != project_id:
+                    raise ValueError("default_outfit_id is invalid")
+                normalized["default_outfit_id"] = outfit_id
+            else:
+                normalized["default_outfit_id"] = None
         if "status" in payload or require_all:
             status = str(payload.get("status") or "draft").strip() or "draft"
             if status not in self.VALID_STATUSES:

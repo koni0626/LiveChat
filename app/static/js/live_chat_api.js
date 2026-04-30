@@ -41,6 +41,17 @@
     });
   }
 
+  async function loadClosetOutfits(sessionId) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/closet-outfits`);
+  }
+
+  async function selectClosetOutfit(sessionId, outfitId) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/closet-outfits/${outfitId}/select`, {
+      method: "POST",
+      body: {},
+    });
+  }
+
   async function deleteCostume(sessionId, imageId) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/costumes/${imageId}`, {
       method: "DELETE",
@@ -134,6 +145,8 @@
     uploadGift,
     selectImage,
     selectCostume,
+    loadClosetOutfits,
+    selectClosetOutfit,
     deleteCostume,
     executeSceneChoice,
     setReferenceImage,

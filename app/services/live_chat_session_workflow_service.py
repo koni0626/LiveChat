@@ -131,7 +131,10 @@ class LiveChatSessionWorkflowService:
                 }
             },
         )
-        self._media_service.ensure_initial_costume(session.id)
+        if getattr(room, "default_outfit_id", None):
+            self._media_service.select_closet_outfit(session.id, int(room.default_outfit_id))
+        else:
+            self._media_service.ensure_initial_costume(session.id)
         return self._context_provider(session.id)
 
     def _preserve_locked_session_characters(self, session_id: int, payload: dict) -> dict:

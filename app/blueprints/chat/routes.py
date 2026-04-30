@@ -187,6 +187,13 @@ def create_room_chat_session(room_id: int):
     except Exception as exc:  # Keep the session usable even when the image API is temporarily unavailable.
         current_app.logger.exception("initial live chat image generation failed")
         created["image_generation_error"] = str(exc)
+        fallback_image = live_chat_service.create_scene_from_selected_costume(
+            created["session"]["id"],
+            reason=str(exc),
+        )
+        if fallback_image:
+            created["initial_image"] = fallback_image
+            created["initial_image_fallback"] = True
     return json_response(created, status=201)
 
 
@@ -314,6 +321,22 @@ def list_chat_costumes(session_id: int):
     _require_session(session_id)
     costumes = live_chat_service.list_costumes(session_id)
     return json_response(costumes, meta={"count": len(costumes)})
+
+
+@chat_bp.route("/chat/sessions/<int:session_id>/closet-outfits", methods=["GET"])
+def list_chat_closet_outfits(session_id: int):
+    _require_session(session_id)
+    result = live_chat_service.list_closet_outfits(session_id)
+    return json_response(result)
+
+
+@chat_bp.route("/chat/sessions/<int:session_id>/closet-outfits/<int:outfit_id>/select", methods=["POST"])
+def select_chat_closet_outfit(session_id: int, outfit_id: int):
+    _require_session(session_id, for_manage=True)
+    result = live_chat_service.select_closet_outfit(session_id, outfit_id)
+    if not result:
+        raise NotFoundError()
+    return json_response(result)
 
 
 @chat_bp.route("/chat/sessions/<int:session_id>/costumes/generate", methods=["POST"])

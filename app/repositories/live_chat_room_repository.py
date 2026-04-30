@@ -13,6 +13,7 @@ class LiveChatRoomRepository:
         "proxy_player_gender",
         "proxy_player_speech_style",
         "character_id",
+        "default_outfit_id",
         "status",
         "sort_order",
     )
@@ -43,6 +44,7 @@ class LiveChatRoomRepository:
             project_id=payload["project_id"],
             created_by_user_id=payload["created_by_user_id"],
             character_id=payload["character_id"],
+            default_outfit_id=payload.get("default_outfit_id"),
             title=payload["title"],
             description=payload.get("description"),
             conversation_objective=payload["conversation_objective"],

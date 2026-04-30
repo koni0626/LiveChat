@@ -126,7 +126,7 @@
       </div>
 
       <div class="d-grid mb-3">
-        <a class="btn btn-outline-dark" id="liveChatGenerateCostumeLink" href="{{ url_for('ui.live_chat_costume_create_page', project_id=project_id, session_id=session_id) }}">衣装を生成</a>
+        <button class="btn btn-outline-dark" id="liveChatClosetSelectButton" type="button">クローゼットから選択</button>
       </div>
       <form class="vstack gap-2 mb-3 d-none" id="liveChatCostumeForm" hidden>
         <div>
@@ -162,7 +162,7 @@
         </div>
       </form>
 
-      <div class="live-chat-costume-grid" id="liveChatCostumeGrid"></div>
+      <div class="live-chat-costume-grid d-none" id="liveChatCostumeGrid" hidden></div>
     </section>
     <div class="panel-head">
       <h3>画像設定</h3>
@@ -208,6 +208,29 @@
     <div class="live-chat-image-grid" id="liveChatImageGrid"></div>
   </aside>
 </section>
+
+<div class="modal fade" id="liveChatClosetSelectModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content live-chat-closet-modal">
+      <div class="modal-header">
+        <div>
+          <div class="eyebrow">Closet Select</div>
+          <h5 class="modal-title">このルームの衣装基準を選択</h5>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="live-chat-closet-picker" id="liveChatClosetPicker">
+          <div class="empty-panel">クローゼット衣装を読み込み中です。</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-outline-light" href="{{ url_for('ui.closet_page', project_id=project_id) }}">クローゼットで編集</a>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 {% endblock %}
 {% block scripts %}

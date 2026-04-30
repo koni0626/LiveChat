@@ -11,6 +11,7 @@ class StoryRepository:
         "status",
         "story_mode",
         "character_id",
+        "default_outfit_id",
         "config_markdown",
         "config_json",
         "initial_state_json",
@@ -38,6 +39,7 @@ class StoryRepository:
         row = Story(
             project_id=payload["project_id"],
             character_id=payload["character_id"],
+            default_outfit_id=payload.get("default_outfit_id"),
             created_by_user_id=payload["created_by_user_id"],
             title=payload["title"],
             description=payload.get("description"),

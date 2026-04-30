@@ -9,6 +9,7 @@ class LiveChatRoom(db.Model, TimestampMixin, SoftDeleteMixin):
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False, index=True)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     character_id = db.Column(db.Integer, db.ForeignKey("character.id"), nullable=False, index=True)
+    default_outfit_id = db.Column(db.Integer, db.ForeignKey("character_outfit.id"), index=True)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
     conversation_objective = db.Column(db.Text, nullable=False)

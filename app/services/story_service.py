@@ -14,6 +14,7 @@ from ..repositories.story_session_repository import StorySessionRepository
 from ..utils import json_util
 from .asset_service import AssetService
 from .character_service import CharacterService
+from .closet_service import ClosetService
 from .project_service import ProjectService
 from .story_state_service import StoryStateService
 
@@ -31,6 +32,7 @@ class StoryService:
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
         asset_service: AssetService | None = None,
+        closet_service: ClosetService | None = None,
     ):
         self._repo = repository or StoryRepository()
         self._session_repo = session_repository or StorySessionRepository()
@@ -40,6 +42,7 @@ class StoryService:
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
         self._asset_service = asset_service or AssetService()
+        self._closet_service = closet_service or ClosetService()
 
     def list_stories(self, project_id: int, *, include_unpublished: bool = False):
         status = None if include_unpublished else "published"
@@ -52,10 +55,17 @@ class StoryService:
         if not story:
             return None
         character = self._character_service.get_character(story.character_id)
+        thumbnail_asset = self._serialize_asset_summary(getattr(character, "thumbnail_asset_id", None) if character else None)
+        base_asset = self._serialize_asset_summary(getattr(character, "base_asset_id", None) if character else None)
+        default_outfit = self._closet_service.serialize_outfit(
+            self._closet_service.resolve_outfit(story.character_id, getattr(story, "default_outfit_id", None))
+        )
         payload = {
             "id": story.id,
             "project_id": story.project_id,
             "character_id": story.character_id,
+            "default_outfit_id": getattr(story, "default_outfit_id", None),
+            "default_outfit": default_outfit,
             "created_by_user_id": story.created_by_user_id,
             "title": story.title,
             "description": story.description,
@@ -76,6 +86,8 @@ class StoryService:
                     "nickname": getattr(character, "nickname", None),
                     "thumbnail_asset_id": getattr(character, "thumbnail_asset_id", None),
                     "base_asset_id": getattr(character, "base_asset_id", None),
+                    "thumbnail_asset": thumbnail_asset,
+                    "base_asset": base_asset,
                 }
                 if character
                 else None
@@ -111,7 +123,13 @@ class StoryService:
             return None
         if "max_turns" in payload and "config_json" not in payload:
             payload["config_json"] = story.config_json
-        normalized = self._normalize_payload(story.project_id, payload, created_by_user_id=story.created_by_user_id, require_all=False)
+        normalized = self._normalize_payload(
+            story.project_id,
+            payload,
+            created_by_user_id=story.created_by_user_id,
+            require_all=False,
+            current_character_id=story.character_id,
+        )
         if not normalized:
             raise ValueError("payload must not be empty")
         return self._repo.update(story_id, normalized)
@@ -211,14 +229,34 @@ class StoryService:
         if not isinstance(config, dict):
             config = {}
         prompt = self._build_opening_image_prompt(story, character, config)
+        explicit_outfit_id = getattr(story, "default_outfit_id", None)
+        outfit = self._closet_service.resolve_outfit(story.character_id, getattr(story, "default_outfit_id", None))
+        outfit_lines = self._closet_service.outfit_prompt_lines(outfit)
+        if outfit_lines:
+            prompt = "\n".join(
+                [
+                    prompt,
+                    "Opening image reference priority:",
+                    "Use the selected outfit image as the primary visual base for the character's clothing.",
+                    "Do not borrow clothing from the character base image when a selected outfit reference is provided.",
+                    *outfit_lines,
+                ]
+            )
         reference_paths = []
         reference_asset_ids = []
-        base_asset_id = getattr(character, "base_asset_id", None) if character else None
-        if base_asset_id:
-            asset = self._asset_service.get_asset(base_asset_id)
+
+        def append_reference(asset_id):
+            if not asset_id or int(asset_id) in {int(item) for item in reference_asset_ids}:
+                return
+            asset = self._asset_service.get_asset(int(asset_id))
             if asset and getattr(asset, "file_path", None):
                 reference_paths.append(asset.file_path)
                 reference_asset_ids.append(asset.id)
+
+        append_reference(getattr(outfit, "asset_id", None) if outfit else None)
+        base_asset_id = getattr(character, "base_asset_id", None) if character else None
+        if not explicit_outfit_id:
+            append_reference(base_asset_id)
         result = self._image_ai_client.generate_image(
             prompt,
             size=size or "1536x1024",
@@ -251,6 +289,8 @@ class StoryService:
                         "quality": quality,
                         "size": "1536x1024",
                         "reference_asset_ids": reference_asset_ids,
+                        "default_outfit_id": getattr(story, "default_outfit_id", None),
+                        "resolved_outfit_id": getattr(outfit, "id", None) if outfit else None,
                         "revised_prompt": result.get("revised_prompt"),
                     }
                 ),
@@ -286,6 +326,9 @@ class StoryService:
 
     def build_story_snapshot(self, story):
         character = self._character_service.get_character(story.character_id)
+        default_outfit = self._closet_service.serialize_outfit(
+            self._closet_service.resolve_outfit(story.character_id, getattr(story, "default_outfit_id", None))
+        )
         return {
             "story_id": story.id,
             "story_title": story.title,
@@ -294,6 +337,8 @@ class StoryService:
             "initial_state_json": self._load_json(story.initial_state_json),
             "character_id": story.character_id,
             "character_name": character.name if character else None,
+            "default_outfit_id": getattr(story, "default_outfit_id", None),
+            "default_outfit_name": default_outfit.get("name") if isinstance(default_outfit, dict) else None,
             "status": story.status,
             "version_updated_at": story.updated_at.isoformat() if getattr(story, "updated_at", None) else None,
         }
@@ -317,6 +362,11 @@ class StoryService:
             "media_url": self._build_media_url(asset.file_path),
         }
 
+    def _serialize_asset_summary(self, asset_id: int | None):
+        if not asset_id:
+            return None
+        return self._serialize_asset(self._asset_service.get_asset(asset_id))
+
     def _build_media_url(self, file_path: str | None):
         if not file_path:
             return None
@@ -327,7 +377,15 @@ class StoryService:
             return None
         return f"/media/{os.path.relpath(normalized_path, normalized_root).replace(os.sep, '/')}"
 
-    def _normalize_payload(self, project_id: int, payload: dict, *, created_by_user_id: int, require_all: bool):
+    def _normalize_payload(
+        self,
+        project_id: int,
+        payload: dict,
+        *,
+        created_by_user_id: int,
+        require_all: bool,
+        current_character_id: int | None = None,
+    ):
         normalized = {}
         if require_all or "title" in payload:
             title = str(payload.get("title") or "").strip()
@@ -343,6 +401,20 @@ class StoryService:
             if not character or character.project_id != project_id:
                 raise ValueError("character_id is invalid")
             normalized["character_id"] = character_id
+        effective_character_id = normalized.get("character_id") or current_character_id
+        if "default_outfit_id" in payload or require_all or "character_id" in normalized:
+            raw_outfit_id = payload.get("default_outfit_id")
+            try:
+                outfit_id = int(raw_outfit_id or 0)
+            except (TypeError, ValueError):
+                outfit_id = 0
+            if outfit_id:
+                outfit = self._closet_service.resolve_outfit(int(effective_character_id or 0), outfit_id)
+                if not outfit or outfit.id != outfit_id or outfit.project_id != project_id:
+                    raise ValueError("default_outfit_id is invalid")
+                normalized["default_outfit_id"] = outfit_id
+            else:
+                normalized["default_outfit_id"] = None
         if "description" in payload or require_all:
             normalized["description"] = str(payload.get("description") or "").strip() or None
         if "status" in payload or require_all:

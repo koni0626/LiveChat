@@ -49,6 +49,13 @@
         <input class="form-control" id="storyMaxTurnsInput" type="number" min="5" max="20" step="1" value="10">
       </div>
       <div class="col-12">
+        <input type="hidden" id="storyOutfitInput" name="default_outfit_id">
+        <div class="form-label">基準衣装</div>
+        <div class="room-outfit-picker" id="storyOutfitPicker">
+          <div class="empty-panel">キャラクターを選択すると衣装が表示されます。</div>
+        </div>
+      </div>
+      <div class="col-12">
         <label class="form-label" for="storyDescriptionInput">説明</label>
         <textarea class="form-control" id="storyDescriptionInput" rows="2"></textarea>
       </div>
@@ -79,6 +86,7 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/markdown_editor.js') }}"></script>
+<script src="{{ url_for('static', filename='js/outfit_picker.js') }}"></script>
 <script>
 (() => {
   const projectId = Number({{ project_id }});
@@ -92,6 +100,14 @@
   const openingImagePreview = document.getElementById("storyOpeningImagePreview");
   const markdownInput = document.getElementById("storyMarkdownInput");
   const markdownPreview = document.getElementById("storyMarkdownPreview");
+  const characterSelect = document.getElementById("storyCharacterSelect");
+  const outfitInput = document.getElementById("storyOutfitInput");
+  const outfitPicker = document.getElementById("storyOutfitPicker");
+  const outfitPickerController = window.OutfitPicker.create({
+    characterSelect,
+    input: outfitInput,
+    picker: outfitPicker,
+  });
 
   function readMaxTurns() {
     const value = Number(document.getElementById("storyMaxTurnsInput").value || 10);
@@ -100,8 +116,12 @@
 
   async function loadCharacters() {
     const characters = await NovelUI.api(`/api/v1/projects/${projectId}/characters`);
-    const select = document.getElementById("storyCharacterSelect");
-    select.innerHTML = characters.map((character) => `<option value="${character.id}">${NovelUI.escape(character.name)}</option>`).join("");
+    const rows = Array.isArray(characters) ? characters : [];
+    characterSelect.innerHTML = rows.map((character) => `<option value="${character.id}">${NovelUI.escape(character.name)}</option>`).join("");
+  }
+
+  async function loadOutfits(selectedOutfitId = "") {
+    return outfitPickerController.load(selectedOutfitId);
   }
 
   function readPayload() {
@@ -109,7 +129,8 @@
       title: document.getElementById("storyTitleInput").value.trim(),
       description: document.getElementById("storyDescriptionInput").value.trim(),
       status: document.getElementById("storyStatusSelect").value,
-      character_id: Number(document.getElementById("storyCharacterSelect").value),
+      character_id: Number(characterSelect.value),
+      default_outfit_id: outfitInput.value ? Number(outfitInput.value) : null,
       story_mode: document.getElementById("storyModeSelect").value || "free_chat",
       max_turns: readMaxTurns(),
       config_markdown: markdownInput.value,
@@ -144,7 +165,8 @@
     document.getElementById("storyTitleInput").value = story.title || "";
     document.getElementById("storyDescriptionInput").value = story.description || "";
     document.getElementById("storyStatusSelect").value = story.status || "draft";
-    document.getElementById("storyCharacterSelect").value = story.character_id || "";
+    characterSelect.value = story.character_id || "";
+    outfitInput.value = story.default_outfit_id || "";
     const modeSelect = document.getElementById("storyModeSelect");
     const mode = story.story_mode || "free_chat";
     if ([...modeSelect.options].some((option) => option.value === mode)) {
@@ -163,6 +185,7 @@
     if (!storyId) return;
     const story = await NovelUI.api(`/api/v1/stories/${storyId}`);
     fillForm(story);
+    await loadOutfits(story.default_outfit_id || "");
   }
 
   async function saveStory() {
@@ -230,10 +253,8 @@
     openingImageButton.disabled = true;
     openingImageButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>生成中...';
     try {
-      if (!storyId) {
-        const saved = await saveStory();
-        if (!saved) return;
-      }
+      const saved = await saveStory();
+      if (!saved) return;
       openingImagePreview.innerHTML = '<div class="empty-panel mb-0"><span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>オープニング画像を生成しています...</div>';
       const result = await NovelUI.api(`/api/v1/stories/${storyId}/opening-image`, {
         method: "POST",
@@ -288,7 +309,9 @@
   });
 
   renderOpeningImage(null);
-  Promise.all([loadCharacters()]).then(loadStory).catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
+  Promise.all([loadCharacters()])
+    .then(() => storyId ? loadStory() : loadOutfits(""))
+    .catch((error) => NovelUI.toast(error.message || "読み込みに失敗しました。", "danger"));
 })();
 </script>
 {% endblock %}

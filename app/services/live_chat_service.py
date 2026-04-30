@@ -226,6 +226,15 @@ class LiveChatService:
     def select_costume(self, session_id: int, session_image_id: int):
         return self._media_service.select_costume(session_id, session_image_id)
 
+    def list_closet_outfits(self, session_id: int):
+        return self._media_service.list_closet_outfits(session_id)
+
+    def select_closet_outfit(self, session_id: int, outfit_id: int):
+        return self._media_service.select_closet_outfit(session_id, outfit_id)
+
+    def create_scene_from_selected_costume(self, session_id: int, *, reason: str | None = None):
+        return self._media_service.create_scene_from_selected_costume(session_id, reason=reason)
+
     def register_uploaded_costume(self, session_id: int, asset_id: int, payload: dict | None = None):
         return self._media_service.register_uploaded_costume(session_id, asset_id, payload)
 

@@ -8,6 +8,7 @@ class Story(db.Model, TimestampMixin, SoftDeleteMixin):
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False, index=True)
     character_id = db.Column(db.Integer, db.ForeignKey("character.id"), nullable=False, index=True)
+    default_outfit_id = db.Column(db.Integer, db.ForeignKey("character_outfit.id"), index=True)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)

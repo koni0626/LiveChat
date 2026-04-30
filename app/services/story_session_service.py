@@ -18,6 +18,7 @@ from ..repositories.story_session_repository import StorySessionRepository
 from ..utils import json_util
 from .asset_service import AssetService
 from .character_service import CharacterService
+from .closet_service import ClosetService
 from .letter_service import LetterService
 from .project_service import ProjectService
 from . import live_chat_prompt_support as prompt_support
@@ -63,6 +64,7 @@ class StorySessionService:
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
         self._world_map_service = world_map_service or WorldMapService()
+        self._closet_service = ClosetService()
 
     def list_sessions(self, project_id: int, *, owner_user_id: int | None = None):
         return self._repo.list_by_project(project_id, owner_user_id=owner_user_id)
@@ -440,13 +442,16 @@ class StorySessionService:
         if not session:
             return None
         payload = dict(payload or {})
-        self.ensure_initial_costume(session.id)
         context = self._build_generation_context(session)
         image_options = self._scene_image_options(session, payload)
         prompt = str(payload.get("prompt_text") or "").strip() or self._generate_scene_image_prompt(context)
         visual_context = self._build_live_chat_visual_context(session, context)
         reference_paths, reference_asset_ids = self._collect_reference_assets(context)
+        outfit = self._default_outfit_for_context(context)
         prompt, prompt_metadata = self._polish_scene_image_prompt(prompt, visual_context, payload)
+        outfit_lines = self._closet_service.outfit_prompt_lines(outfit)
+        if outfit_lines:
+            prompt = "\n".join([prompt, *outfit_lines])
         prompt = self._apply_costume_reference_guardrails(prompt, reference_asset_ids)
         prompt = self._apply_first_person_game_cg_guardrails(prompt)
         prompt_metadata["costume_reference_asset_ids"] = reference_asset_ids
@@ -598,6 +603,11 @@ class StorySessionService:
         return self.serialize_image(row)
 
     def _initial_costume_asset_id(self, story, character):
+        outfit_id = getattr(story, "default_outfit_id", None)
+        if outfit_id and character:
+            outfit = self._closet_service.resolve_outfit(character.id, outfit_id)
+            if outfit and getattr(outfit, "asset_id", None):
+                return int(outfit.asset_id)
         asset_id = (
             getattr(character, "base_asset_id", None)
             or getattr(story, "main_character_reference_asset_id", None)
@@ -1780,7 +1790,6 @@ class StorySessionService:
         reference_paths = []
         reference_asset_ids = []
         session_id = (context.get("session") or {}).get("id")
-        self.ensure_initial_costume(session_id) if session_id else None
         selected_costume = self._selected_costume_image(session_id)
         if selected_costume:
             asset = self._asset_service.get_asset(selected_costume.asset_id)
@@ -1789,6 +1798,13 @@ class StorySessionService:
                 reference_asset_ids.append(asset.id)
         if reference_paths:
             return reference_paths, reference_asset_ids
+        outfit = self._default_outfit_for_context(context)
+        if outfit:
+            asset = self._asset_service.get_asset(outfit.asset_id)
+            if asset and getattr(asset, "file_path", None):
+                reference_paths.append(asset.file_path)
+                reference_asset_ids.append(asset.id)
+                return reference_paths, reference_asset_ids
         story = context.get("story") or {}
         for asset_id in (
             (story.get("character") or {}).get("base_asset_id"),
@@ -1801,6 +1817,17 @@ class StorySessionService:
                 reference_paths.append(asset.file_path)
                 reference_asset_ids.append(asset.id)
         return reference_paths[:2], reference_asset_ids[:2]
+
+    def _default_outfit_for_context(self, context: dict):
+        character_id = int((context.get("character") or {}).get("id") or 0)
+        if not character_id:
+            character_id = int(((context.get("story") or {}).get("character") or {}).get("id") or 0)
+        if not character_id:
+            return None
+        story = context.get("story") if isinstance(context.get("story"), dict) else {}
+        snapshot = context.get("story_snapshot") if isinstance(context.get("story_snapshot"), dict) else {}
+        outfit_id = story.get("default_outfit_id") or snapshot.get("default_outfit_id")
+        return self._closet_service.resolve_outfit(character_id, outfit_id)
 
     def _selected_costume_image(self, session_id: int | None):
         if not session_id:

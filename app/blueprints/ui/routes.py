@@ -35,6 +35,7 @@ def _project_nav(project_id: int | None, current_user: User | None = None):
     links.append({"label": "チャットルーム", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)})
     links.append({"label": "セッション", "icon": "bi-dice-5", "href": url_for("ui.story_session_list_page", project_id=project_id)})
     links.append({"label": "スタジオ", "icon": "bi-palette", "href": url_for("ui.studio_page", project_id=project_id)})
+    links.append({"label": "クローゼット", "icon": "bi-person-bounding-box", "href": url_for("ui.closet_page", project_id=project_id)})
     return links
 
 
@@ -174,6 +175,11 @@ def outings_page(project_id: int):
     return _render("ui/outings.html", title="おでかけ", screen_id="outings", project_id=project_id)
 
 
+@ui_bp.route("/projects/<int:project_id>/closet", methods=["GET"])
+def closet_page(project_id: int):
+    return _render("ui/closet.html", title="クローゼット", screen_id="closet", project_id=project_id)
+
+
 @ui_bp.route("/projects/<int:project_id>/world-news", methods=["GET"])
 def world_news_page(project_id: int):
     return _render("ui/world_news.html", title="ワールドニュース", screen_id="world-news", project_id=project_id)
@@ -271,24 +277,12 @@ def live_chat_page(project_id: int, session_id: int):
 
 @ui_bp.route("/projects/<int:project_id>/live-chat/<int:session_id>/costumes/new", methods=["GET"])
 def live_chat_costume_create_page(project_id: int, session_id: int):
-    return _render(
-        "ui/live_chat_costume_create.html",
-        title="衣装生成",
-        screen_id="live-chat-costume-create",
-        project_id=project_id,
-        session_id=session_id,
-    )
+    return redirect(url_for("ui.closet_page", project_id=project_id))
 
 
 @ui_bp.route("/projects/<int:project_id>/story-sessions/<int:session_id>/costumes/new", methods=["GET"])
 def story_session_costume_create_page(project_id: int, session_id: int):
-    return _render(
-        "ui/story_session_costume_create.html",
-        title="衣装生成",
-        screen_id="live-chat-costume-create",
-        project_id=project_id,
-        session_id=session_id,
-    )
+    return redirect(url_for("ui.closet_page", project_id=project_id))
 
 
 @ui_bp.route("/settings", methods=["GET"])

@@ -32,6 +32,13 @@
         </select>
       </div>
       <div class="col-12">
+        <input type="hidden" id="liveChatRoomOutfitInput" name="default_outfit_id">
+        <div class="form-label">基準衣装</div>
+        <div class="room-outfit-picker" id="liveChatRoomOutfitPicker">
+          <div class="empty-panel">キャラクターを選択すると衣装が表示されます。</div>
+        </div>
+      </div>
+      <div class="col-12">
         <label class="form-label" for="liveChatRoomDescriptionInput">説明</label>
         <input class="form-control" id="liveChatRoomDescriptionInput" name="description" placeholder="ユーザーに見せる簡単な説明">
       </div>
@@ -167,6 +174,7 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/outfit_picker.js') }}"></script>
 <script>
 (() => {
   const projectId = Number({{ project_id }});
@@ -174,6 +182,13 @@
   const roomForm = document.getElementById("liveChatRoomForm");
   if (!roomForm) return;
   const characterSelect = document.getElementById("liveChatRoomCharacterSelect");
+  const outfitInput = document.getElementById("liveChatRoomOutfitInput");
+  const outfitPicker = document.getElementById("liveChatRoomOutfitPicker");
+  const outfitPickerController = window.OutfitPicker.create({
+    characterSelect,
+    input: outfitInput,
+    picker: outfitPicker,
+  });
   const objectivePreview = document.getElementById("liveChatRoomObjectivePreview");
   const objectiveEditButton = document.getElementById("liveChatRoomObjectiveEditButton");
   const objectiveModalElement = document.getElementById("liveChatRoomObjectiveModal");
@@ -276,6 +291,7 @@
   function fillRoom(room) {
     roomForm.title.value = room.title || "";
     roomForm.character_id.value = room.character_id || "";
+    outfitInput.value = room.default_outfit_id || "";
     roomForm.status.value = room.status || "draft";
     roomForm.description.value = room.description || "";
     roomForm.conversation_objective.value = room.conversation_objective || "";
@@ -295,10 +311,15 @@
     ].join("");
   }
 
+  async function loadOutfits(selectedOutfitId = "") {
+    return outfitPickerController.load(selectedOutfitId);
+  }
+
   async function loadRoom() {
     if (!roomId) return;
     const room = await NovelUI.api(`/api/v1/chat/rooms/${roomId}`);
     fillRoom(room);
+    await loadOutfits(room.default_outfit_id || "");
   }
 
   async function saveRoom(event) {
@@ -306,6 +327,7 @@
     const body = {
       title: roomForm.title.value.trim(),
       character_id: Number(roomForm.character_id.value || 0),
+      default_outfit_id: outfitInput.value ? Number(outfitInput.value) : null,
       status: roomForm.status.value,
       description: roomForm.description.value.trim(),
       conversation_objective: roomForm.conversation_objective.value.trim(),
@@ -331,6 +353,7 @@
   roomForm.addEventListener("submit", (event) => {
     saveRoom(event).catch((error) => NovelUI.toast(error.message || "ルーム保存に失敗しました。", "danger"));
   });
+
   objectiveEditButton?.addEventListener("click", openObjectiveEditor);
   objectiveApplyButton?.addEventListener("click", applyObjectiveEditor);
   objectiveMarkdownInput?.addEventListener("input", () => {
@@ -345,7 +368,7 @@
   renderObjectivePreview();
   renderProxyPlayerObjectivePreview();
   loadCharacters()
-    .then(loadRoom)
+    .then(() => roomId ? loadRoom() : loadOutfits(""))
     .catch((error) => NovelUI.toast(error.message || "ルーム設定の読み込みに失敗しました。", "danger"));
 })();
 </script>

@@ -7,8 +7,15 @@
       costumeGrid,
       costumePreview,
       generateCostumeButton,
+      closetSelectButton,
+      closetSelectModalElement,
+      closetPicker,
       loadContext,
     } = options;
+    const closetSelectModal = closetSelectModalElement ? new bootstrap.Modal(closetSelectModalElement) : null;
+    if (closetSelectModalElement) {
+      document.body.appendChild(closetSelectModalElement);
+    }
 
     function render(context) {
       const costumes = context.costumes || [];
@@ -24,7 +31,7 @@
           `
           : '<div class="empty-panel">衣装の基準画像がありません。</div>';
       }
-      if (!costumeGrid) return;
+      if (!costumeGrid || costumeGrid.hidden) return;
       if (!costumes.length) {
         costumeGrid.innerHTML = '<div class="empty-panel">衣装候補がありません。</div>';
         return;
@@ -49,6 +56,74 @@
       generateCostumeButton.innerHTML = active
         ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>衣装生成中...'
         : "衣装を生成";
+    }
+
+    function renderClosetPicker(payload) {
+      if (!closetPicker) return;
+      const outfits = payload?.outfits || [];
+      if (!outfits.length) {
+        closetPicker.innerHTML = '<div class="empty-panel">このキャラクターのクローゼット衣装がありません。</div>';
+        return;
+      }
+      closetPicker.innerHTML = outfits.map((outfit) => {
+        const mediaUrl = outfit.thumbnail_asset?.media_url || outfit.asset?.media_url || "";
+        const tags = Array.isArray(outfit.tags) ? outfit.tags.slice(0, 3) : [];
+        return `
+          <article class="live-chat-closet-card ${outfit.is_selected_for_session ? "selected" : ""}">
+            <div class="live-chat-closet-image">
+              ${mediaUrl ? `<img src="${NovelUI.escape(mediaUrl)}" alt="">` : "<span>No Image</span>"}
+              ${outfit.is_selected_for_session ? '<span class="live-chat-closet-selected">選択中</span>' : ""}
+            </div>
+            <div class="live-chat-closet-body">
+              <div class="live-chat-closet-meta">
+                <span>${NovelUI.escape(outfit.usage_scene || "outfit")}</span>
+                ${outfit.is_default ? "<span>Default</span>" : ""}
+              </div>
+              <h4>${NovelUI.escape(outfit.name || "衣装")}</h4>
+              <details>
+                <summary>説明を表示</summary>
+                <p>${NovelUI.escape(outfit.description || "説明はありません。")}</p>
+              </details>
+              <div class="live-chat-closet-tags">
+                ${tags.map((tag) => `<span>${NovelUI.escape(tag)}</span>`).join("")}
+              </div>
+              <button class="btn btn-sunrise btn-sm w-100" type="button" data-closet-outfit-id="${NovelUI.escape(outfit.id)}" ${outfit.is_selected_for_session ? "disabled" : ""}>
+                ${outfit.is_selected_for_session ? "選択中" : "この衣装を使う"}
+              </button>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    async function openClosetPicker() {
+      if (!closetSelectModal || !closetPicker) return;
+      closetPicker.innerHTML = '<div class="empty-panel"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>クローゼット衣装を読み込み中です。</div>';
+      closetSelectModal.show();
+      try {
+        renderClosetPicker(await api.loadClosetOutfits(getSessionId()));
+      } catch (error) {
+        closetPicker.innerHTML = '<div class="empty-panel">クローゼット衣装を読み込めませんでした。</div>';
+        NovelUI.toast(error.message || "クローゼット衣装の読み込みに失敗しました。", "danger");
+      }
+    }
+
+    async function selectClosetOutfit(event) {
+      const button = event.target.closest("[data-closet-outfit-id]");
+      if (!button) return;
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>選択中...';
+      try {
+        await api.selectClosetOutfit(getSessionId(), button.dataset.closetOutfitId);
+        await loadContext();
+        closetSelectModal?.hide();
+        NovelUI.toast("クローゼット衣装をこのルームの基準にしました。");
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = originalText;
+        NovelUI.toast(error.message || "衣装の選択に失敗しました。", "danger");
+      }
     }
 
     async function generateCostume() {
@@ -98,8 +173,12 @@
         event.preventDefault();
         await generateCostume();
       });
-      costumeGrid?.addEventListener("click", selectCostume);
+      if (costumeGrid && !costumeGrid.hidden) {
+        costumeGrid.addEventListener("click", selectCostume);
+      }
       costumePreview?.addEventListener("click", selectCostume);
+      closetSelectButton?.addEventListener("click", openClosetPicker);
+      closetPicker?.addEventListener("click", selectClosetOutfit);
     }
 
     return {

@@ -23,6 +23,9 @@
   const costumeGrid = document.getElementById("liveChatCostumeGrid");
   const costumePreview = document.getElementById("liveChatCostumePreview");
   const generateCostumeButton = document.getElementById("liveChatGenerateCostumeButton");
+  const closetSelectButton = document.getElementById("liveChatClosetSelectButton");
+  const closetSelectModalElement = document.getElementById("liveChatClosetSelectModal");
+  const closetPicker = document.getElementById("liveChatClosetPicker");
   const sceneChoicePanel = document.getElementById("liveChatSceneChoicePanel");
 
   let currentContext = null;
@@ -248,6 +251,9 @@
     costumeGrid,
     costumePreview,
     generateCostumeButton,
+    closetSelectButton,
+    closetSelectModalElement,
+    closetPicker,
     loadContext,
   });
   costumeRoomController.bind();

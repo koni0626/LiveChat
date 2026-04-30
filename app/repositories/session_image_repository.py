@@ -117,11 +117,13 @@ class SessionImageRepository:
             query = SessionImage.query.filter(
                 SessionImage.session_id == row.session_id,
                 SessionImage.image_type.in_(self.COSTUME_TYPES),
+                SessionImage.id != row.id,
             )
         else:
             query = SessionImage.query.filter(
                 SessionImage.session_id == row.session_id,
                 ~SessionImage.image_type.in_(self.COSTUME_TYPES),
+                SessionImage.id != row.id,
             )
         query.update({"is_selected": 0}, synchronize_session=False)
         row.is_selected = 1

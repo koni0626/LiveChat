@@ -5,6 +5,7 @@ from .chat_message import ChatMessage
 from .chat_session import ChatSession
 from .character import Character
 from .character_feed_profile import CharacterFeedProfile
+from .character_outfit import CharacterOutfit
 from .feed_like import FeedLike
 from .feed_post import FeedPost
 from .live_chat_room import LiveChatRoom
@@ -35,6 +36,7 @@ __all__ = [
     "ChatSession",
     "Character",
     "CharacterFeedProfile",
+    "CharacterOutfit",
     "FeedLike",
     "FeedPost",
     "LiveChatRoom",
