@@ -43,6 +43,17 @@ class UserSettingService:
         db.session.commit()
         return setting
 
+    def _get_global_setting(self) -> UserSetting | None:
+        owner = (
+            User.query.filter_by(role="superuser", status="active")
+            .filter(User.deleted_at.is_(None))
+            .order_by(User.id.asc())
+            .first()
+        )
+        if owner:
+            return self._get_or_create(owner.id)
+        return UserSetting.query.order_by(UserSetting.user_id.asc()).first()
+
     def _serialize(self, setting: UserSetting) -> dict:
         return {
             "user_id": setting.user_id,
@@ -95,11 +106,44 @@ class UserSettingService:
         setting = self._get_or_create(user.id)
         return self._serialize(setting)
 
+    def get_global_settings(self) -> dict:
+        setting = self._get_global_setting()
+        if not setting:
+            return self._serialize_defaults()
+        return self._serialize(setting)
+
+    def _serialize_defaults(self) -> dict:
+        return {
+            "user_id": None,
+            "text_ai_model": self.DEFAULTS["text_ai_model"],
+            "image_ai_provider": self.DEFAULTS["image_ai_provider"],
+            "image_ai_model": self.DEFAULTS["image_ai_model"],
+            "default_quality": self.DEFAULTS["default_quality"],
+            "default_size": self.DEFAULTS["default_size"],
+            "prefer_portrait_on_mobile": bool(self.DEFAULTS["prefer_portrait_on_mobile"]),
+            "autosave_interval": self.DEFAULTS["autosave_interval"],
+            "available_options": {
+                "image_providers": sorted(self.VALID_IMAGE_PROVIDERS),
+                "provider_default_models": dict(self.PROVIDER_DEFAULT_MODELS),
+                "qualities": sorted(self.VALID_QUALITIES),
+                "sizes": sorted(self.VALID_SIZES),
+                "autosave_intervals": sorted(self.VALID_AUTOSAVE_INTERVALS, key=lambda item: (item == "off", item)),
+            },
+        }
+
     def update_settings(self, user_id: int | None, payload: dict | None) -> dict:
         user = self._get_active_user(user_id)
-        payload = dict(payload or {})
         setting = self._get_or_create(user.id)
+        return self._update_setting(setting, payload)
 
+    def update_global_settings(self, payload: dict | None) -> dict:
+        setting = self._get_global_setting()
+        if not setting:
+            raise UnauthorizedError()
+        return self._update_setting(setting, payload)
+
+    def _update_setting(self, setting: UserSetting, payload: dict | None) -> dict:
+        payload = dict(payload or {})
         text_ai_model = self._normalize_string(payload, "text_ai_model")
         image_ai_provider = self._normalize_string(payload, "image_ai_provider").lower()
         image_ai_model = self._normalize_string(payload, "image_ai_model")
@@ -129,8 +173,15 @@ class UserSettingService:
         return self._serialize(setting)
 
     def apply_image_generation_settings(self, user_id: int | None, payload: dict | None = None) -> dict:
-        options = dict(payload or {})
         settings = self.get_settings(user_id)
+        return self._apply_image_generation_settings(settings, payload)
+
+    def apply_global_image_generation_settings(self, payload: dict | None = None) -> dict:
+        settings = self.get_global_settings()
+        return self._apply_image_generation_settings(settings, payload)
+
+    def _apply_image_generation_settings(self, settings: dict, payload: dict | None = None) -> dict:
+        options = dict(payload or {})
         if "provider" not in options and options.get("image_ai_provider"):
             options["provider"] = options.get("image_ai_provider")
         if "model" not in options and options.get("image_ai_model"):
@@ -148,6 +199,15 @@ class UserSettingService:
     def reset_settings(self, user_id: int | None) -> dict:
         user = self._get_active_user(user_id)
         setting = self._get_or_create(user.id)
+        return self._reset_setting(setting)
+
+    def reset_global_settings(self) -> dict:
+        setting = self._get_global_setting()
+        if not setting:
+            raise UnauthorizedError()
+        return self._reset_setting(setting)
+
+    def _reset_setting(self, setting: UserSetting) -> dict:
         for key, value in self.DEFAULTS.items():
             setattr(setting, key, value)
         db.session.commit()

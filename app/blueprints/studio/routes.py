@@ -45,7 +45,7 @@ def list_studio_images(project_id: int):
 def generate_studio_image(project_id: int):
     _, user = _require_project(project_id)
     payload = request.get_json(silent=True) or {}
-    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
+    payload = user_setting_service.apply_global_image_generation_settings(payload)
     try:
         result = studio_service.generate_variant(project_id, user.id, payload)
     except ValueError as exc:

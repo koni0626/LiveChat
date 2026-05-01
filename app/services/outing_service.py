@@ -422,13 +422,12 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
             outfit = self._closet_service.resolve_outfit(character.id, state.get("selected_outfit_id"))
             prompt = self._build_step_image_prompt(row, character, location, step, selected_choice=selected_choice, is_final=is_final)
             reference_paths, reference_asset_ids = self._step_reference_paths(character, location, outfit=outfit)
-            image_options = self._user_setting_service.apply_image_generation_settings(
-                user_id,
-                {"size": "1536x1024", "quality": current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium")},
+            image_options = self._user_setting_service.apply_global_image_generation_settings(
+                {"quality": current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium")},
             )
             result = self._image_ai_client.generate_image(
                 prompt,
-                size=image_options.get("size") or "1536x1024",
+                size=image_options.get("size") or UserSettingService.DEFAULTS.get("default_size", "1024x1024"),
                 quality=image_options.get("quality") or current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium"),
                 model=image_options.get("model"),
                 provider=image_options.get("provider"),
@@ -458,7 +457,7 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
                             "provider": result.get("provider"),
                             "model": result.get("model"),
                             "quality": result.get("quality") or image_options.get("quality"),
-                            "size": image_options.get("size") or "1536x1024",
+                            "size": image_options.get("size") or UserSettingService.DEFAULTS.get("default_size", "1024x1024"),
                             "aspect_ratio": result.get("aspect_ratio"),
                             "prompt": prompt,
                             "revised_prompt": result.get("revised_prompt"),

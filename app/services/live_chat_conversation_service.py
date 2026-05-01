@@ -16,6 +16,7 @@ from .chat_session_service import ChatSessionService
 from .letter_service import LetterService
 from .live_chat_media_service import LiveChatMediaService
 from .session_state_service import SessionStateService
+from .user_setting_service import UserSettingService
 
 
 class LiveChatConversationService:
@@ -596,7 +597,7 @@ class LiveChatConversationService:
                 "image_type": "directed_scene",
                 "prompt_text": prompt,
                 "use_existing_prompt": True,
-                "size": payload.get("size") or "1536x1024",
+                "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1024x1024"),
                 "quality": payload.get("quality") or "low",
             },
         )

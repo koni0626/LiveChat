@@ -47,7 +47,7 @@ def upload_world_map(project_id: int):
 def generate_world_map(project_id: int):
     _project, user = require_project_manage(project_id)
     payload = request.get_json(silent=True) or {}
-    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
+    payload = user_setting_service.apply_global_image_generation_settings(payload)
     try:
         image = world_map_service.generate_map_image(project_id, payload, user.id)
     except RuntimeError as exc:
@@ -145,7 +145,7 @@ def generate_location_image(location_id: int):
     location = _require_location_manage(location_id)
     payload = request.get_json(silent=True) or {}
     _project, user = require_project_manage(location.project_id)
-    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
+    payload = user_setting_service.apply_global_image_generation_settings(payload)
     try:
         location = world_map_service.generate_location_image(location_id, payload)
     except RuntimeError as exc:

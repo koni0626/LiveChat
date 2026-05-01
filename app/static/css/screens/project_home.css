@@ -182,3 +182,33 @@ body[data-screen="project-home"] #projectMetaChips .soft-code {
   padding: 0.28rem 0.7rem;
 }
 
+@media (max-width: 991.98px) {
+  body[data-screen="project-home"] .world-home-entry {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  body[data-screen="project-home"] .world-home-signboard {
+    min-height: 0;
+  }
+
+  body[data-screen="project-home"] .world-home-signboard-image,
+  body[data-screen="project-home"] .world-home-signboard-empty {
+    min-height: 0;
+    aspect-ratio: 16 / 9;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    border-top: 0;
+  }
+
+  body[data-screen="project-home"] .world-home-signboard-image {
+    object-fit: cover;
+  }
+
+  body[data-screen="project-home"] .world-home-menu {
+    padding: 1rem 1rem 1.1rem;
+  }
+}

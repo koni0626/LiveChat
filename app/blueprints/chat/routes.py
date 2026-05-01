@@ -172,22 +172,14 @@ def create_room_chat_session(room_id: int):
     if not created:
         raise NotFoundError()
     try:
-        settings = user_setting_service.get_settings(user.id)
         requested_size = str(payload.get("size") or "").strip()
         valid_sizes = {"1024x1024", "1024x1536", "1536x1024"}
-        if requested_size not in valid_sizes:
-            user_agent = (request.headers.get("User-Agent") or "").lower()
-            is_mobile = any(token in user_agent for token in ("iphone", "android", "mobile", "ipad"))
-            requested_size = "1024x1536" if is_mobile else "1536x1024"
+        image_payload = {"quality": "low"}
+        if requested_size in valid_sizes:
+            image_payload["size"] = requested_size
         initial_image = live_chat_service.generate_image(
             created["session"]["id"],
-            user_setting_service.apply_image_generation_settings(
-                user.id,
-                {
-                    "quality": settings.get("default_quality") or "low",
-                    "size": requested_size,
-                },
-            ),
+            user_setting_service.apply_global_image_generation_settings(image_payload),
         )
         created["initial_image"] = initial_image
     except Exception as exc:  # Keep the session usable even when the image API is temporarily unavailable.
@@ -293,8 +285,9 @@ def delete_chat_message(session_id: int, message_id: int):
 
 @chat_bp.route("/chat/sessions/<int:session_id>/choices/<choice_id>/execute", methods=["POST"])
 def execute_chat_scene_choice(session_id: int, choice_id: str):
-    _require_session(session_id, for_manage=True)
+    _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_global_image_generation_settings(payload)
     result = live_chat_service.execute_scene_choice(session_id, choice_id, payload)
     if not result:
         raise NotFoundError()
@@ -398,7 +391,7 @@ def delete_chat_costume(session_id: int, image_id: int):
 def generate_chat_image(session_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
-    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
+    payload = user_setting_service.apply_global_image_generation_settings(payload)
     try:
         result = live_chat_service.generate_image(session_id, payload)
     except ValueError as exc:

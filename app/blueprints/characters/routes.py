@@ -187,7 +187,7 @@ def generate_character_base_image(character_id: int):
     if not existing:
         raise NotFoundError()
     _project, user = require_project_manage(existing.project_id)
-    payload = user_setting_service.apply_image_generation_settings(user.id, payload)
+    payload = user_setting_service.apply_global_image_generation_settings(payload)
     try:
         character = character_service.generate_base_image(character_id, payload)
     except ValueError as exc:

@@ -291,7 +291,14 @@ class StorySessionService:
             "letter_scheduled": letter_scheduled,
         }
 
-    def execute_choice(self, session_id: int, choice_id: str, *, generate_image: bool = False):
+    def execute_choice(
+        self,
+        session_id: int,
+        choice_id: str,
+        *,
+        generate_image: bool = False,
+        image_payload: dict | None = None,
+    ):
         session = self.get_session(session_id)
         if not session:
             return None
@@ -306,11 +313,16 @@ class StorySessionService:
         result = self.post_user_message(session_id, label)
         if generate_image and result:
             try:
+                image_payload = dict(image_payload or {})
                 result["generated_image"] = self.generate_scene_image(
                     session_id,
                     {
                         "visual_type": "choice_result",
                         "subject": label,
+                        **({"size": image_payload.get("size")} if image_payload.get("size") else {}),
+                        **({"quality": image_payload.get("quality")} if image_payload.get("quality") else {}),
+                        **({"provider": image_payload.get("provider")} if image_payload.get("provider") else {}),
+                        **({"model": image_payload.get("model")} if image_payload.get("model") else {}),
                     },
                 )
             except Exception as exc:
@@ -1642,17 +1654,17 @@ class StorySessionService:
     def _scene_image_options(self, session, payload: dict):
         settings = {}
         try:
-            settings = self._user_setting_service.get_settings(session.owner_user_id)
+            settings = self._user_setting_service.get_global_settings()
         except Exception:
             settings = {}
         quality = str(payload.get("quality") or settings.get("default_quality") or "medium").strip()
-        size = str(payload.get("size") or settings.get("default_size") or "1536x1024").strip()
+        size = str(payload.get("size") or settings.get("default_size") or UserSettingService.DEFAULTS["default_size"]).strip()
         provider = str(payload.get("provider") or payload.get("image_ai_provider") or settings.get("image_ai_provider") or "openai").strip()
         model = str(payload.get("model") or payload.get("image_ai_model") or settings.get("image_ai_model") or "").strip()
         if quality not in UserSettingService.VALID_QUALITIES:
             quality = "medium"
         if size not in UserSettingService.VALID_SIZES:
-            size = "1536x1024"
+            size = UserSettingService.DEFAULTS["default_size"]
         if provider not in UserSettingService.VALID_IMAGE_PROVIDERS:
             provider = "openai"
         return {"quality": quality, "size": size, "provider": provider, "model": model or None}

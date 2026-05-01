@@ -496,8 +496,7 @@ NGルール: {character.get("ng_rules") or ""}
                 reference_asset_ids.append(asset.id)
         image_options = {}
         try:
-            image_options = self._user_setting_service.apply_image_generation_settings(
-                getattr(session, "owner_user_id", None),
+            image_options = self._user_setting_service.apply_global_image_generation_settings(
                 {"size": "1536x1024", "quality": current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium")},
             )
         except Exception:
