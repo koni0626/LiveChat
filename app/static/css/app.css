@@ -137,23 +137,30 @@ body::before {
   background: #00f5d4; box-shadow: 0 0 0 0.2rem rgba(0, 245, 212, 0.18);
 }
 .login-user-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "icon copy logout"
+    "profile profile profile";
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.6rem 0.7rem;
   padding: 0.85rem;
   border-radius: 1rem;
   background: linear-gradient(135deg, rgba(8, 22, 39, 0.84), rgba(12, 30, 55, 0.66));
   border: 1px solid rgba(90, 198, 255, 0.18);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  overflow: hidden;
 }
 .login-user-card .login-user-copy {
   flex: 1 1 auto;
 }
 .login-user-icon {
+  grid-area: icon;
   color: #7feaff;
   font-size: 1.35rem;
 }
 .login-user-copy {
+  grid-area: copy;
   min-width: 0;
 }
 .login-user-label {
@@ -170,6 +177,7 @@ body::before {
   white-space: nowrap;
 }
 .login-user-logout {
+  grid-area: logout;
   display: inline-grid;
   place-items: center;
   width: 2.15rem;
@@ -186,6 +194,57 @@ body::before {
   border-color: rgba(255, 122, 168, 0.3);
   color: #ffd4df;
   transform: translateY(-1px);
+}
+
+.profile-quick-button {
+  grid-area: profile;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  max-width: 100%;
+  min-height: 2.2rem;
+  padding: 0.38rem 0.8rem;
+  border: 1px solid rgba(108, 220, 255, 0.55);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(0, 245, 212, 0.26), rgba(98, 192, 255, 0.22), rgba(189, 92, 255, 0.3));
+  color: #f3fdff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  box-shadow:
+    0 0 16px rgba(0, 245, 212, 0.22),
+    0 0 24px rgba(98, 192, 255, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.profile-quick-button:hover {
+  border-color: rgba(126, 250, 255, 0.85);
+  color: #ffffff;
+  box-shadow:
+    0 0 20px rgba(0, 245, 212, 0.34),
+    0 0 32px rgba(98, 192, 255, 0.24),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.profile-modal {
+  border: 1px solid rgba(84, 177, 255, 0.28);
+  border-radius: 1rem;
+  background:
+    linear-gradient(180deg, rgba(8, 17, 31, 0.98), rgba(6, 14, 27, 0.95)),
+    radial-gradient(circle at top right, rgba(189, 92, 255, 0.18), transparent 40%);
+  color: #e8fbff;
+}
+
+.profile-modal .modal-header {
+  border-bottom: 1px solid rgba(84, 177, 255, 0.18);
+}
+
+#profileModal {
+  z-index: 2095;
 }
 
 .app-main { padding: 1.4rem 1.4rem 2rem; }

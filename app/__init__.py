@@ -58,10 +58,12 @@ def _register_cli_commands(app: Flask):
 
         user = User.query.filter_by(email=normalized_email).first()
         if user is None:
-            user = User(email=normalized_email, display_name=display_name, status=status, role=role)
+            user = User(email=normalized_email, display_name=display_name, player_name=display_name, status=status, role=role)
             db.session.add(user)
         else:
             user.display_name = display_name
+            if not str(getattr(user, "player_name", "") or "").strip():
+                user.player_name = display_name
             user.status = status
             user.role = role
 

@@ -25,6 +25,7 @@ from .project_service import ProjectService
 from .user_setting_service import UserSettingService
 from .world_service import WorldService
 from .world_news_service import WorldNewsService
+from .character_user_memory_service import CharacterUserMemoryService
 
 
 class OutingService:
@@ -43,6 +44,7 @@ class OutingService:
         user_setting_service: UserSettingService | None = None,
         world_news_service: WorldNewsService | None = None,
         closet_service: ClosetService | None = None,
+        character_user_memory_service: CharacterUserMemoryService | None = None,
     ):
         self._outings = outing_repository or OutingSessionRepository()
         self._characters = character_repository or CharacterRepository()
@@ -57,6 +59,7 @@ class OutingService:
         self._user_setting_service = user_setting_service or UserSettingService()
         self._world_news_service = world_news_service or WorldNewsService()
         self._closet_service = closet_service or ClosetService()
+        self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
 
     def options(self, project_id: int, user_id: int) -> dict:
         return {
@@ -177,6 +180,12 @@ class OutingService:
             )
         row = self._outings.update(row.id, updates)
         if is_final:
+            self._character_user_memory_service.update_from_event(
+                user_id=row.user_id,
+                character_id=row.character_id,
+                important_events=updates.get("memory_summary") or step.get("memory_summary") or "",
+                memory_notes=step.get("narration") or "",
+            )
             self._schedule_completion_artifacts(row.id, step)
         return self.serialize_outing(row)
 

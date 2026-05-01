@@ -1,4 +1,6 @@
 from flask import Blueprint, request, session
+from ...extensions import db
+from ...models import User
 from ...api import json_response
 from app.services.auth_service import AuthService
 from ...security import check_login_rate_limit, clear_login_failures, login_rate_limit_key, record_login_failure
@@ -70,3 +72,22 @@ def me():
         return json_response({"user": None}, status=401)
 
     return json_response({"user": user})
+
+
+@auth_bp.route("/me/player-name", methods=["PATCH"])
+def update_player_name():
+    user_id = _get_session_user_id()
+    if not user_id:
+        return json_response({"message": "unauthorized"}, status=401)
+    row = User.query.get(user_id)
+    if not row or not row.is_active_user:
+        _set_session_user(None)
+        return json_response({"message": "unauthorized"}, status=401)
+    payload = request.get_json(silent=True) or {}
+    player_name = str(payload.get("player_name") or "").strip()
+    if not player_name:
+        return json_response({"message": "player_name is required"}, status=400)
+    row.player_name = player_name[:100]
+    db.session.add(row)
+    db.session.commit()
+    return json_response({"user": auth_service.get_current_user(row.id)})

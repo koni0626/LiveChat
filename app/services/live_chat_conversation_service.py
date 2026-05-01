@@ -17,6 +17,7 @@ from .letter_service import LetterService
 from .live_chat_media_service import LiveChatMediaService
 from .session_state_service import SessionStateService
 from .user_setting_service import UserSettingService
+from .character_user_memory_service import CharacterUserMemoryService
 
 
 class LiveChatConversationService:
@@ -34,6 +35,7 @@ class LiveChatConversationService:
         context_provider=None,
         serialize_message=None,
         serialize_state=None,
+        character_user_memory_service: CharacterUserMemoryService | None = None,
     ):
         self._chat_session_service = chat_session_service
         self._chat_message_service = chat_message_service
@@ -44,6 +46,30 @@ class LiveChatConversationService:
         self._context_provider = context_provider
         self._serialize_message = serialize_message
         self._serialize_state = serialize_state
+        self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
+
+    def _update_character_user_memory(self, session, context: dict):
+        if not session:
+            return
+        messages = context.get("messages") or []
+        last_user = next((item for item in reversed(messages) if item.get("sender_type") == "user"), None)
+        last_character = next((item for item in reversed(messages) if item.get("sender_type") == "character"), None)
+        user_text = str((last_user or {}).get("message_text") or "").strip()
+        character_text = str((last_character or {}).get("message_text") or "").strip()
+        if not user_text and not character_text:
+            return
+        for character in context.get("characters") or []:
+            character_id = int(character.get("id") or 0)
+            if not character_id:
+                continue
+            summary = f"{character.get('name') or 'character'}との会話を継続中。"
+            notes = " / ".join(item for item in [user_text[:200], character_text[:200]] if item)
+            self._character_user_memory_service.update_from_event(
+                user_id=int(session.owner_user_id),
+                character_id=character_id,
+                relationship_summary=summary,
+                memory_notes=notes,
+            )
 
     def _load_json(self, value):
         if value is None:
@@ -325,6 +351,7 @@ class LiveChatConversationService:
             self.update_scene_choices(session_id, updated_context, assistant_message)
             updated_context = self._context_provider(session_id)
         if self._letter_service:
+            self._update_character_user_memory(session, updated_context)
             return self._letter_service.try_generate_for_context(
                 session,
                 updated_context,
@@ -394,6 +421,7 @@ class LiveChatConversationService:
         generated_image = None
         updated_context = self._context_provider(session_id)
         self.update_session_memory(session_id, updated_context)
+        self._update_character_user_memory(session, updated_context)
         updated_context = self._context_provider(session_id)
         self.update_conversation_evaluation(session_id, updated_context)
         updated_context = self._context_provider(session_id)

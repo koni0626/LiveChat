@@ -2342,6 +2342,15 @@ body[data-screen="live-chat"] .live-chat-thumb-reference {
   box-shadow: 0 24px 72px rgba(0, 0, 0, 0.48);
 }
 
+#markdownEditorModal {
+  z-index: 2105;
+}
+
+body[data-screen="character-edit"] .modal-backdrop,
+body[data-screen="character-create"] .modal-backdrop {
+  z-index: 2100;
+}
+
 .markdown-modal .modal-header,
 .markdown-modal .modal-footer {
   border-color: rgba(84, 177, 255, 0.16);

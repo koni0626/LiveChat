@@ -99,9 +99,6 @@ class LiveChatSessionWorkflowService:
         room = self._live_chat_room_service.get_room(room_id)
         if not room:
             return None
-        player_name = str(payload.get("player_name") or "").strip()
-        if not player_name:
-            raise ValueError("player_name is required")
         snapshot = self._live_chat_room_service.build_room_snapshot(room)
         title = str(payload.get("title") or "").strip()
         if not title:
@@ -109,7 +106,7 @@ class LiveChatSessionWorkflowService:
         session_payload = {
             "room_id": room.id,
             "title": title,
-            "player_name": player_name,
+            "player_name": str(payload.get("player_name") or "").strip() or None,
             "settings_json": {
                 "selected_character_ids": [room.character_id],
                 "conversation_objective": room.conversation_objective,

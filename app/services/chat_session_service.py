@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from ..models import User
 from ..utils import json_util
 from .project_service import ProjectService
 from ..repositories.chat_session_repository import ChatSessionRepository
@@ -36,6 +37,17 @@ class ChatSessionService:
         if not text:
             raise ValueError("player_name is required")
         return text
+
+    def _resolve_player_name(self, owner_user_id: int, value):
+        text = str(value or "").strip()
+        if text:
+            return text
+        owner = User.query.get(owner_user_id) if owner_user_id else None
+        if owner:
+            fallback = str(getattr(owner, "player_name", "") or "").strip() or str(owner.display_name or "").strip()
+            if fallback:
+                return fallback
+        return "あなた"
 
     def _normalize_required_title(self, value):
         text = str(value or "").strip()
@@ -101,7 +113,7 @@ class ChatSessionService:
                 "session_type": payload.get("session_type") or "live_chat",
                 "status": payload.get("status") or "active",
                 "privacy_status": payload.get("privacy_status") or "private",
-                "player_name": self._normalize_required_player_name(payload.get("player_name")),
+                "player_name": self._resolve_player_name(owner_user_id, payload.get("player_name")),
                 "settings_json": self._normalize_settings_json(payload.get("settings_json")),
                 "room_snapshot_json": self._normalize_settings_json(payload.get("room_snapshot_json")),
             }

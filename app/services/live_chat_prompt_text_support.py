@@ -367,6 +367,35 @@ def _analyze_player_memory_match(context: dict) -> dict:
     return {"bonus": bonus, "penalty": penalty, "reasons": reasons}
 
 
+def _character_user_memory_blocks(context: dict) -> list[str]:
+    blocks = []
+    memory_map = context.get("character_user_memories") or {}
+    if not isinstance(memory_map, dict):
+        return blocks
+    for character in context.get("characters") or []:
+        character_id = str(character.get("id") or "")
+        if not character_id:
+            continue
+        memory = memory_map.get(character_id) or {}
+        if not isinstance(memory, dict) or memory.get("memory_enabled") is False:
+            continue
+        if not any(str(memory.get(key) or "").strip() for key in ("relationship_summary", "memory_notes", "preference_notes", "unresolved_threads", "important_events")):
+            continue
+        blocks.append(
+            "\n".join(
+                [
+                    f"- {character.get('name') or 'character'}:",
+                    f"  relationship_summary={memory.get('relationship_summary') or ''}",
+                    f"  shared_memories={memory.get('memory_notes') or ''}",
+                    f"  player_preferences={memory.get('preference_notes') or ''}",
+                    f"  open_threads={memory.get('unresolved_threads') or ''}",
+                    f"  important_events={memory.get('important_events') or ''}",
+                ]
+            )
+        )
+    return blocks
+
+
 def build_opening_prompt(context: dict) -> str:
     session_objective = get_session_objective(context)
     state_json = (context.get("state") or {}).get("state_json") or {}
@@ -381,6 +410,8 @@ def build_opening_prompt(context: dict) -> str:
         "Make the opening feel like this character is choosing to talk first.",
         f"Project: {context['project'].get('title') or 'Untitled'}",
         f"Player name: {context['session'].get('player_name') or 'Player'}",
+        f"Player display name: {context['session'].get('player_name') or 'Player'}",
+        "Characters should address the player using this name when natural.",
     ]
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
@@ -415,6 +446,11 @@ def build_opening_prompt(context: dict) -> str:
             lines.append(f"  memory={summary}")
         if character.get("feed_profile_text"):
             lines.append(f"  public_feed_tendency={character.get('feed_profile_text')}")
+    memory_blocks = _character_user_memory_blocks(context)
+    if memory_blocks:
+        lines.append("Character memory about this player:")
+        lines.extend(memory_blocks)
+        lines.append("Use this memory subtly. Do not mention it unnaturally.")
     return "\n".join(lines)
 
 
@@ -584,6 +620,8 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         "Keep the reply proactive, emotionally colored, and character-specific.",
         "Do not answer like a generic guide unless the character truly would.",
         f"Player name: {context['session'].get('player_name') or '主人公'}",
+        f"Player display name: {context['session'].get('player_name') or '主人公'}",
+        "Characters should address the player using this name when natural.",
     ]
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
@@ -698,6 +736,11 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     for message in context["messages"][-8:]:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
     lines.append(f"- player: {user_message_text}")
+    memory_blocks = _character_user_memory_blocks(context)
+    if memory_blocks:
+        lines.append("Character memory about this player:")
+        lines.extend(memory_blocks)
+        lines.append("Use this memory subtly. Do not mention it unnaturally.")
     return "\n".join(lines)
 
 

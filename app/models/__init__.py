@@ -4,6 +4,7 @@ from .asset import Asset
 from .chat_message import ChatMessage
 from .chat_session import ChatSession
 from .character import Character
+from .character_user_memory import CharacterUserMemory
 from .character_feed_profile import CharacterFeedProfile
 from .character_outfit import CharacterOutfit
 from .feed_like import FeedLike
@@ -35,6 +36,7 @@ __all__ = [
     "ChatMessage",
     "ChatSession",
     "Character",
+    "CharacterUserMemory",
     "CharacterFeedProfile",
     "CharacterOutfit",
     "FeedLike",

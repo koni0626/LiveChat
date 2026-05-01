@@ -20,6 +20,7 @@ from .session_image_service import SessionImageService
 from .session_state_service import SessionStateService
 from .world_service import WorldService
 from .world_map_service import WorldMapService
+from .character_user_memory_service import CharacterUserMemoryService
 
 
 class LiveChatService:
@@ -39,6 +40,7 @@ class LiveChatService:
         world_map_service: WorldMapService | None = None,
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
+        character_user_memory_service: CharacterUserMemoryService | None = None,
     ):
         self._chat_session_service = chat_session_service or ChatSessionService()
         self._chat_message_service = chat_message_service or ChatMessageService()
@@ -54,6 +56,7 @@ class LiveChatService:
         self._world_map_service = world_map_service or WorldMapService()
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
+        self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
         self._serializer = LiveChatSerializer(asset_service=self._asset_service)
         self._media_service = LiveChatMediaService(
             chat_session_service=self._chat_session_service,
@@ -80,6 +83,7 @@ class LiveChatService:
             gift_event_serializer=self._serialize_gift_event,
             select_characters=self._select_characters,
             text_ai_client=self._text_ai_client,
+            character_user_memory_service=self._character_user_memory_service,
         )
         self._conversation_service = LiveChatConversationService(
             chat_session_service=self._chat_session_service,
@@ -91,6 +95,7 @@ class LiveChatService:
             context_provider=self.get_session_context,
             serialize_message=self._serialize_message,
             serialize_state=self._serialize_state,
+            character_user_memory_service=self._character_user_memory_service,
         )
         self._session_workflow_service = LiveChatSessionWorkflowService(
             chat_session_service=self._chat_session_service,

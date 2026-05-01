@@ -10,6 +10,7 @@ class User(db.Model, TimestampMixin, SoftDeleteMixin):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), nullable=False, unique=True)
     display_name = db.Column(db.String(255), nullable=False)
+    player_name = db.Column(db.String(100))
     password_hash = db.Column(db.String(255))
     auth_provider = db.Column(db.String(50), default="local", nullable=False)
     role = db.Column(db.String(50), default="user", nullable=False)

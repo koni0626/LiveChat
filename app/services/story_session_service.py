@@ -11,6 +11,7 @@ from flask import current_app
 from ..clients.image_ai_client import ImageAIClient
 from ..clients.text_ai_client import TextAIClient
 from ..extensions import db
+from ..models import User
 from ..repositories.feed_repository import FeedRepository
 from ..repositories.story_image_repository import StoryImageRepository
 from ..repositories.story_message_repository import StoryMessageRepository
@@ -28,6 +29,7 @@ from .story_service import StoryService
 from .story_state_service import StoryStateService
 from .user_setting_service import UserSettingService
 from .world_map_service import WorldMapService
+from .character_user_memory_service import CharacterUserMemoryService
 
 
 class StorySessionService:
@@ -48,6 +50,7 @@ class StorySessionService:
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
         world_map_service: WorldMapService | None = None,
+        character_user_memory_service: CharacterUserMemoryService | None = None,
     ):
         self._repo = repository or StorySessionRepository()
         self._message_repo = message_repository or StoryMessageRepository()
@@ -64,6 +67,7 @@ class StorySessionService:
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
         self._world_map_service = world_map_service or WorldMapService()
+        self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
         self._closet_service = ClosetService()
 
     def list_sessions(self, project_id: int, *, owner_user_id: int | None = None):
@@ -152,7 +156,12 @@ class StorySessionService:
             raise ValueError("owner_user_id is required")
         player_name = str(payload.get("player_name") or "").strip()
         if not player_name:
-            raise ValueError("player_name is required")
+            owner = User.query.get(owner_user_id) if owner_user_id else None
+            player_name = (
+                str(getattr(owner, "player_name", "") or "").strip()
+                or str(getattr(owner, "display_name", "") or "").strip()
+                or "あなた"
+            )
         title = str(payload.get("title") or "").strip() or f"{story.title} {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
         snapshot = self._story_service.build_story_snapshot(story)
         session = self._repo.create(
@@ -280,6 +289,18 @@ class StorySessionService:
         updated_context = self._build_generation_context(session)
         updated_context["gm_result"] = gm_result
         scene_messages = self._create_scene_messages(session, gm_result, updated_context, text)
+        character_id = int((updated_context.get("character") or {}).get("id") or 0)
+        if character_id:
+            character_line = ""
+            if scene_messages:
+                character_line = str(getattr(scene_messages[-1], "message_text", "") or "")
+            self._character_user_memory_service.update_from_event(
+                user_id=session.owner_user_id,
+                character_id=character_id,
+                relationship_summary=f"{(updated_context.get('character') or {}).get('name') or 'キャラクター'}との物語を進行中。",
+                memory_notes=f"{text[:200]} / {character_line[:200]}",
+                important_events=str(gm_result.get("narration") or "")[:300],
+            )
         letter_scheduled = self._schedule_clear_letter_if_needed(session.id, state_row)
         return {
             "user_message": self.serialize_message(user_message),

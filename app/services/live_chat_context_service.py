@@ -13,6 +13,7 @@ from .session_image_service import SessionImageService
 from .session_state_service import SessionStateService
 from .world_service import WorldService
 from .world_map_service import WorldMapService
+from .character_user_memory_service import CharacterUserMemoryService
 
 
 class LiveChatContextService:
@@ -35,6 +36,7 @@ class LiveChatContextService:
         gift_event_serializer,
         select_characters,
         text_ai_client: TextAIClient,
+        character_user_memory_service: CharacterUserMemoryService | None = None,
     ):
         self._chat_session_service = chat_session_service
         self._chat_message_service = chat_message_service
@@ -50,6 +52,7 @@ class LiveChatContextService:
         self._gift_event_serializer = gift_event_serializer
         self._select_characters = select_characters
         self._text_ai_client = text_ai_client
+        self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
 
     def _create_opening_message(self, session, context: dict):
         opening = text_support.generate_opening_message(self._text_ai_client, context)
@@ -126,6 +129,13 @@ class LiveChatContextService:
         if not selected_image and scene_images:
             selected_image = scene_images[0]
         characters = self._select_characters(session_id)
+        character_user_memories = {}
+        for character in characters:
+            character_id = int(character.get("id") or 0)
+            if not character_id:
+                continue
+            row = self._character_user_memory_service.get_memory(session.owner_user_id, character_id)
+            character_user_memories[str(character_id)] = self._character_user_memory_service.serialize_memory(row)
         world = self._world_service.get_world(session.project_id)
         world_map_context = self._world_map_context(session.project_id)
         if not messages and characters:
@@ -143,6 +153,7 @@ class LiveChatContextService:
                 },
                 "world_map": world_map_context,
                 "session": self._serializer.serialize_session(session),
+                "character_user_memories": character_user_memories,
                 "messages": [],
                 "state": self._serializer.serialize_state(state),
                 "characters": characters,
@@ -164,6 +175,7 @@ class LiveChatContextService:
             },
             "world_map": world_map_context,
             "session": self._serializer.serialize_session(session),
+            "character_user_memories": character_user_memories,
             "room": self._live_chat_room_service.serialize_room(room) if room else None,
             "messages": [self._serializer.serialize_message(item) for item in messages],
             "state": self._serializer.serialize_state(state),

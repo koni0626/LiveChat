@@ -14,7 +14,7 @@ window.NovelUI = (() => {
     try {
       const parsed = new URL(url, window.location.href);
       return parsed.origin === window.location.origin;
-    } catch (error) {
+    } catch (_error) {
       return true;
     }
   }
@@ -24,9 +24,7 @@ window.NovelUI = (() => {
     if (shouldAttachCsrf(resource, config)) {
       const headers = new Headers(config.headers || {});
       const token = csrfToken();
-      if (token && !headers.has("X-CSRFToken")) {
-        headers.set("X-CSRFToken", token);
-      }
+      if (token && !headers.has("X-CSRFToken")) headers.set("X-CSRFToken", token);
       config.headers = headers;
     }
     return nativeFetch(resource, config);
@@ -42,9 +40,7 @@ window.NovelUI = (() => {
   }
 
   function normalizeResponse(payload) {
-    if (payload && typeof payload === "object" && "data" in payload) {
-      return payload.data;
-    }
+    if (payload && typeof payload === "object" && "data" in payload) return payload.data;
     return payload;
   }
 
@@ -55,19 +51,14 @@ window.NovelUI = (() => {
       credentials: "same-origin",
       cache: options.cache || "no-store",
     };
-    if (options.body !== undefined) {
-      config.body = JSON.stringify(options.body);
-    }
+    if (options.body !== undefined) config.body = JSON.stringify(options.body);
     const response = await fetch(url, config);
     const payload = await response.json().catch(() => ({}));
     const data = normalizeResponse(payload);
     if (!response.ok) {
       const message = data?.message || payload?.message || `HTTP ${response.status}`;
-      if (response.status === 401 && !options.allowUnauthorized) {
-        const loginUrl = "/login";
-        if (window.location.pathname !== loginUrl) {
-          window.location.href = loginUrl;
-        }
+      if (response.status === 401 && !options.allowUnauthorized && window.location.pathname !== "/login") {
+        window.location.href = "/login";
       }
       throw new Error(message);
     }
@@ -78,7 +69,7 @@ window.NovelUI = (() => {
     const stack = document.getElementById("toastStack");
     if (!stack) return;
     const wrapper = document.createElement("div");
-    wrapper.className = "toast align-items-center text-bg-" + tone + " border-0";
+    wrapper.className = `toast align-items-center text-bg-${tone} border-0`;
     wrapper.setAttribute("role", "status");
     wrapper.setAttribute("aria-live", "polite");
     wrapper.setAttribute("aria-atomic", "true");
@@ -89,9 +80,9 @@ window.NovelUI = (() => {
       </div>
     `;
     stack.appendChild(wrapper);
-    const toastInstance = new bootstrap.Toast(wrapper, { delay: 2800 });
+    const instance = new bootstrap.Toast(wrapper, { delay: 2800 });
     wrapper.addEventListener("hidden.bs.toast", () => wrapper.remove());
-    toastInstance.show();
+    instance.show();
   }
 
   function fillForm(form, data) {
@@ -99,13 +90,9 @@ window.NovelUI = (() => {
     Object.entries(data).forEach(([key, value]) => {
       const field = form.querySelector(`[name="${key}"]`);
       if (!field) return;
-      if (field.type === "checkbox") {
-        field.checked = Boolean(value);
-      } else if (typeof value === "object" && value !== null) {
-        field.value = JSON.stringify(value, null, 2);
-      } else {
-        field.value = value ?? "";
-      }
+      if (field.type === "checkbox") field.checked = Boolean(value);
+      else if (typeof value === "object" && value !== null) field.value = JSON.stringify(value, null, 2);
+      else field.value = value ?? "";
     });
   }
 
@@ -119,12 +106,7 @@ window.NovelUI = (() => {
     if (!value) return "";
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleString(locale, {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return date.toLocaleString(locale, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
 
   function statusLabel(value) {
@@ -142,7 +124,7 @@ window.NovelUI = (() => {
       return `
         <a class="list-row text-decoration-none" href="${escapeHtml(href)}">
           <div>
-            <strong>${escapeHtml(title || "履歴")}</strong>
+            <strong>${escapeHtml(title || "項目")}</strong>
             ${meta ? `<div class="small text-secondary">${escapeHtml(meta)}</div>` : ""}
           </div>
           <span class="soft-code">${escapeHtml(actionLabel)}</span>
@@ -181,6 +163,48 @@ window.NovelUI = (() => {
     }
   }
 
+  async function editPlayerName() {
+    const modalEl = document.getElementById("profileModal");
+    const input = document.getElementById("profilePlayerNameInput");
+    const saveButton = document.getElementById("profilePlayerNameSaveButton");
+    if (!modalEl || !input || !saveButton) return;
+    const me = await api("/api/v1/auth/me", { allowUnauthorized: true }).catch(() => null);
+    if (!me?.user) return;
+    input.value = me.user.player_name || me.user.display_name || "";
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    const submit = async () => {
+      const trimmed = String(input.value || "").trim();
+      if (!trimmed) {
+        toast("プレイヤー名を入力してください。", "warning");
+        input.focus();
+        return;
+      }
+      saveButton.disabled = true;
+      try {
+        await api("/api/v1/auth/me/player-name", { method: "PATCH", body: { player_name: trimmed } });
+        modal.hide();
+        toast("プロフィールを更新しました。");
+        window.location.reload();
+      } catch (error) {
+        toast(error.message || "更新に失敗しました。", "danger");
+      } finally {
+        saveButton.disabled = false;
+      }
+    };
+
+    saveButton.onclick = submit;
+    input.onkeydown = (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submit();
+      }
+    };
+
+    modal.show();
+    setTimeout(() => input.focus(), 120);
+  }
+
   async function refreshLetterBadge() {
     const badge = document.getElementById("letterNavBadge");
     if (!badge) return;
@@ -189,16 +213,20 @@ window.NovelUI = (() => {
       const count = Number(payload?.unread_count || 0);
       badge.textContent = count > 99 ? "99+" : String(count);
       badge.classList.toggle("d-none", count <= 0);
-    } catch (error) {
+    } catch (_error) {
       badge.classList.add("d-none");
     }
   }
 
   document.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-action='logout']");
-    if (!button) {
+    const editButton = event.target.closest("[data-action='edit-player-name']");
+    if (editButton) {
+      event.preventDefault();
+      editPlayerName().catch((error) => toast(error.message || "更新に失敗しました。", "danger"));
       return;
     }
+    const button = event.target.closest("[data-action='logout']");
+    if (!button) return;
     event.preventDefault();
     logout();
   });

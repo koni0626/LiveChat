@@ -64,10 +64,7 @@
 
   function renderStartForm(story) {
     return `
-      <div class="input-group input-group-sm">
-        <input class="form-control" data-player-name-for="${story.id}" placeholder="プレイヤー名">
-        <button class="btn btn-dark" type="button" data-start-story="${story.id}">開始</button>
-      </div>
+      <button class="btn btn-sm btn-dark" type="button" data-start-story="${story.id}">開始</button>
     `;
   }
 
@@ -110,20 +107,13 @@
     const start = event.target.closest("[data-start-story]");
     if (!start) return;
     const storyId = Number(start.dataset.startStory);
-    const input = document.querySelector(`[data-player-name-for="${storyId}"]`);
-    const playerName = input?.value.trim() || "";
-    if (!playerName) {
-      NovelUI.toast("プレイヤー名を入力してください。", "warning");
-      input?.focus();
-      return;
-    }
     const originalLabel = start.textContent;
     start.disabled = true;
     start.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>準備中...';
     try {
       const created = await NovelUI.api(`/api/v1/stories/${storyId}/sessions`, {
         method: "POST",
-        body: { player_name: playerName, generate_initial_image: true },
+        body: { generate_initial_image: true },
       });
       if (created.image_generation_error) {
         NovelUI.toast(`セッションは開始しましたが、初期画像生成に失敗しました: ${created.image_generation_error}`, "warning");

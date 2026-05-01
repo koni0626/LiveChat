@@ -35,10 +35,12 @@ class AuthService:
         return value
 
     def _serialize_user(self, user: User) -> dict[str, Any]:
+        player_name = str(getattr(user, "player_name", "") or "").strip() or user.display_name
         return {
             "id": user.id,
             "email": user.email,
             "display_name": user.display_name,
+            "player_name": player_name,
             "role": getattr(user, "role", "user") or "user",
             "status": user.status,
             "auth_provider": user.auth_provider,
@@ -101,6 +103,7 @@ class AuthService:
         user = User(
             email=normalized_email,
             display_name=validated_display_name,
+            player_name=validated_display_name,
             auth_provider="local",
             role="user",
             status="active",
@@ -127,6 +130,7 @@ class AuthService:
         user = User(
             email=normalized_email,
             display_name=validated_display_name,
+            player_name=validated_display_name,
             auth_provider="local",
             role="superuser",
             status="active",

@@ -68,23 +68,12 @@
         <button class="btn btn-sm btn-outline-dark" type="button" data-load-room-sessions="${room.id}">過去のチャット</button>
       </div>
       <div class="live-chat-room-start">
-        <label class="form-label" for="playerName-${room.id}">プレイヤー名</label>
-        <div class="input-group">
-          <input class="form-control" id="playerName-${room.id}" data-player-name-for="${room.id}" placeholder="あなたの名前">
-          <button class="btn btn-dark" type="button" data-start-room="${room.id}">新しくチャット</button>
-        </div>
+        <button class="btn btn-dark" type="button" data-start-room="${room.id}">新しくチャット</button>
       </div>
     `;
   }
 
   async function startRoom(roomId, button = null) {
-    const input = document.querySelector(`[data-player-name-for="${roomId}"]`);
-    const playerName = input?.value.trim() || "";
-    if (!playerName) {
-      NovelUI.toast("プレイヤー名を入力してください。", "warning");
-      input?.focus();
-      return;
-    }
     const originalLabel = button?.textContent || "";
     if (button) {
       button.disabled = true;
@@ -96,7 +85,6 @@
       const created = await NovelUI.api(`/api/v1/chat/rooms/${roomId}/sessions`, {
         method: "POST",
         body: {
-          player_name: playerName,
           size: initialImageSize,
         },
       });
