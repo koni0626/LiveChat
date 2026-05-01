@@ -173,13 +173,19 @@ def create_room_chat_session(room_id: int):
         raise NotFoundError()
     try:
         settings = user_setting_service.get_settings(user.id)
+        requested_size = str(payload.get("size") or "").strip()
+        valid_sizes = {"1024x1024", "1024x1536", "1536x1024"}
+        if requested_size not in valid_sizes:
+            user_agent = (request.headers.get("User-Agent") or "").lower()
+            is_mobile = any(token in user_agent for token in ("iphone", "android", "mobile", "ipad"))
+            requested_size = "1024x1536" if is_mobile else "1536x1024"
         initial_image = live_chat_service.generate_image(
             created["session"]["id"],
             user_setting_service.apply_image_generation_settings(
                 user.id,
                 {
                     "quality": settings.get("default_quality") or "low",
-                    "size": settings.get("default_size") or "1536x1024",
+                    "size": requested_size,
                 },
             ),
         )
@@ -187,13 +193,6 @@ def create_room_chat_session(room_id: int):
     except Exception as exc:  # Keep the session usable even when the image API is temporarily unavailable.
         current_app.logger.exception("initial live chat image generation failed")
         created["image_generation_error"] = str(exc)
-        fallback_image = live_chat_service.create_scene_from_selected_costume(
-            created["session"]["id"],
-            reason=str(exc),
-        )
-        if fallback_image:
-            created["initial_image"] = fallback_image
-            created["initial_image_fallback"] = True
     return json_response(created, status=201)
 
 

@@ -20,7 +20,7 @@
         </select>
       </div>
       <div class="col-md-4">
-        <label class="form-label">既定の画像品質</label>
+        <label class="form-label">既定の画質</label>
         <select class="form-select" name="default_quality">
           <option value="low">low</option>
           <option value="medium">medium</option>
@@ -35,6 +35,12 @@
           <option value="1536x1024">1536x1024</option>
         </select>
       </div>
+      <div class="col-12">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="preferPortraitOnMobile" name="prefer_portrait_on_mobile">
+          <label class="form-check-label" for="preferPortraitOnMobile">スマホ時は画像生成を縦長（1024x1536）で優先する</label>
+        </div>
+      </div>
       <div class="col-md-4">
         <label class="form-label">自動保存間隔</label>
         <select class="form-select" name="autosave_interval">
@@ -45,7 +51,7 @@
       </div>
       <div class="col-12">
         <label class="form-label">メモ</label>
-        <textarea class="form-control" rows="4" readonly>この画面はログイン中ユーザーの既定値を保存します。API キーやストレージ先のようなサーバ設定はここでは変更しません。</textarea>
+        <textarea class="form-control" rows="4" readonly>この画面はログイン中ユーザーの既定値を保存します。API キーやストレージ固有のようなサーバー設定はここでは変更しません。</textarea>
       </div>
       <div class="col-12 d-flex justify-content-end gap-2">
         <button class="btn btn-outline-dark" type="button" id="settingsResetButton">初期値に戻す</button>
@@ -61,7 +67,13 @@
   const form = document.getElementById("settingsForm");
   const providerSelect = document.getElementById("imageAiProviderSelect");
   const modelInput = document.getElementById("imageAiModelInput");
+  const preferPortraitOnMobileInput = document.getElementById("preferPortraitOnMobile");
   let providerDefaultModels = { openai: "gpt-image-2", grok: "grok-imagine-image" };
+
+  function syncMobilePortraitToggle(settings) {
+    if (!preferPortraitOnMobileInput) return;
+    preferPortraitOnMobileInput.checked = Boolean(settings?.prefer_portrait_on_mobile);
+  }
 
   function applyProviderModelDefault(previousProvider) {
     const provider = providerSelect?.value || "openai";
@@ -79,21 +91,24 @@
     const settings = await NovelUI.api("/api/v1/settings");
     providerDefaultModels = settings?.available_options?.provider_default_models || providerDefaultModels;
     NovelUI.fillForm(form, settings);
+    syncMobilePortraitToggle(settings);
     if (providerSelect) providerSelect.dataset.previousProvider = providerSelect.value || "openai";
   }
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const body = Object.fromEntries(new FormData(form).entries());
+    body.prefer_portrait_on_mobile = preferPortraitOnMobileInput?.checked ? "1" : "0";
     try {
       const settings = await NovelUI.api("/api/v1/settings", {
         method: "PUT",
         body,
       });
       NovelUI.fillForm(form, settings);
+      syncMobilePortraitToggle(settings);
       NovelUI.toast("ユーザー設定を保存しました。");
     } catch (error) {
-      NovelUI.toast(error.message || "設定保存に失敗しました。", "danger");
+      NovelUI.toast(error.message || "設定の保存に失敗しました。", "danger");
     }
   });
 
@@ -104,6 +119,7 @@
         body: {},
       });
       NovelUI.fillForm(form, settings);
+      syncMobilePortraitToggle(settings);
       NovelUI.toast("設定を初期値に戻しました。", "warning");
     } catch (error) {
       NovelUI.toast(error.message || "設定の初期化に失敗しました。", "danger");

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from flask import has_request_context, request
+
 from ..api import UnauthorizedError, ValidationError
 from ..extensions import db
 from ..models import User, UserSetting
@@ -12,6 +14,7 @@ class UserSettingService:
         "image_ai_model": "gpt-image-2",
         "default_quality": "medium",
         "default_size": "1024x1024",
+        "prefer_portrait_on_mobile": False,
         "autosave_interval": "off",
     }
     PROVIDER_DEFAULT_MODELS = {
@@ -48,6 +51,7 @@ class UserSettingService:
             "image_ai_model": setting.image_ai_model,
             "default_quality": setting.default_quality,
             "default_size": setting.default_size,
+            "prefer_portrait_on_mobile": bool(getattr(setting, "prefer_portrait_on_mobile", False)),
             "autosave_interval": setting.autosave_interval,
             "available_options": {
                 "image_providers": sorted(self.VALID_IMAGE_PROVIDERS),
@@ -75,6 +79,17 @@ class UserSettingService:
             return self.PROVIDER_DEFAULT_MODELS["openai"]
         return value or self.PROVIDER_DEFAULT_MODELS.get(provider, self.DEFAULTS["image_ai_model"])
 
+    def _normalize_bool(self, value) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+    def _is_mobile_request(self) -> bool:
+        if not has_request_context():
+            return False
+        user_agent = (request.headers.get("User-Agent") or "").lower()
+        return any(token in user_agent for token in ("iphone", "android", "mobile", "ipad"))
+
     def get_settings(self, user_id: int | None) -> dict:
         user = self._get_active_user(user_id)
         setting = self._get_or_create(user.id)
@@ -90,6 +105,7 @@ class UserSettingService:
         image_ai_model = self._normalize_string(payload, "image_ai_model")
         default_quality = self._normalize_string(payload, "default_quality")
         default_size = self._normalize_string(payload, "default_size")
+        prefer_portrait_on_mobile = self._normalize_bool(payload.get("prefer_portrait_on_mobile", False))
         autosave_interval = self._normalize_string(payload, "autosave_interval")
 
         if image_ai_provider not in self.VALID_IMAGE_PROVIDERS:
@@ -107,6 +123,7 @@ class UserSettingService:
         setting.image_ai_model = image_ai_model
         setting.default_quality = default_quality
         setting.default_size = default_size
+        setting.prefer_portrait_on_mobile = prefer_portrait_on_mobile
         setting.autosave_interval = autosave_interval
         db.session.commit()
         return self._serialize(setting)
@@ -124,6 +141,8 @@ class UserSettingService:
         options["model"] = self._normalize_image_model_for_provider(options["provider"], options.get("model"))
         options.setdefault("quality", settings.get("default_quality") or self.DEFAULTS["default_quality"])
         options.setdefault("size", settings.get("default_size") or self.DEFAULTS["default_size"])
+        if self._normalize_bool(settings.get("prefer_portrait_on_mobile")) and self._is_mobile_request():
+            options["size"] = "1024x1536"
         return options
 
     def reset_settings(self, user_id: int | None) -> dict:

@@ -3,9 +3,9 @@
 }
 
 .world-news-hero {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 1rem;
 }
 
@@ -22,9 +22,18 @@
 
 .world-news-actions {
   display: flex;
+  align-items: flex-start;
   gap: 0.55rem;
   flex-wrap: wrap;
   justify-content: flex-end;
+  min-width: 0;
+}
+
+.world-news-actions .btn {
+  flex: 0 0 auto;
+  min-height: 2.25rem;
+  white-space: nowrap;
+  text-align: center;
 }
 
 .world-news-list {
@@ -58,7 +67,7 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .world-news-image figcaption {
@@ -79,6 +88,13 @@
 
 .world-news-image figcaption span:first-child {
   color: #8df7ff;
+}
+
+.world-news-image figcaption span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .world-news-card-head,
@@ -139,7 +155,31 @@
 }
 
 @media (max-width: 900px) {
+  .world-news-hero {
+    grid-template-columns: 1fr;
+    gap: 0.8rem;
+  }
+
+  .world-news-actions {
+    width: 100%;
+    justify-content: stretch;
+    gap: 0.5rem;
+  }
+
+  .world-news-actions .btn {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
   .world-news-list {
     grid-template-columns: 1fr;
+  }
+
+  .world-news-card h4,
+  .world-news-card p {
+    overflow-wrap: anywhere;
   }
 }

@@ -12,4 +12,5 @@ class UserSetting(db.Model, TimestampMixin):
     image_ai_model = db.Column(db.String(100), nullable=False, default="gpt-image-2")
     default_quality = db.Column(db.String(20), nullable=False, default="medium")
     default_size = db.Column(db.String(20), nullable=False, default="1024x1024")
+    prefer_portrait_on_mobile = db.Column(db.Boolean, nullable=False, default=False)
     autosave_interval = db.Column(db.String(20), nullable=False, default="off")

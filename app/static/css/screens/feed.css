@@ -539,6 +539,17 @@ body[data-screen="feed"] .feed-post-manage {
   gap: 0.45rem;
 }
 
+body[data-screen="feed"] .feed-post-manage > .btn,
+body[data-screen="feed"] .feed-post-manage > label.btn {
+  min-height: 2.15rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
 body[data-screen="feed"] .feed-edit-modal {
   color: #dff6ff;
   border: 1px solid rgba(84, 177, 255, 0.24);
@@ -590,5 +601,49 @@ body[data-screen="feed"] .feed-edit-modal .modal-title {
     align-items: flex-start;
     flex-direction: column;
   }
-}
 
+  body[data-screen="feed"] .feed-post-manage {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    justify-content: stretch;
+    gap: 0.5rem;
+  }
+
+  body[data-screen="feed"] .feed-post-manage > .btn,
+  body[data-screen="feed"] .feed-post-manage > label.btn {
+    width: 100%;
+    margin: 0;
+    min-width: 0;
+    padding-inline: 0.5rem;
+    font-size: 0.88rem;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
+  }
+
+  body[data-screen="feed"] .feed-post-manage > .btn span,
+  body[data-screen="feed"] .feed-post-manage > label.btn span {
+    overflow-wrap: anywhere;
+  }
+
+  body[data-screen="feed"] .feed-composer-tools {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.55rem 0.7rem;
+  }
+
+  body[data-screen="feed"] .feed-attach-hint {
+    min-width: 0;
+    line-height: 1.45;
+  }
+
+  body[data-screen="feed"] #feedImportUrlButton {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin-left: 0 !important;
+    justify-content: center;
+    white-space: nowrap;
+  }
+}

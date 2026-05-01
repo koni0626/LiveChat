@@ -3,6 +3,43 @@ body[data-screen="world-map"] .world-map-main {
   gap: 1rem;
 }
 
+body[data-screen="world-map"] .world-map-hero .panel-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.9rem 1rem;
+}
+
+body[data-screen="world-map"] .world-map-hero .panel-head > div:first-child {
+  min-width: 0;
+}
+
+body[data-screen="world-map"] .world-map-hero .section-copy {
+  max-width: none;
+  line-height: 1.7;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+body[data-screen="world-map"] .world-map-hero .panel-head > .btn,
+body[data-screen="world-map"] .world-map-hero .panel-head > label.btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+body[data-screen="world-map"] .world-map-hero .panel-head {
+  grid-auto-flow: row;
+}
+
+body[data-screen="world-map"] .world-map-hero .panel-head > .btn,
+body[data-screen="world-map"] .world-map-hero .panel-head > label.btn {
+  justify-self: end;
+}
+
+body[data-screen="world-map"] .world-map-hero .panel-head > .btn + label.btn {
+  margin-left: 0.55rem;
+}
+
 body[data-screen="world-map"] .world-map-image-frame {
   min-height: 24rem;
 }
@@ -12,7 +49,7 @@ body[data-screen="world-map"] .world-map-empty {
   width: 100%;
   min-height: 24rem;
   aspect-ratio: 3 / 2;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 1.15rem;
   border: 1px solid rgba(84, 177, 255, 0.2);
   background:
@@ -77,7 +114,7 @@ body[data-screen="world-map"] .world-map-thumb.active {
 body[data-screen="world-map"] .world-map-thumb img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 body[data-screen="world-map"] .world-location-form {
@@ -173,7 +210,7 @@ body[data-screen="world-map"] button.world-location-image:focus-visible {
 body[data-screen="world-map"] .world-location-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 body[data-screen="world-map"] .world-location-image-modal {
@@ -272,8 +309,45 @@ body[data-screen="world-map"] .world-location-meta span {
     grid-template-columns: 1fr;
   }
 
+  body[data-screen="world-map"] .world-map-hero .panel-head {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-screen="world-map"] .world-map-hero .panel-head > .btn,
+  body[data-screen="world-map"] .world-map-hero .panel-head > label.btn {
+    width: 100%;
+    justify-self: stretch;
+    justify-content: center;
+    margin: 0;
+    white-space: normal;
+  }
+
+  body[data-screen="world-map"] .world-map-hero .panel-head > .btn + label.btn {
+    margin-left: 0;
+  }
+
+  body[data-screen="world-map"] .world-map-image-frame {
+    min-height: 16rem;
+  }
+
+  body[data-screen="world-map"] .world-map-image,
+  body[data-screen="world-map"] .world-map-empty {
+    min-height: 16rem;
+  }
+
+  body[data-screen="world-map"] .world-location-candidate-row {
+    gap: 0.65rem;
+  }
+
+  body[data-screen="world-map"] .world-location-candidate-row .btn {
+    width: 100%;
+  }
+
+  body[data-screen="world-map"] .world-location-actions .btn {
+    width: 100%;
+  }
+
   body[data-screen="world-map"] .world-location-filter-row {
     grid-template-columns: 1fr;
   }
 }
-

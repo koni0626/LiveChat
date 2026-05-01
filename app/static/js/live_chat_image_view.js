@@ -93,6 +93,35 @@
     selectedImagePanel.style.setProperty("--rendered-stage-height", `${Math.round(height)}px`);
   }
 
+  function applyNaturalStageDimensions(selectedImagePanel, naturalWidth, naturalHeight) {
+    const widthNum = Number(naturalWidth);
+    const heightNum = Number(naturalHeight);
+    if (!selectedImagePanel || !(widthNum > 0) || !(heightNum > 0)) return;
+    selectedImagePanel.style.setProperty("--stage-width", String(widthNum));
+    selectedImagePanel.style.setProperty("--stage-height", String(heightNum));
+    const viewportHeight = Math.max(window.innerHeight || 0, 720);
+    const desktopOffset = 250;
+    const mobileOffset = 320;
+    const maxHeight = Math.max(
+      window.innerWidth <= 1200 ? 360 : 420,
+      viewportHeight - (window.innerWidth <= 1200 ? mobileOffset : desktopOffset)
+    );
+    const stageParent = selectedImagePanel.parentElement;
+    const availableWidth = stageParent ? stageParent.clientWidth : selectedImagePanel.clientWidth;
+
+    let width = Math.min(availableWidth, maxHeight * (widthNum / heightNum));
+    let height = width * (heightNum / widthNum);
+
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height * (widthNum / heightNum);
+    }
+
+    selectedImagePanel.style.width = `${Math.round(width)}px`;
+    selectedImagePanel.style.height = "auto";
+    selectedImagePanel.style.setProperty("--rendered-stage-height", `${Math.round(height)}px`);
+  }
+
   function renderSelectedImage(selectedImage, options) {
     const {
       selectedImagePanel,
@@ -148,6 +177,15 @@
         ${novelMarkup}
       </div>
     `;
+    const stageImage = selectedImagePanel.querySelector(".live-chat-stage-image");
+    if (stageImage) {
+      stageImage.addEventListener("load", () => {
+        applyNaturalStageDimensions(selectedImagePanel, stageImage.naturalWidth, stageImage.naturalHeight);
+      }, { once: true });
+      if (stageImage.complete && stageImage.naturalWidth > 0 && stageImage.naturalHeight > 0) {
+        applyNaturalStageDimensions(selectedImagePanel, stageImage.naturalWidth, stageImage.naturalHeight);
+      }
+    }
   }
 
   function renderImageGrid(images, imageGrid) {

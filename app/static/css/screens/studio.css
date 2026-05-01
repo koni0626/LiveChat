@@ -27,7 +27,7 @@ body[data-screen="studio"] .studio-image-card img,
 body[data-screen="studio"] .studio-selected-image img {
   width: 100%;
   aspect-ratio: 3 / 2;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 0.65rem;
   background: rgba(4, 10, 20, 0.82);
 }
@@ -156,4 +156,3 @@ body[data-screen="studio"] .studio-prompt-section h4 {
     position: static;
   }
 }
-

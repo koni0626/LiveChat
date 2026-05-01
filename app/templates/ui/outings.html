@@ -45,7 +45,10 @@
     <section class="panel-card outing-main-panel">
       <div class="panel-head">
         <h3 id="outingTitle">おでかけ</h3>
-        <span class="soft-code" id="outingStatus">standby</span>
+        <div class="outing-main-head-tools">
+          <span class="soft-code" id="outingStatus">standby</span>
+          <button class="btn btn-sm btn-outline-light" type="button" id="outingToggleTextboxButton" aria-expanded="true">テキストボックス非表示</button>
+        </div>
       </div>
       <div class="outing-loading d-none" id="outingLoading" role="status" aria-live="polite">
         <div class="spinner-border spinner-border-sm" aria-hidden="true"></div>
@@ -119,9 +122,16 @@
   const imageModal = new bootstrap.Modal(imageModalElement);
   const imageModalTitle = document.getElementById("outingImageModalTitle");
   const imageModalImage = document.getElementById("outingImageModalImage");
+  const toggleTextboxButton = document.getElementById("outingToggleTextboxButton");
   let currentOuting = null;
   let isBusy = false;
   let outingNovelPageState = { pages: [], pageIndex: 0 };
+  let textboxVisible = true;
+  const mobilePagerMediaQuery = window.matchMedia("(max-width: 767.98px)");
+
+  function isMobileOutingView() {
+    return mobilePagerMediaQuery.matches;
+  }
 
   function setLoading(active, title = "準備中", text = "おでかけの場面を作っています。") {
     isBusy = Boolean(active);
@@ -235,7 +245,9 @@
     const choices = Array.isArray(outing.choices) ? outing.choices : [];
     const sceneTitle = step.scene_title || outing.title || "Outing";
     const speaker = outing.character?.name || "Character";
-    const novelText = [step.narration || "", step.character_line || ""].filter(Boolean).join("\n\n");
+    const narrationText = step.narration || "";
+    const characterLine = step.character_line || "";
+    const novelText = narrationText || characterLine;
     currentHost.innerHTML = `
       <div class="outing-chat-stage">
         <div class="live-chat-image-panel outing-image-panel">
@@ -250,9 +262,10 @@
               </div>
             `}
             <div class="outing-stage-title">${NovelUI.escape(sceneTitle)}</div>
-            <div class="live-chat-novel-box outing-novel-box">
+            <div class="live-chat-novel-box outing-novel-box ${outing.status === "completed" ? "is-completed" : ""}">
               <div class="live-chat-novel-speaker">${NovelUI.escape(speaker)}</div>
               <div class="live-chat-novel-text outing-novel-text">${NovelUI.escape(novelText)}</div>
+              ${characterLine ? `<div class="outing-character-line">${NovelUI.escape(characterLine)}</div>` : ""}
               ${outing.status === "completed" ? renderMemory(outing) : renderChoices(choices)}
               <div class="live-chat-novel-footer outing-novel-footer">
                 <div class="live-chat-novel-continue outing-novel-continue"></div>
@@ -267,7 +280,20 @@
       </div>
     `;
     setupOutingNovelPagination(novelText);
+    setTextboxVisible(textboxVisible);
     renderGallery(outing);
+  }
+
+  function setTextboxVisible(visible) {
+    textboxVisible = Boolean(visible);
+    const novelBox = currentHost.querySelector(".outing-novel-box");
+    if (novelBox) {
+      novelBox.classList.toggle("is-hidden", !textboxVisible);
+    }
+    if (toggleTextboxButton) {
+      toggleTextboxButton.textContent = textboxVisible ? "テキストボックス非表示" : "テキストボックス表示";
+      toggleTextboxButton.setAttribute("aria-expanded", String(textboxVisible));
+    }
   }
 
   function ensureOutingTextMeasurer(sourceElement) {
@@ -305,9 +331,11 @@
     const novelSpeaker = currentHost.querySelector(".live-chat-novel-speaker");
     const choiceList = currentHost.querySelector(".outing-choice-list");
     const memoryBox = currentHost.querySelector(".outing-memory-box");
+    const characterLine = currentHost.querySelector(".outing-character-line");
     const footer = currentHost.querySelector(".outing-novel-footer");
     const normalized = String(text || "").replace(/\r\n/g, "\n").trim();
     if (!novelBox || !novelText || !novelSpeaker || !normalized) return [normalized || ""];
+    if (isMobileOutingView()) return [normalized];
     const measurer = ensureOutingTextMeasurer(novelText);
     const boxStyle = window.getComputedStyle(novelBox);
     const paddingTop = parseFloat(boxStyle.paddingTop || "0");
@@ -315,10 +343,11 @@
     const gap = parseFloat(boxStyle.gap || "0");
     const choiceReserve = choiceList ? Math.min(choiceList.scrollHeight || 0, 132) : 0;
     const memoryReserve = memoryBox ? Math.min(memoryBox.scrollHeight || 0, 128) : 0;
+    const lineReserve = characterLine ? Math.min(characterLine.scrollHeight || 0, 86) : 0;
     const footerReserve = footer ? Math.max(footer.offsetHeight, 28) : 28;
     const availableHeight = Math.max(
       48,
-      novelBox.clientHeight - paddingTop - paddingBottom - novelSpeaker.offsetHeight - gap - footerReserve - choiceReserve - memoryReserve
+      novelBox.clientHeight - paddingTop - paddingBottom - novelSpeaker.offsetHeight - gap - footerReserve - choiceReserve - memoryReserve - lineReserve
     );
     const pages = [];
     let start = 0;
@@ -357,7 +386,7 @@
     const pageIndex = Math.max(0, Math.min(outingNovelPageState.pageIndex || 0, pages.length - 1));
     outingNovelPageState.pageIndex = pageIndex;
     if (novelText) novelText.textContent = pages[pageIndex] || "";
-    const showPager = pages.length > 1;
+    const showPager = !isMobileOutingView() && pages.length > 1;
     if (footer) footer.hidden = !showPager;
     if (pager) pager.hidden = !showPager;
     if (cue) {
@@ -372,7 +401,10 @@
       nextButton.hidden = !showPager;
       nextButton.disabled = !showPager || pageIndex >= pages.length - 1;
     }
-    if (choiceList) choiceList.hidden = showPager && pageIndex < pages.length - 1;
+    if (choiceList) {
+      choiceList.hidden = showPager && pageIndex < pages.length - 1;
+      if (isMobileOutingView()) choiceList.hidden = false;
+    }
   }
 
   function setupOutingNovelPagination(text) {
@@ -384,6 +416,10 @@
     };
     renderOutingNovelPage();
   }
+
+  window.addEventListener("resize", () => {
+    renderOutingNovelPage();
+  });
 
   function moveOutingNovelPage(delta) {
     const pages = outingNovelPageState.pages || [];
@@ -598,6 +634,10 @@
     setLoading(false);
     renderEmptyCurrent("読み込みに失敗しました。");
     NovelUI.toast(error.message || "おでかけ情報を読み込めませんでした。", "danger");
+  });
+
+  toggleTextboxButton?.addEventListener("click", () => {
+    setTextboxVisible(!textboxVisible);
   });
 })();
 </script>

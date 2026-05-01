@@ -90,10 +90,15 @@
       button.disabled = true;
       button.textContent = "準備中...";
     }
+    const isMobileViewport = window.matchMedia("(max-width: 767.98px)").matches;
+    const initialImageSize = isMobileViewport ? "1024x1536" : "1536x1024";
     try {
       const created = await NovelUI.api(`/api/v1/chat/rooms/${roomId}/sessions`, {
         method: "POST",
-        body: { player_name: playerName },
+        body: {
+          player_name: playerName,
+          size: initialImageSize,
+        },
       });
       if (created.image_generation_error) {
         NovelUI.toast(`会話は作成しましたが、初期画像生成に失敗しました: ${created.image_generation_error}`, "warning");

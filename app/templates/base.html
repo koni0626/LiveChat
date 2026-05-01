@@ -111,20 +111,6 @@
             <div class="eyebrow">Creative Workspace</div>
             <h1 class="page-title">{{ page_title }}</h1>
           </div>
-          <div class="topbar-actions">
-            {% if project_id %}
-            <a class="btn btn-outline-light btn-sm" href="{{ url_for('ui.story_session_list_page', project_id=project_id) }}">
-              <i class="bi bi-dice-5"></i>
-              <span>セッション</span>
-            </a>
-            {% endif %}
-            {% if current_user_role in ["superuser", "project_user"] %}
-            <a class="btn btn-sunrise btn-sm" href="{{ url_for('ui.project_create_page') }}">
-              <i class="bi bi-plus-lg"></i>
-              <span>New World</span>
-            </a>
-            {% endif %}
-          </div>
         </header>
         <div class="page-body">
     {% endif %}
@@ -133,6 +119,71 @@
         </div>
       </main>
     </div>
+    <nav class="mobile-project-nav d-lg-none" aria-label="Project navigation">
+      {% if project_id %}
+      <a class="mobile-project-nav-link{% if screen_id == 'project-home' %} active{% endif %}" href="{{ url_for('ui.project_home_page', project_id=project_id) }}">
+        <i class="bi bi-house-door"></i>
+        <span>ホーム</span>
+      </a>
+      <a class="mobile-project-nav-link{% if screen_id in ['story-sessions', 'story-session'] %} active{% endif %}" href="{{ url_for('ui.story_session_list_page', project_id=project_id) }}">
+        <i class="bi bi-dice-5"></i>
+        <span>セッション</span>
+      </a>
+      <a class="mobile-project-nav-link{% if screen_id == 'feed' %} active{% endif %}" href="{{ url_for('ui.feed_page') }}">
+        <i class="bi bi-broadcast"></i>
+        <span>Feed</span>
+      </a>
+      <a class="mobile-project-nav-link{% if screen_id == 'world-news' %} active{% endif %}" href="{{ url_for('ui.world_news_page', project_id=project_id) }}">
+        <i class="bi bi-newspaper"></i>
+        <span>ニュース</span>
+      </a>
+      {% else %}
+      <a class="mobile-project-nav-link{% if screen_id == 'dashboard' %} active{% endif %}" href="{{ url_for('ui.dashboard_page') }}">
+        <i class="bi bi-house-door"></i>
+        <span>Dashboard</span>
+      </a>
+      <a class="mobile-project-nav-link{% if screen_id in ['project-list', 'project-create'] %} active{% endif %}" href="{{ url_for('ui.project_list_page') }}">
+        <i class="bi bi-grid"></i>
+        <span>Worlds</span>
+      </a>
+      <a class="mobile-project-nav-link{% if screen_id == 'feed' %} active{% endif %}" href="{{ url_for('ui.feed_page') }}">
+        <i class="bi bi-broadcast"></i>
+        <span>Feed</span>
+      </a>
+      <a class="mobile-project-nav-link{% if screen_id == 'letters' %} active{% endif %}" href="{{ url_for('ui.letters_page') }}">
+        <i class="bi bi-envelope-heart"></i>
+        <span>Letters</span>
+      </a>
+      {% endif %}
+      <div class="dropup mobile-project-nav-menu">
+        <button class="mobile-project-nav-link mobile-project-nav-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More navigation">
+          <i class="bi bi-grid-3x3-gap"></i>
+          <span>メニュー</span>
+        </button>
+        <div class="dropdown-menu dropdown-menu-end mobile-project-nav-dropdown">
+          {% if project_id %}
+          {% for item in project_nav_links %}
+          <a class="dropdown-item" href="{{ item.href }}">
+            <i class="bi {{ item.icon }}"></i>
+            <span>{{ item.label }}</span>
+          </a>
+          {% endfor %}
+          {% else %}
+          {% for item in global_nav_links %}
+          <a class="dropdown-item" href="{{ item.href }}">
+            <i class="bi {{ item.icon }}"></i>
+            <span>{{ item.label }}</span>
+          </a>
+          {% endfor %}
+          {% endif %}
+          <div class="dropdown-divider"></div>
+          <button class="dropdown-item" type="button" data-action="logout">
+            <i class="bi bi-box-arrow-right"></i>
+            <span>ログアウト</span>
+          </button>
+        </div>
+      </div>
+    </nav>
     {% endif %}
 
     <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastStack"></div>

@@ -51,7 +51,7 @@
         <div class="closet-detail-layout">
           <div class="closet-detail-preview">
             <img id="closetDetailPreviewImage" alt="">
-            <div class="closet-detail-preview-empty" id="closetDetailPreviewEmpty">生成後に画像が保存されます。</div>
+            <div class="closet-detail-preview-empty" id="closetDetailPreviewEmpty">画像を生成すると、ここにプレビューが表示されます。</div>
           </div>
           <form id="closetGeneratedSaveForm" class="stacked-form">
             <div id="closetDetailCreateFields">
@@ -143,6 +143,29 @@
   let generatedDraft = null;
   let isGeneratingImage = false;
 
+  function resolveGeneratedImageUrl(payload) {
+    if (!payload || typeof payload !== "object") return "";
+    return String(
+      payload.image_url
+      || payload.media_url
+      || payload.url
+      || payload.asset?.media_url
+      || payload.asset?.url
+      || ""
+    ).trim();
+  }
+
+  async function fetchAssetMediaUrl(assetId) {
+    const id = Number(assetId || 0);
+    if (!id) return "";
+    try {
+      const asset = await NovelUI.api(`/api/v1/assets/${id}`);
+      return String(asset?.media_url || "").trim();
+    } catch (_error) {
+      return "";
+    }
+  }
+
   function setLoading(active) {
     loading.classList.toggle("d-none", !active);
     newOutfitButton.disabled = active;
@@ -161,10 +184,11 @@
   }
 
   function setGeneratedPreview(draft) {
-    detailPreviewImage.src = draft.image_url || "";
+    const previewUrl = String(draft?.image_url || "").trim();
+    detailPreviewImage.src = previewUrl;
     detailPreviewImage.alt = draft.name || "衣装画像";
-    detailPreviewImage.classList.toggle("d-none", !draft.image_url);
-    detailPreviewEmpty.classList.toggle("d-none", Boolean(draft.image_url));
+    detailPreviewImage.classList.toggle("d-none", !previewUrl);
+    detailPreviewEmpty.classList.toggle("d-none", Boolean(previewUrl));
   }
 
   function renderCharacterSelects() {
@@ -291,12 +315,13 @@
           edit_existing: Boolean(generatedDraft?.outfit_id),
         },
       });
+      const resolvedUrl = resolveGeneratedImageUrl(generated) || await fetchAssetMediaUrl(generated?.asset_id);
       generatedDraft = {
         ...(generatedDraft || {}),
         character_id: characterId,
         asset_id: generated.asset_id,
         asset: generated.asset,
-        image_url: generated.asset?.media_url || generated.image_url || "",
+        image_url: resolvedUrl,
         prompt_text: promptText,
       };
       setGeneratedPreview(generatedDraft);
@@ -309,6 +334,11 @@
       setImageGenerating(false);
       setLoading(false);
     }
+  });
+
+  detailPreviewImage.addEventListener("error", () => {
+    detailPreviewImage.classList.add("d-none");
+    detailPreviewEmpty.classList.remove("d-none");
   });
 
   generatedSaveForm.addEventListener("submit", async (event) => {

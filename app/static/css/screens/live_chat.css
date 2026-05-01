@@ -301,7 +301,7 @@ body[data-screen="stories"] .live-chat-room-session-list {
 .live-chat-image-panel {
   --stage-width: 1024;
   --stage-height: 1536;
-  --rendered-stage-height: 560px;
+  --rendered-stage-height: clamp(22rem, 62vw, 56rem);
   width: 100%;
   max-width: 100%;
   display: flex;
@@ -544,7 +544,7 @@ body[data-screen="stories"] .live-chat-room-session-list {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: inherit;
   cursor: zoom-in;
 }
@@ -1185,7 +1185,8 @@ body[data-screen="stories"] .live-chat-room-session-list {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background: rgba(2, 8, 16, 0.82);
 }
 
 .live-chat-costume-card.selected {
@@ -1272,7 +1273,7 @@ body[data-screen="stories"] .live-chat-room-session-list {
 .live-chat-closet-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .live-chat-closet-selected {
@@ -1380,7 +1381,7 @@ body[data-screen="stories"] .live-chat-room-session-list {
 .room-outfit-thumb img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .room-outfit-default-thumb {
@@ -1616,7 +1617,7 @@ body[data-screen="stories"] .live-chat-room-session-list {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 @media (max-width: 991.98px) {
@@ -2658,7 +2659,7 @@ body[data-screen="story-session"] .story-image-gallery-thumb {
 body[data-screen="story-session"] .story-image-gallery-thumb img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 
@@ -2947,4 +2948,260 @@ body[data-screen="story-session"] .story-session-token-list .is-empty {
   border-color: transparent;
   background: transparent;
   color: rgba(180, 221, 255, 0.62);
+}
+
+@media (max-width: 1199.98px) {
+  .live-chat-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "meta"
+      "main"
+      "side";
+  }
+
+  .live-chat-main,
+  .live-chat-side {
+    min-height: auto;
+    min-width: 0;
+  }
+
+  .live-chat-side {
+    align-self: stretch;
+  }
+
+  .live-chat-image-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
+  }
+}
+
+@media (max-width: 767.98px) {
+  body[data-screen="live-chat"] .app-main,
+  body[data-screen="story-session"] .app-main {
+    padding: 0.75rem 0.65rem 1rem;
+  }
+
+  body[data-screen="live-chat"] .page-body,
+  body[data-screen="story-session"] .page-body {
+    gap: 0.85rem;
+  }
+
+  body[data-screen="live-chat"] .topbar,
+  body[data-screen="story-session"] .topbar {
+    margin-bottom: 0.85rem;
+    padding: 0.85rem;
+    border-radius: 1rem;
+  }
+
+  body[data-screen="live-chat"] .topbar-actions,
+  body[data-screen="story-session"] .topbar-actions {
+    display: none;
+  }
+
+  body[data-screen="live-chat"] .topbar-actions .btn,
+  body[data-screen="story-session"] .topbar-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .live-chat-shell {
+    gap: 0.85rem;
+  }
+
+  .live-chat-main,
+  .live-chat-side,
+  .live-chat-log-card,
+  .live-chat-compose {
+    border-radius: 1rem;
+  }
+
+  .live-chat-main,
+  .live-chat-side {
+    padding: 0.85rem;
+  }
+
+  .live-chat-stage-actions,
+  .live-chat-choice-buttons,
+  .live-chat-compose-head,
+  .live-chat-log-head,
+  .panel-head {
+    align-items: stretch;
+  }
+
+  .live-chat-stage-actions,
+  .live-chat-compose-head,
+  .live-chat-log-head,
+  .panel-head {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .live-chat-stage-actions .btn,
+  .live-chat-choice-button,
+  .live-chat-compose-head .btn,
+  .live-chat-log-head .btn,
+  .panel-head .btn {
+    width: 100%;
+    white-space: normal;
+  }
+
+  .live-chat-image-panel {
+    max-width: 100%;
+  }
+
+  .live-chat-stage-frame {
+    border-radius: 0.9rem;
+  }
+
+  .live-chat-novel-box {
+    left: 0.55rem;
+    right: 0.55rem;
+    bottom: 0.55rem;
+    min-height: 7.5rem;
+    max-height: min(48%, 12rem);
+    padding: 0.75rem;
+    overflow: visible;
+  }
+
+  .live-chat-novel-text {
+    font-size: 0.92rem;
+    line-height: 1.65;
+  }
+
+  .live-chat-novel-footer {
+    align-items: flex-end;
+    flex: 0 0 auto;
+    min-height: 2rem;
+  }
+
+  .live-chat-novel-pager {
+    flex: 0 0 auto;
+  }
+
+  .live-chat-novel-page-button {
+    min-height: 1.85rem;
+    background: rgba(8, 17, 31, 0.62);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  }
+
+  .live-chat-message-panel {
+    max-height: 46vh;
+    padding: 0.75rem;
+    border-radius: 0.9rem;
+  }
+
+  .live-chat-bubble-head,
+  .live-chat-gift-card {
+    gap: 0.5rem;
+  }
+
+  .live-chat-compose {
+    padding: 0.7rem;
+  }
+
+  .live-chat-compose textarea.form-control {
+    min-height: 6.75rem;
+    padding-right: 3.55rem;
+    padding-bottom: 0.85rem;
+  }
+
+  .live-chat-compose-editor-bar {
+    position: static;
+    margin-top: 0.55rem;
+    padding-right: 3.55rem;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .live-chat-compose-proxy,
+  .live-chat-compose-attach {
+    min-height: 2rem;
+    padding: 0.28rem 0.48rem;
+    font-size: 0.76rem;
+  }
+
+  .live-chat-compose #liveChatGiftSelectedName {
+    flex-basis: 100%;
+    max-width: 100%;
+  }
+
+  .live-chat-compose-send {
+    top: 0.65rem;
+    right: 0.65rem;
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .live-chat-compose .live-chat-gift-preview {
+    max-width: 100%;
+    border-radius: 0.85rem;
+  }
+
+  .live-chat-costume-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .live-chat-closet-picker {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  }
+}
+
+@media (max-width: 575.98px) {
+  body[data-screen="live-chat"] .app-main,
+  body[data-screen="story-session"] .app-main {
+    padding-inline: 0.5rem;
+  }
+
+  .live-chat-main,
+  .live-chat-side {
+    padding: 0.7rem;
+  }
+
+  .live-chat-log-card {
+    padding: 0.75rem;
+  }
+
+  .live-chat-stage-frame.is-loading::after {
+    width: min(88%, 20rem);
+    min-height: 6.5rem;
+    padding: 1rem;
+    border-radius: 1rem;
+    font-size: 0.86rem;
+  }
+
+  .live-chat-eval-badge {
+    min-width: 0;
+    padding: 0.65rem;
+  }
+
+  .live-chat-eval-head {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .live-chat-novel-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+  }
+
+  .live-chat-novel-pager {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+
+  .live-chat-gift-card {
+    align-items: flex-start;
+  }
+
+  .live-chat-gift-thumb {
+    width: 52px;
+    height: 52px;
+  }
+
+  .live-chat-closet-modal .modal-body,
+  .live-chat-closet-modal .modal-header,
+  .live-chat-closet-modal .modal-footer {
+    padding-inline: 0.75rem;
+  }
 }

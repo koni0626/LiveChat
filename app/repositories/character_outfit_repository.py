@@ -1,27 +1,13 @@
 from datetime import datetime
 
-from sqlalchemy import case
-
 from ..extensions import db
 from ..models.character_outfit import CharacterOutfit
 
 
 class CharacterOutfitRepository:
     def _order_by_display_priority(self, query, *, include_character: bool = False):
-        source_rank = case(
-            (CharacterOutfit.source_type == "character_base", 1),
-            else_=0,
-        )
-        order_fields = []
-        if include_character:
-            order_fields.append(CharacterOutfit.character_id.asc())
-        order_fields.extend(
-            [
-                source_rank.asc(),
-                CharacterOutfit.id.desc(),
-            ]
-        )
-        return query.order_by(*order_fields)
+        del include_character
+        return query.order_by(CharacterOutfit.id.desc())
 
     def list_by_project(self, project_id: int, include_deleted: bool = False):
         query = CharacterOutfit.query.filter(CharacterOutfit.project_id == project_id)
