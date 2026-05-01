@@ -3,6 +3,7 @@ from flask import Blueprint, request
 from ...api import ForbiddenError, NotFoundError, json_response
 from ..access import require_project_manage, require_project_view
 from ...services.asset_service import AssetService
+from ...services.character_memory_note_service import CharacterMemoryNoteService
 from ...services.character_service import CharacterService
 from ...services.user_setting_service import UserSettingService
 from ...utils import json_util
@@ -11,8 +12,29 @@ from flask import current_app
 
 characters_bp = Blueprint("characters", __name__)
 character_service = CharacterService()
+character_memory_note_service = CharacterMemoryNoteService()
 asset_service = AssetService()
 user_setting_service = UserSettingService()
+
+
+def _require_existing_character(character_id: int, *, manage: bool = False):
+    character = character_service.get_character(character_id)
+    if not character:
+        raise NotFoundError()
+    if manage:
+        require_project_manage(character.project_id)
+    else:
+        require_project_view(character.project_id)
+    return character
+
+
+def _require_memory_note(character_id: int, note_id: int):
+    note = character_memory_note_service.get_note(note_id)
+    if not note or int(note.character_id) != int(character_id):
+        raise NotFoundError()
+    return note
+
+
 def _get_bool_query(name: str, default: bool = False) -> bool:
     value = request.args.get(name)
     if value is None:
@@ -209,3 +231,49 @@ def delete_character(character_id: int):
     if not deleted:
         return json_response({"message": "not_found"}, status=404)
     return json_response({"character_id": character_id, "deleted": True})
+
+
+@characters_bp.route("/characters/<int:character_id>/memory-notes", methods=["GET"])
+def list_character_memory_notes(character_id: int):
+    _require_existing_character(character_id)
+    include_disabled = _get_bool_query("include_disabled", default=True)
+    notes = character_memory_note_service.list_serialized_notes(
+        character_id,
+        include_disabled=include_disabled,
+    )
+    return json_response(notes, meta={"character_id": character_id, "count": len(notes)})
+
+
+@characters_bp.route("/characters/<int:character_id>/memory-notes", methods=["POST"])
+def create_character_memory_note(character_id: int):
+    _require_existing_character(character_id, manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        note = character_memory_note_service.create_note(character_id, payload, source_type="manual")
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    return json_response(character_memory_note_service.serialize_note(note), status=201)
+
+
+@characters_bp.route("/characters/<int:character_id>/memory-notes/<int:note_id>", methods=["PATCH"])
+def update_character_memory_note(character_id: int, note_id: int):
+    _require_existing_character(character_id, manage=True)
+    _require_memory_note(character_id, note_id)
+    payload = request.get_json(silent=True) or {}
+    try:
+        note = character_memory_note_service.update_note(note_id, payload)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    if not note:
+        raise NotFoundError()
+    return json_response(character_memory_note_service.serialize_note(note))
+
+
+@characters_bp.route("/characters/<int:character_id>/memory-notes/<int:note_id>", methods=["DELETE"])
+def delete_character_memory_note(character_id: int, note_id: int):
+    _require_existing_character(character_id, manage=True)
+    _require_memory_note(character_id, note_id)
+    deleted = character_memory_note_service.delete_note(note_id)
+    if not deleted:
+        raise NotFoundError()
+    return json_response({"character_id": character_id, "note_id": note_id, "deleted": True})

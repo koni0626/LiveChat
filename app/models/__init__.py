@@ -1,9 +1,11 @@
 from ..extensions import db
 
 from .asset import Asset
+from .chat_session_objective_note import ChatSessionObjectiveNote
 from .chat_message import ChatMessage
 from .chat_session import ChatSession
 from .character import Character
+from .character_memory_note import CharacterMemoryNote
 from .character_user_memory import CharacterUserMemory
 from .character_feed_profile import CharacterFeedProfile
 from .character_outfit import CharacterOutfit
@@ -33,9 +35,11 @@ from .world_news_item import WorldNewsItem
 __all__ = [
     "db",
     "Asset",
+    "ChatSessionObjectiveNote",
     "ChatMessage",
     "ChatSession",
     "Character",
+    "CharacterMemoryNote",
     "CharacterUserMemory",
     "CharacterFeedProfile",
     "CharacterOutfit",

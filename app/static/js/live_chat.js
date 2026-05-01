@@ -27,6 +27,9 @@
   const closetSelectModalElement = document.getElementById("liveChatClosetSelectModal");
   const closetPicker = document.getElementById("liveChatClosetPicker");
   const sceneChoicePanel = document.getElementById("liveChatSceneChoicePanel");
+  const objectiveInitial = document.getElementById("liveChatObjectiveInitial");
+  const objectiveList = document.getElementById("liveChatObjectiveList");
+  const objectiveCount = document.getElementById("liveChatObjectiveDebugCount");
 
   let currentContext = null;
   let giftController = null;
@@ -86,6 +89,54 @@
     shell.renderImageGrid(context.images || []);
     costumeRoomController?.render(context);
     renderSceneChoices(context);
+    renderObjectiveNotes(context);
+  }
+
+  function getInitialObjective(context) {
+    const session = context?.session || {};
+    const roomSnapshot = session.room_snapshot_json || {};
+    if (roomSnapshot && typeof roomSnapshot === "object" && roomSnapshot.conversation_objective) {
+      return roomSnapshot.conversation_objective;
+    }
+    const room = context?.room || {};
+    if (room && typeof room === "object" && room.conversation_objective) {
+      return room.conversation_objective;
+    }
+    const settings = session.settings_json || {};
+    if (settings && typeof settings === "object") {
+      return settings.conversation_objective || settings.session_objective || "";
+    }
+    return "";
+  }
+
+  function renderObjectiveNotes(context) {
+    if (!objectiveInitial || !objectiveList || !objectiveCount) return;
+    const initialObjective = String(getInitialObjective(context) || "").trim();
+    const notes = Array.isArray(context?.session_objective_notes) ? context.session_objective_notes : [];
+    objectiveCount.textContent = `${notes.length} items`;
+    objectiveInitial.innerHTML = `
+      <div class="live-chat-objective-label">初期目的</div>
+      <div class="live-chat-objective-text">${NovelUI.escape(initialObjective || "初期目的は未設定です。")}</div>
+    `;
+    if (!notes.length) {
+      objectiveList.innerHTML = '<div class="live-chat-objective-empty">まだDirectionAIの目的メモはありません。</div>';
+      return;
+    }
+    objectiveList.innerHTML = notes.map((note) => {
+      const scope = note.character_name || "セッション全体";
+      const source = note.source_type === "manual" ? "手動" : "DirectionAI";
+      return `
+        <article class="live-chat-objective-item">
+          <div class="live-chat-objective-item-head">
+            <span class="live-chat-objective-scope">${NovelUI.escape(scope)}</span>
+            <span class="live-chat-objective-priority">P${Number(note.priority || 0)}</span>
+            <span class="live-chat-objective-source">${NovelUI.escape(source)}</span>
+          </div>
+          <h6>${NovelUI.escape(note.title || "目的メモ")}</h6>
+          <p>${NovelUI.escape(note.note || "")}</p>
+        </article>
+      `;
+    }).join("");
   }
 
   async function loadContext() {

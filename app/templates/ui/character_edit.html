@@ -65,6 +65,48 @@
     </form>
   </section>
 
+  <section class="panel-card character-memory-note-panel">
+    <div class="panel-head">
+      <div>
+        <div class="eyebrow">AI MEMORY</div>
+        <h3>キャラクターAIメモ</h3>
+        <p class="section-copy mb-0">初期設定はそのままに、会話から増えた面白い癖や好みだけを追加で管理します。</p>
+      </div>
+    </div>
+    <form id="characterMemoryNoteForm" class="character-memory-note-form">
+      <div class="row g-2">
+        <div class="col-md-5">
+          <label class="form-label">カテゴリ</label>
+          <select class="form-select" name="category">
+            <option value="preference">好み</option>
+            <option value="habit">癖</option>
+            <option value="value">価値観</option>
+            <option value="weakness">弱点</option>
+            <option value="relationship">関係性</option>
+            <option value="foreshadowing">伏線</option>
+            <option value="fun_fact">面白設定</option>
+            <option value="other">その他</option>
+          </select>
+        </div>
+        <div class="col-md-7 d-flex align-items-end">
+          <label class="form-check character-memory-pin-check">
+            <input class="form-check-input" type="checkbox" name="pinned">
+            <span class="form-check-label">優先して使う</span>
+          </label>
+        </div>
+      </div>
+      <label class="form-label" for="characterMemoryNoteInput">メモ</label>
+      <textarea class="form-control" id="characterMemoryNoteInput" name="note" rows="3" placeholder="例: ノアはワインの銘柄に少し詳しく、照れると早口になる。"></textarea>
+      <div class="d-flex justify-content-end">
+        <button class="btn btn-sunrise" type="submit">
+          <i class="bi bi-stars"></i>
+          <span>メモを追加</span>
+        </button>
+      </div>
+    </form>
+    <div id="characterMemoryNoteList" class="character-memory-note-list" aria-live="polite"></div>
+  </section>
+
   <section class="panel-card">
     <div class="panel-head">
       <div>
@@ -184,4 +226,5 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/markdown_editor.js') }}"></script>
 <script src="{{ url_for('static', filename='js/character_edit.js') }}"></script>
+<script src="{{ url_for('static', filename='js/character_memory_notes.js') }}"></script>
 {% endblock %}

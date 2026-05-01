@@ -396,6 +396,20 @@ def _character_user_memory_blocks(context: dict) -> list[str]:
     return blocks
 
 
+def _append_character_growth_notes(lines: list[str], character: dict):
+    block = str(character.get("ai_memory_prompt_block") or "").strip()
+    if not block:
+        return
+    lines.append("  " + block.replace("\n", "\n  "))
+
+
+def _append_session_objective_notes(lines: list[str], context: dict):
+    block = str(context.get("session_objective_prompt_block") or "").strip()
+    if not block:
+        return
+    lines.append(block)
+
+
 def build_opening_prompt(context: dict) -> str:
     session_objective = get_session_objective(context)
     state_json = (context.get("state") or {}).get("state_json") or {}
@@ -415,6 +429,7 @@ def build_opening_prompt(context: dict) -> str:
     ]
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
+    _append_session_objective_notes(lines, context)
     if context["world"].get("overview"):
         lines.append(f"World overview: {context['world']['overview']}")
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
@@ -446,6 +461,7 @@ def build_opening_prompt(context: dict) -> str:
             lines.append(f"  memory={summary}")
         if character.get("feed_profile_text"):
             lines.append(f"  public_feed_tendency={character.get('feed_profile_text')}")
+        _append_character_growth_notes(lines, character)
     memory_blocks = _character_user_memory_blocks(context)
     if memory_blocks:
         lines.append("Character memory about this player:")
@@ -625,6 +641,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     ]
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
+    _append_session_objective_notes(lines, context)
     if context["world"].get("overview"):
         lines.append(f"World overview: {context['world']['overview']}")
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
@@ -727,6 +744,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
             lines.append(f"  memory={summary}")
         if character.get("feed_profile_text"):
             lines.append(f"  public_feed_tendency={character.get('feed_profile_text')}")
+        _append_character_growth_notes(lines, character)
     lines.append("If the player mentions something a character likes, remembers, or responds well to, let that improve the reaction.")
     lines.append("If the player touches a taboo, dislike, or romantic boundary, cool the reaction and let it affect the tone.")
     lines.append(
@@ -1429,6 +1447,7 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
         lines.append(world_map_context)
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
+    _append_session_objective_notes(lines, context)
     if relationship_state:
         lines.append("Relationship state:")
         for name, metrics in relationship_state.items():
@@ -1490,6 +1509,7 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
             lines.append(f"  memory={summary}")
         if character.get("feed_profile_text"):
             lines.append(f"  public_feed_tendency={character.get('feed_profile_text')}")
+        _append_character_growth_notes(lines, character)
     lines.append("Recent conversation:")
     for message in context["messages"][-8:]:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")

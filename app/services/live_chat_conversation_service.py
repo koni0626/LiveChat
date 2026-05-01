@@ -18,6 +18,8 @@ from .live_chat_media_service import LiveChatMediaService
 from .session_state_service import SessionStateService
 from .user_setting_service import UserSettingService
 from .character_user_memory_service import CharacterUserMemoryService
+from .character_memory_note_service import CharacterMemoryNoteService
+from .session_objective_note_service import SessionObjectiveNoteService
 
 
 class LiveChatConversationService:
@@ -36,6 +38,8 @@ class LiveChatConversationService:
         serialize_message=None,
         serialize_state=None,
         character_user_memory_service: CharacterUserMemoryService | None = None,
+        character_memory_note_service: CharacterMemoryNoteService | None = None,
+        session_objective_note_service: SessionObjectiveNoteService | None = None,
     ):
         self._chat_session_service = chat_session_service
         self._chat_message_service = chat_message_service
@@ -47,6 +51,8 @@ class LiveChatConversationService:
         self._serialize_message = serialize_message
         self._serialize_state = serialize_state
         self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
+        self._character_memory_note_service = character_memory_note_service or CharacterMemoryNoteService()
+        self._session_objective_note_service = session_objective_note_service or SessionObjectiveNoteService()
 
     def _update_character_user_memory(self, session, context: dict):
         if not session:
@@ -135,7 +141,14 @@ class LiveChatConversationService:
         relationship_state = prompt_support.apply_director_relationship_update(relationship_state, context, director)
         state_json["conversation_director"] = director
         state_json["relationship_state"] = relationship_state
-        return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
+        updated = self._session_state_service.upsert_state(session_id, {"state_json": state_json})
+        updated_context = self._context_provider(session_id) if self._context_provider else context
+        self._session_objective_note_service.update_from_direction(
+            self._text_ai_client,
+            updated_context,
+            source_ref=f"chat_session:{session_id}",
+        )
+        return updated
 
     def update_scene_progression(self, session_id: int, context: dict, user_message_text: str):
         state_row = self._session_state_service.get_state(session_id)
@@ -352,6 +365,11 @@ class LiveChatConversationService:
             updated_context = self._context_provider(session_id)
         if self._letter_service:
             self._update_character_user_memory(session, updated_context)
+            self._character_memory_note_service.extract_from_live_chat_context(
+                self._text_ai_client,
+                updated_context,
+                source_ref=f"chat_session:{session_id}",
+            )
             return self._letter_service.try_generate_for_context(
                 session,
                 updated_context,
@@ -422,6 +440,11 @@ class LiveChatConversationService:
         updated_context = self._context_provider(session_id)
         self.update_session_memory(session_id, updated_context)
         self._update_character_user_memory(session, updated_context)
+        self._character_memory_note_service.extract_from_live_chat_context(
+            self._text_ai_client,
+            updated_context,
+            source_ref=f"chat_session:{session_id}",
+        )
         updated_context = self._context_provider(session_id)
         self.update_conversation_evaluation(session_id, updated_context)
         updated_context = self._context_provider(session_id)
@@ -530,6 +553,12 @@ class LiveChatConversationService:
             updated_context = self._context_provider(session_id)
             self.update_conversation_evaluation(session_id, updated_context)
             updated_context = self._context_provider(session_id)
+            self._update_character_user_memory(session, updated_context)
+            self._character_memory_note_service.extract_from_live_chat_context(
+                self._text_ai_client,
+                updated_context,
+                source_ref=f"chat_session:{session_id}",
+            )
             state = self._extract_state_payload(session, updated_context)
             updated_context = self._context_provider(session_id)
             if assistant_message:

@@ -14,6 +14,8 @@ from .session_state_service import SessionStateService
 from .world_service import WorldService
 from .world_map_service import WorldMapService
 from .character_user_memory_service import CharacterUserMemoryService
+from .character_memory_note_service import CharacterMemoryNoteService
+from .session_objective_note_service import SessionObjectiveNoteService
 
 
 class LiveChatContextService:
@@ -37,6 +39,8 @@ class LiveChatContextService:
         select_characters,
         text_ai_client: TextAIClient,
         character_user_memory_service: CharacterUserMemoryService | None = None,
+        character_memory_note_service: CharacterMemoryNoteService | None = None,
+        session_objective_note_service: SessionObjectiveNoteService | None = None,
     ):
         self._chat_session_service = chat_session_service
         self._chat_message_service = chat_message_service
@@ -53,6 +57,29 @@ class LiveChatContextService:
         self._select_characters = select_characters
         self._text_ai_client = text_ai_client
         self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
+        self._character_memory_note_service = character_memory_note_service or CharacterMemoryNoteService()
+        self._session_objective_note_service = session_objective_note_service or SessionObjectiveNoteService()
+
+    def _attach_character_growth_notes(self, characters: list[dict]) -> list[dict]:
+        enriched = []
+        for character in characters or []:
+            item = dict(character)
+            character_id = int(item.get("id") or 0)
+            if character_id:
+                item["ai_memory_notes"] = self._character_memory_note_service.list_serialized_notes(
+                    character_id,
+                    include_disabled=False,
+                    limit=12,
+                )
+                item["ai_memory_prompt_block"] = self._character_memory_note_service.build_prompt_block(
+                    character_id,
+                    limit=8,
+                )
+            else:
+                item["ai_memory_notes"] = []
+                item["ai_memory_prompt_block"] = ""
+            enriched.append(item)
+        return enriched
 
     def _create_opening_message(self, session, context: dict):
         opening = text_support.generate_opening_message(self._text_ai_client, context)
@@ -128,7 +155,16 @@ class LiveChatContextService:
         selected_image = next((item for item in scene_images if item.is_selected), None)
         if not selected_image and scene_images:
             selected_image = scene_images[0]
-        characters = self._select_characters(session_id)
+        characters = self._attach_character_growth_notes(self._select_characters(session_id))
+        session_objective_notes = self._session_objective_note_service.list_serialized_notes(
+            session_id,
+            characters=characters,
+            include_archived=False,
+        )
+        session_objective_prompt_block = self._session_objective_note_service.build_prompt_block(
+            session_id,
+            characters=characters,
+        )
         character_user_memories = {}
         for character in characters:
             character_id = int(character.get("id") or 0)
@@ -154,6 +190,8 @@ class LiveChatContextService:
                 "world_map": world_map_context,
                 "session": self._serializer.serialize_session(session),
                 "character_user_memories": character_user_memories,
+                "session_objective_notes": session_objective_notes,
+                "session_objective_prompt_block": session_objective_prompt_block,
                 "messages": [],
                 "state": self._serializer.serialize_state(state),
                 "characters": characters,
@@ -176,6 +214,8 @@ class LiveChatContextService:
             "world_map": world_map_context,
             "session": self._serializer.serialize_session(session),
             "character_user_memories": character_user_memories,
+            "session_objective_notes": session_objective_notes,
+            "session_objective_prompt_block": session_objective_prompt_block,
             "room": self._live_chat_room_service.serialize_room(room) if room else None,
             "messages": [self._serializer.serialize_message(item) for item in messages],
             "state": self._serializer.serialize_state(state),
