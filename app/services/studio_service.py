@@ -94,6 +94,96 @@ class StudioService:
             },
         }
 
+    def get_image(self, project_id: int, owner_user_id: int, asset_id: int):
+        asset_id = int(asset_id or 0)
+        if not asset_id:
+            return None
+        chat = (
+            db.session.query(SessionImage, ChatSession, Asset)
+            .join(ChatSession, ChatSession.id == SessionImage.session_id)
+            .join(Asset, Asset.id == SessionImage.asset_id)
+            .filter(
+                Asset.id == asset_id,
+                ChatSession.project_id == project_id,
+                ChatSession.owner_user_id == owner_user_id,
+                Asset.deleted_at.is_(None),
+            )
+            .order_by(SessionImage.id.desc())
+            .first()
+        )
+        if chat:
+            image, session, asset = chat
+            costume_types = {"costume_initial", "costume_reference"}
+            return self._serialize_image(
+                asset,
+                source="costume" if image.image_type in costume_types else "chat",
+                source_label="衣装" if image.image_type in costume_types else "チャット",
+                source_image_id=image.id,
+                prompt_text=image.prompt_text,
+                image_type=image.image_type,
+                quality=image.quality,
+                size=image.size,
+                created_at=image.created_at,
+                return_url=f"/projects/{project_id}/live-chat/{session.id}",
+            )
+        story = (
+            db.session.query(StoryImage, StorySession, Asset)
+            .join(StorySession, StorySession.id == StoryImage.session_id)
+            .join(Asset, Asset.id == StoryImage.asset_id)
+            .filter(
+                Asset.id == asset_id,
+                StorySession.project_id == project_id,
+                StorySession.owner_user_id == owner_user_id,
+                Asset.deleted_at.is_(None),
+            )
+            .order_by(StoryImage.id.desc())
+            .first()
+        )
+        if story:
+            image, session, asset = story
+            metadata = self._load_json(image.metadata_json) or {}
+            return self._serialize_image(
+                asset,
+                source="story",
+                source_label="ストーリー",
+                source_image_id=image.id,
+                prompt_text=image.prompt_text,
+                image_type=image.visual_type,
+                quality=metadata.get("quality"),
+                size=metadata.get("size"),
+                created_at=image.created_at,
+                return_url=f"/projects/{project_id}/story-sessions/{session.id}",
+            )
+        asset = self._asset_service.get_asset(asset_id)
+        if not asset or asset.project_id != project_id or not getattr(asset, "file_path", None):
+            return None
+        metadata = self._load_json(asset.metadata_json) or {}
+        if asset.asset_type == "studio_image" and int(metadata.get("owner_user_id") or 0) == int(owner_user_id):
+            return self._serialize_studio_asset(asset)
+        if asset.asset_type == "outing_image":
+            outing_id = int(metadata.get("outing_id") or 0)
+            outing = OutingSession.query.filter(
+                OutingSession.id == outing_id,
+                OutingSession.project_id == project_id,
+                OutingSession.user_id == owner_user_id,
+                OutingSession.deleted_at.is_(None),
+            ).first() if outing_id else None
+            if outing:
+                return self._serialize_image(
+                    asset,
+                    source="outing",
+                    source_label="おでかけ",
+                    source_image_id=asset.id,
+                    prompt_text=metadata.get("prompt") or metadata.get("revised_prompt"),
+                    image_type="outing_image",
+                    quality=metadata.get("quality"),
+                    size=metadata.get("size"),
+                    created_at=asset.created_at,
+                    return_url=f"/projects/{project_id}/outings",
+                    metadata=metadata,
+                )
+        return None
+
     def generate_variant(self, project_id: int, owner_user_id: int, payload: dict | None = None):
         payload = dict(payload or {})
         try:
@@ -361,7 +451,7 @@ class StudioService:
         return self._serialize_image(
             asset,
             source="studio",
-            source_label="スタジオ",
+            source_label="編集画像",
             source_image_id=asset.id,
             prompt_text=metadata.get("prompt") or metadata.get("instruction"),
             image_type="studio_image",

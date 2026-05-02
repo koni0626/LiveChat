@@ -54,6 +54,15 @@ def list_studio_images(project_id: int):
     )
 
 
+@studio_bp.route("/projects/<int:project_id>/studio/images/<int:asset_id>", methods=["GET"])
+def get_studio_image(project_id: int, asset_id: int):
+    _, user = _require_project(project_id)
+    result = studio_service.get_image(project_id, user.id, asset_id)
+    if not result:
+        raise NotFoundError()
+    return json_response(result)
+
+
 @studio_bp.route("/projects/<int:project_id>/studio/generate", methods=["POST"])
 def generate_studio_image(project_id: int):
     _, user = _require_project(project_id)

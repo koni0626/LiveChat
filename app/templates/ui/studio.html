@@ -41,13 +41,17 @@
   let currentPage = 1;
   const perPage = 24;
 
-  async function loadImages() {
-    const params = new URLSearchParams({
-      page: String(currentPage),
+  function currentParams(page) {
+    return new URLSearchParams({
+      page: String(page || currentPage),
       per_page: String(perPage),
       source: sourceSelect.value,
       q: searchInput.value.trim(),
     });
+  }
+
+  async function loadImages() {
+    const params = currentParams(currentPage);
     const payload = await NovelUI.api(`/api/v1/projects/${projectId}/studio/images?${params.toString()}`);
     const images = Array.isArray(payload) ? payload : payload.items || [];
     const page = payload.pagination || { page: 1, total_pages: 1, total: images.length, has_prev: false, has_next: false };
@@ -57,7 +61,7 @@
       return;
     }
     grid.innerHTML = images.map((image) => `
-      <a class="studio-image-card" href="/projects/${projectId}/studio/images/${image.asset_id}?page=${page.page}">
+      <a class="studio-image-card" href="/projects/${projectId}/studio/images/${image.asset_id}?${currentParams(page.page).toString()}">
         <img src="${NovelUI.escape(image.media_url)}" alt="${NovelUI.escape(image.file_name || "generated image")}">
         <span>${NovelUI.escape(image.source_label || image.source)}</span>
       </a>

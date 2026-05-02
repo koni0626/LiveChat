@@ -91,6 +91,9 @@
   const generateButton = document.getElementById("studioGenerateButton");
   let searchTimer = null;
 
+  sourceSelect.value = new URLSearchParams(window.location.search).get("source") || "all";
+  searchInput.value = new URLSearchParams(window.location.search).get("q") || "";
+
   function normalizePrompt(image) {
     return image?.prompt_text || image?.metadata?.revised_prompt || image?.metadata?.prompt || "プロンプトは保存されていません。";
   }
@@ -100,11 +103,20 @@
     if (selected) {
       selectedAssetId = Number(selected.asset_id);
       if (replaceUrl) {
-        history.replaceState(null, "", `/projects/${projectId}/studio/images/${selectedAssetId}?page=${currentPage}`);
+        history.replaceState(null, "", `/projects/${projectId}/studio/images/${selectedAssetId}?${currentParams(currentPage).toString()}`);
       }
     }
     renderSelected();
     renderGrid();
+  }
+
+  function currentParams(page) {
+    return new URLSearchParams({
+      page: String(page || currentPage),
+      per_page: String(perPage),
+      source: sourceSelect.value,
+      q: searchInput.value.trim(),
+    });
   }
 
   function renderSelected() {
@@ -149,16 +161,21 @@
   }
 
   async function loadImages() {
-    const params = new URLSearchParams({
-      page: String(currentPage),
-      per_page: String(perPage),
-      source: sourceSelect.value,
-      q: searchInput.value.trim(),
-    });
+    const params = currentParams(currentPage);
     const payload = await NovelUI.api(`/api/v1/projects/${projectId}/studio/images?${params.toString()}`);
     images = Array.isArray(payload) ? payload : payload.items || [];
     renderPagination(payload.pagination || { page: 1, total_pages: 1, total: images.length, has_prev: false, has_next: false });
-    selectImage(images.find((image) => Number(image.asset_id) === selectedAssetId) || images[0] || null, false);
+    const pageSelected = images.find((image) => Number(image.asset_id) === selectedAssetId);
+    if (pageSelected) {
+      selectImage(pageSelected, false);
+    } else {
+      renderGrid();
+    }
+  }
+
+  async function loadSelectedImage() {
+    selected = await NovelUI.api(`/api/v1/projects/${projectId}/studio/images/${selectedAssetId}`);
+    renderSelected();
   }
 
   document.getElementById("studioImageGrid").addEventListener("click", (event) => {
@@ -227,7 +244,11 @@
     loadImages().catch((error) => NovelUI.toast(error.message || "画像を読み込めませんでした。", "danger"));
   });
 
-  loadImages().catch((error) => NovelUI.toast(error.message || "画像を読み込めませんでした。", "danger"));
+  loadSelectedImage()
+    .catch((error) => NovelUI.toast(error.message || "選択画像を読み込めませんでした。", "danger"))
+    .finally(() => {
+      loadImages().catch((error) => NovelUI.toast(error.message || "画像を読み込めませんでした。", "danger"));
+    });
 })();
 </script>
 {% endblock %}
