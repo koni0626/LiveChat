@@ -931,6 +931,16 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
             "If the player asks what facilities a character owns, manages, has, or is connected to, answer from locations whose owner matches that speaking character. If none are registered for them, say that no owned facility is currently known."
         )
         lines.append(world_map_context)
+    current_location = state_json.get("current_location") or {}
+    if isinstance(current_location, dict) and current_location.get("name"):
+        lines.append("Current selected facility. This is the actual place where the live chat scene is happening now.")
+        lines.append(f"- name: {current_location.get('name') or ''}")
+        lines.append(f"- region: {current_location.get('region') or ''}")
+        lines.append(f"- type: {current_location.get('location_type') or ''}")
+        lines.append(f"- description: {current_location.get('description') or ''}")
+        lines.append(
+            "Characters should understand this facility and naturally use its atmosphere, purpose, objects, visitors, sounds, smells, rules, and possible incidents as conversation hooks."
+        )
     if scene_progression:
         lines.append(f"Current scene phase: {scene_progression.get('scene_phase') or ''}")
         lines.append(f"Current location: {scene_progression.get('location') or ''}")
@@ -1233,6 +1243,8 @@ def fallback_narration_scene(context: dict, user_message_text: str, intent: dict
 
 
 def build_narration_reaction_prompt(context: dict, user_message_text: str, scene_update: dict) -> str:
+    current_location = (context.get("state") or {}).get("state_json") or {}
+    current_location = current_location.get("current_location") if isinstance(current_location, dict) else {}
     lines = [
         "ライブ形式のビジュアルノベルで、視覚的な場面転換後の短い発話リアクションを1つ書いてください。",
         "JSONオブジェクトのみを返してください。",
@@ -1250,6 +1262,17 @@ def build_narration_reaction_prompt(context: dict, user_message_text: str, scene
         f"リアクションのヒント: {scene_update.get('character_reaction_hint') or ''}",
         "キャラクター:",
     ]
+    if isinstance(current_location, dict) and current_location.get("name"):
+        lines.extend(
+            [
+                "移動先施設の登録情報:",
+                f"- name: {current_location.get('name') or ''}",
+                f"- region: {current_location.get('region') or ''}",
+                f"- type: {current_location.get('location_type') or ''}",
+                f"- description: {current_location.get('description') or ''}",
+                "この施設の説明を前提に、その場所らしい感情・提案・小さな事件の火種をセリフに入れてください。",
+            ]
+        )
     for character in context["characters"]:
         lines.append(
             f"- {character.get('name')}: first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, sample={character.get('speech_sample') or ''}"

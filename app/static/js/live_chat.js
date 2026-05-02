@@ -27,6 +27,8 @@
   const closetSelectModalElement = document.getElementById("liveChatClosetSelectModal");
   const closetPicker = document.getElementById("liveChatClosetPicker");
   const sceneChoicePanel = document.getElementById("liveChatSceneChoicePanel");
+  const locationMovePanel = document.getElementById("liveChatLocationMovePanel");
+  const toggleLocationMoveButton = document.getElementById("liveChatToggleLocationMoveButton");
   const objectiveInitial = document.getElementById("liveChatObjectiveInitial");
   const objectiveList = document.getElementById("liveChatObjectiveList");
   const objectiveCount = document.getElementById("liveChatObjectiveDebugCount");
@@ -63,6 +65,8 @@
   let cameraEnabled = false;
   let cameraStream = null;
   let cameraBusy = false;
+  let locationMoveVisible = false;
+  let locationMoveBusy = false;
   let currentShortStory = null;
   let idleTalkTimer = null;
   let idleTalkBusy = false;
@@ -123,6 +127,7 @@
     shell.renderImageGrid(context.images || []);
     costumeRoomController?.render(context);
     renderSceneChoices(context);
+    renderLocationMovePanel(context);
     renderObjectiveNotes(context);
     renderPlayerReaction(context);
     renderSavedShortStories(context);
@@ -532,6 +537,90 @@
     sceneChoicePanel.innerHTML = "";
   }
 
+  function currentLocationId(context) {
+    const location = context?.state?.state_json?.current_location;
+    return Number(location?.id || 0);
+  }
+
+  function renderLocationMovePanel(context) {
+    if (!locationMovePanel) return;
+    const locations = Array.isArray(context?.world_map?.locations) ? context.world_map.locations : [];
+    locationMovePanel.classList.toggle("is-hidden", !locationMoveVisible);
+    if (toggleLocationMoveButton) {
+      toggleLocationMoveButton.setAttribute("aria-expanded", locationMoveVisible ? "true" : "false");
+    }
+    if (!locationMoveVisible) return;
+    if (!locations.length) {
+      locationMovePanel.innerHTML = '<div class="empty-panel">登録済みの施設がありません。ワールドマップで施設を追加すると、ここに移動先として表示されます。</div>';
+      return;
+    }
+    const activeId = currentLocationId(context);
+    locationMovePanel.innerHTML = `
+      <div class="live-chat-location-head">
+        <div>
+          <div class="eyebrow">Move</div>
+          <h4>移動する</h4>
+        </div>
+        <button class="btn btn-sm btn-outline-dark" type="button" data-location-move-close>閉じる</button>
+      </div>
+      <div class="live-chat-location-grid">
+        ${locations.map((location) => {
+          const isActive = Number(location.id) === activeId;
+          const meta = [location.region, location.location_type, location.owner_character_name ? `${location.owner_character_name}関連` : ""]
+            .filter(Boolean)
+            .join(" / ");
+          return `
+            <button class="live-chat-location-card${isActive ? " is-active" : ""}" type="button" data-location-move-id="${location.id}" ${locationMoveBusy ? "disabled" : ""}>
+              <span class="live-chat-location-card-title">${NovelUI.escape(location.name || "名称未設定")}</span>
+              <span class="live-chat-location-card-meta">${NovelUI.escape(meta || "施設")}</span>
+              <span class="live-chat-location-card-desc">${NovelUI.escape(NovelUI.truncateText(location.description || "説明未設定", 120))}</span>
+              ${isActive ? '<span class="live-chat-location-card-current">現在地</span>' : ""}
+            </button>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  async function moveToLocation(locationId, button = null) {
+    if (!locationId || locationMoveBusy) return;
+    locationMoveBusy = true;
+    const originalHtml = button?.innerHTML;
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>移動中...';
+    }
+    shell.setImageLoading(true, "auto");
+    try {
+      const result = await LiveChatApi.moveToLocation(sessionId, locationId, {
+        size: imageForm?.size?.value || "1536x1024",
+        quality: imageForm?.quality?.value || "low",
+      });
+      if (result?.context) {
+        applyContext(result.context);
+      } else {
+        await loadContext();
+      }
+      await capturePlayerReactionIfEnabled();
+      if (result?.image_generation_error) {
+        NovelUI.toast(`移動しました。画像生成は失敗しました: ${result.image_generation_error}`, "warning");
+      } else {
+        NovelUI.toast("移動しました。");
+      }
+    } catch (error) {
+      NovelUI.toast(error.message || "移動に失敗しました。", "danger");
+      await loadContext().catch(() => {});
+    } finally {
+      locationMoveBusy = false;
+      if (button && originalHtml) {
+        button.innerHTML = originalHtml;
+        button.disabled = false;
+      }
+      shell.setImageLoading(false, "auto");
+      renderLocationMovePanel(currentContext);
+    }
+  }
+
   function setSceneChoiceLoading(active, activeButton = null) {
     document.querySelectorAll("[data-scene-choice-id]").forEach((button) => {
       button.disabled = active;
@@ -675,6 +764,23 @@
 
   toggleComposeButton?.addEventListener("click", () => {
     setComposeVisible(!composeVisible);
+  });
+
+  toggleLocationMoveButton?.addEventListener("click", () => {
+    locationMoveVisible = !locationMoveVisible;
+    renderLocationMovePanel(currentContext);
+  });
+
+  locationMovePanel?.addEventListener("click", async (event) => {
+    const closeButton = event.target.closest("[data-location-move-close]");
+    if (closeButton) {
+      locationMoveVisible = false;
+      renderLocationMovePanel(currentContext);
+      return;
+    }
+    const button = event.target.closest("[data-location-move-id]");
+    if (!button) return;
+    await moveToLocation(Number(button.dataset.locationMoveId || 0), button);
   });
 
   cameraToggleButton?.addEventListener("click", () => {

@@ -254,6 +254,9 @@ class LiveChatService:
     def execute_scene_choice(self, session_id: int, choice_id: str, payload: dict | None = None):
         return self._conversation_service.execute_scene_choice(session_id, choice_id, payload)
 
+    def move_to_location(self, session_id: int, location_id: int, payload: dict | None = None):
+        return self._conversation_service.move_to_location(session_id, location_id, payload)
+
     def list_costumes(self, session_id: int):
         return self._media_service.list_costumes(session_id)
 

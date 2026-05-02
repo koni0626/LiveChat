@@ -65,6 +65,13 @@
     });
   }
 
+  async function moveToLocation(sessionId, locationId, body = {}) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/locations/${locationId}/move`, {
+      method: "POST",
+      body,
+    });
+  }
+
   async function postMessage(sessionId, body) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/messages`, {
       method: "POST",
@@ -187,6 +194,7 @@
     selectClosetOutfit,
     deleteCostume,
     executeSceneChoice,
+    moveToLocation,
     setReferenceImage,
     deleteMessage,
   };

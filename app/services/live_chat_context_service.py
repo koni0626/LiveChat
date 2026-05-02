@@ -245,7 +245,7 @@ class LiveChatContextService:
         try:
             locations = self._world_map_service.list_locations(project_id)
             return {
-                "locations": locations[:20],
+                "locations": locations[:100],
                 "prompt_context": self._world_map_service.location_prompt_context(project_id, limit=20),
             }
         except Exception:

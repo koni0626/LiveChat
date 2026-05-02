@@ -20,6 +20,7 @@ from .user_setting_service import UserSettingService
 from .character_user_memory_service import CharacterUserMemoryService
 from .character_memory_note_service import CharacterMemoryNoteService
 from .session_objective_note_service import SessionObjectiveNoteService
+from ..repositories.world_location_repository import WorldLocationRepository
 
 
 class LiveChatConversationService:
@@ -40,6 +41,7 @@ class LiveChatConversationService:
         character_user_memory_service: CharacterUserMemoryService | None = None,
         character_memory_note_service: CharacterMemoryNoteService | None = None,
         session_objective_note_service: SessionObjectiveNoteService | None = None,
+        world_location_repository: WorldLocationRepository | None = None,
     ):
         self._chat_session_service = chat_session_service
         self._chat_message_service = chat_message_service
@@ -53,6 +55,7 @@ class LiveChatConversationService:
         self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
         self._character_memory_note_service = character_memory_note_service or CharacterMemoryNoteService()
         self._session_objective_note_service = session_objective_note_service or SessionObjectiveNoteService()
+        self._world_location_repository = world_location_repository or WorldLocationRepository()
 
     def _update_character_user_memory(self, session, context: dict):
         if not session:
@@ -459,6 +462,159 @@ class LiveChatConversationService:
             "generated_image": generated_image,
             "new_letter": None,
             "deferred_letter": deferred_letter,
+        }
+
+    def _serialize_location_for_state(self, location) -> dict:
+        return {
+            "id": location.id,
+            "name": location.name,
+            "region": location.region,
+            "location_type": location.location_type,
+            "description": location.description,
+            "image_prompt": location.image_prompt,
+            "owner_character_id": location.owner_character_id,
+        }
+
+    def _build_location_move_prompt(self, context: dict, location) -> str:
+        character_names = "、".join(character.get("name") or "" for character in context.get("characters") or [])
+        recent_lines = []
+        for message in (context.get("messages") or [])[-6:]:
+            speaker = message.get("speaker_name") or message.get("sender_type") or ""
+            text = message.get("message_text") or ""
+            if text:
+                recent_lines.append(f"{speaker}: {text}")
+        lines = [
+            "ライブチャットの場所移動イベントCG。",
+            "プレイヤー視点ではなく、キャラクターたちがその施設に到着した瞬間を見せる。",
+            "登録済みキャラクターの顔、髪型、衣装の印象、画風の連続性を保つ。",
+            "画像内に文字、ロゴ、字幕、吹き出し、UI、看板の可読文字を入れない。",
+            f"移動先施設: {location.name or ''}",
+            f"地域: {location.region or ''}",
+            f"施設タイプ: {location.location_type or ''}",
+            f"施設説明: {location.description or ''}",
+            f"施設画像方針: {location.image_prompt or ''}",
+            f"登場キャラクター: {character_names}",
+            "会話の直前ログ:",
+            *recent_lines,
+            "演出: 場所の特徴が一目でわかり、キャラクターがそこで会話を始めたくなる空気を作る。",
+        ]
+        prompt = "\n".join(lines)
+        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        return prompt_support.forbid_text_in_image(prompt)
+
+    def move_to_location(self, session_id: int, location_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return None
+        location = self._world_location_repository.get(location_id)
+        if not location or location.project_id != session.project_id:
+            raise ValueError("location_id is invalid")
+
+        context = self._context_provider(session_id)
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        location_payload = self._serialize_location_for_state(location)
+        focus_summary = f"{location.name}へ移動した。{(location.description or '')[:180]}"
+        prompt = self._build_location_move_prompt(context, location)
+        scene_update = {
+            "scene_phase": "location_move",
+            "location": location.name,
+            "background": location.description or location.image_prompt or location.name,
+            "focus_summary": focus_summary,
+            "next_topic": f"{location.name}で、施設の雰囲気やそこで起きそうな出来事を会話に混ぜる",
+            "transition_occurred": True,
+            "character_reaction_hint": "移動先の施設説明を理解し、その場所らしい感情・提案・小さな事件の火種を出す",
+            "image_focus": prompt,
+            "selected_location": location_payload,
+        }
+        state_json["current_location"] = location_payload
+        state_json["location"] = location.name
+        state_json["background"] = location.description or location.image_prompt or location.name
+        state_json["scene_progression"] = scene_update
+        state_json["directed_scene"] = scene_update
+        state_json["visual_prompt_text"] = prompt
+        self._session_state_service.upsert_state(
+            session_id,
+            {
+                "state_json": state_json,
+                "narration_note": focus_summary,
+                "visual_prompt_text": prompt,
+            },
+        )
+
+        user_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "narration",
+                "speaker_name": "移動",
+                "message_text": f"{location.name}へ移動した。",
+                "message_role": "location_move",
+                "state_snapshot_json": {
+                    "location_move": location_payload,
+                    "directed_scene": scene_update,
+                },
+            },
+        )
+
+        generated_image = None
+        image_generation_error = None
+        try:
+            generated_image = self._media_service.generate_image(
+                session_id,
+                {
+                    "image_type": "location_move",
+                    "prompt_text": prompt,
+                    "use_existing_prompt": True,
+                    "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
+                    "quality": payload.get("quality") or "low",
+                },
+            )
+        except Exception as exc:
+            current_app.logger.exception("location move image generation failed")
+            image_generation_error = str(exc)
+
+        updated_context = self._context_provider(session_id)
+        reply = text_support.generate_narration_reaction(
+            self._text_ai_client,
+            updated_context,
+            f"{location.name}へ移動した。",
+            scene_update,
+        )
+        assistant_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "character",
+                "speaker_name": reply["speaker_name"],
+                "message_text": reply["message_text"],
+                "message_role": "assistant",
+                "state_snapshot_json": {
+                    "location_move": location_payload,
+                    "directed_scene": scene_update,
+                },
+            },
+        )
+        updated_context = self._context_provider(session_id)
+        self.update_line_visual_note(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        self.update_session_memory(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        self.update_conversation_evaluation(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        self._update_character_user_memory(session, updated_context)
+        self._character_memory_note_service.extract_from_live_chat_context(
+            self._text_ai_client,
+            updated_context,
+            source_ref=f"chat_session:{session_id}",
+        )
+        updated_context = self._context_provider(session_id)
+        return {
+            "location": location_payload,
+            "generated_image": generated_image,
+            "image_generation_error": image_generation_error,
+            "messages": [self._serialize_message(user_message), self._serialize_message(assistant_message)],
+            "context": updated_context,
         }
 
     def post_message(self, session_id: int, payload: dict | None = None):

@@ -351,6 +351,20 @@ def execute_chat_scene_choice(session_id: int, choice_id: str):
     return json_response(result, status=201)
 
 
+@chat_bp.route("/chat/sessions/<int:session_id>/locations/<int:location_id>/move", methods=["POST"])
+def move_chat_session_location(session_id: int, location_id: int):
+    _chat_session, _project, user = _require_session(session_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_global_image_generation_settings(payload)
+    try:
+        result = live_chat_service.move_to_location(session_id, location_id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
 @chat_bp.route("/chat/sessions/<int:session_id>/state", methods=["GET"])
 def get_chat_state(session_id: int):
     _require_session(session_id)
