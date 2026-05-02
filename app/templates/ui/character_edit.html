@@ -69,10 +69,17 @@
     <div class="panel-head">
       <div>
         <div class="eyebrow">AI MEMORY</div>
-        <h3>キャラクターAIメモ</h3>
-        <p class="section-copy mb-0">初期設定はそのままに、会話から増えた面白い癖や好みだけを追加で管理します。</p>
+        <h3>キャラクターAIメモ要約</h3>
+        <p class="section-copy mb-0">チャットでは個別メモの羅列ではなく、この要約を優先して使います。</p>
       </div>
+      <button class="btn btn-sm btn-outline-dark" type="button" id="characterMemorySummarizeButton">
+        <i class="bi bi-stars"></i>
+        <span>要約を更新</span>
+      </button>
     </div>
+    <section class="character-memory-summary" id="characterMemorySummary" aria-live="polite"></section>
+    <details class="character-memory-note-details">
+      <summary>個別AIメモを確認・編集する</summary>
     <form id="characterMemoryNoteForm" class="character-memory-note-form">
       <div class="row g-2">
         <div class="col-md-5">
@@ -105,6 +112,7 @@
       </div>
     </form>
     <div id="characterMemoryNoteList" class="character-memory-note-list" aria-live="polite"></div>
+    </details>
   </section>
 
   <section class="panel-card">

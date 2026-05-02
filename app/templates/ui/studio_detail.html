@@ -51,7 +51,25 @@
       <h3>ギャラリー</h3>
       <button class="btn btn-sm btn-outline-dark" type="button" id="studioReloadButton">再読み込み</button>
     </div>
+    <div class="studio-filter-bar">
+      <div>
+        <label class="form-label" for="studioSourceSelect">カテゴリ</label>
+        <select class="form-select" id="studioSourceSelect">
+          <option value="all">すべて</option>
+          <option value="chat">チャット</option>
+          <option value="costume">衣装</option>
+          <option value="story">ストーリー</option>
+          <option value="outing">おでかけ</option>
+          <option value="studio">編集画像</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="studioSearchInput">検索</label>
+        <input class="form-control" id="studioSearchInput" type="search" placeholder="ファイル名・プロンプト・種類で検索">
+      </div>
+    </div>
     <div class="studio-grid" id="studioImageGrid"></div>
+    <div class="studio-pagination" id="studioPagination" aria-label="スタジオ画像ページ"></div>
   </section>
 </section>
 {% endblock %}
@@ -62,9 +80,16 @@
   let selectedAssetId = Number({{ asset_id }});
   let images = [];
   let selected = null;
+  const initialPage = Number(new URLSearchParams(window.location.search).get("page") || 1);
+  let currentPage = Number.isFinite(initialPage) && initialPage > 0 ? initialPage : 1;
+  const perPage = 24;
   const selectedPanel = document.getElementById("studioSelectedPanel");
   const grid = document.getElementById("studioImageGrid");
+  const pagination = document.getElementById("studioPagination");
+  const sourceSelect = document.getElementById("studioSourceSelect");
+  const searchInput = document.getElementById("studioSearchInput");
   const generateButton = document.getElementById("studioGenerateButton");
+  let searchTimer = null;
 
   function normalizePrompt(image) {
     return image?.prompt_text || image?.metadata?.revised_prompt || image?.metadata?.prompt || "プロンプトは保存されていません。";
@@ -75,7 +100,7 @@
     if (selected) {
       selectedAssetId = Number(selected.asset_id);
       if (replaceUrl) {
-        history.replaceState(null, "", `/projects/${projectId}/studio/images/${selectedAssetId}`);
+        history.replaceState(null, "", `/projects/${projectId}/studio/images/${selectedAssetId}?page=${currentPage}`);
       }
     }
     renderSelected();
@@ -110,8 +135,29 @@
     `).join("");
   }
 
+  function renderPagination(page) {
+    if (!pagination) return;
+    if (!page.total || page.total_pages <= 1) {
+      pagination.innerHTML = "";
+      return;
+    }
+    pagination.innerHTML = `
+      <button class="btn btn-sm btn-outline-dark" type="button" data-page="${page.page - 1}" ${page.has_prev ? "" : "disabled"}>前へ</button>
+      <span>${page.page} / ${page.total_pages} ページ（${page.total}件）</span>
+      <button class="btn btn-sm btn-outline-dark" type="button" data-page="${page.page + 1}" ${page.has_next ? "" : "disabled"}>次へ</button>
+    `;
+  }
+
   async function loadImages() {
-    images = await NovelUI.api(`/api/v1/projects/${projectId}/studio/images`);
+    const params = new URLSearchParams({
+      page: String(currentPage),
+      per_page: String(perPage),
+      source: sourceSelect.value,
+      q: searchInput.value.trim(),
+    });
+    const payload = await NovelUI.api(`/api/v1/projects/${projectId}/studio/images?${params.toString()}`);
+    images = Array.isArray(payload) ? payload : payload.items || [];
+    renderPagination(payload.pagination || { page: 1, total_pages: 1, total: images.length, has_prev: false, has_next: false });
     selectImage(images.find((image) => Number(image.asset_id) === selectedAssetId) || images[0] || null, false);
   }
 
@@ -146,6 +192,7 @@
           size: document.getElementById("studioSizeSelect").value,
         },
       });
+      currentPage = 1;
       images = [generated, ...images.filter((image) => Number(image.asset_id) !== Number(generated.asset_id))];
       document.getElementById("studioInstructionInput").value = "";
       selectImage(generated);
@@ -159,6 +206,24 @@
   });
 
   document.getElementById("studioReloadButton").addEventListener("click", () => {
+    loadImages().catch((error) => NovelUI.toast(error.message || "画像を読み込めませんでした。", "danger"));
+  });
+
+  function resetAndLoad() {
+    currentPage = 1;
+    loadImages().catch((error) => NovelUI.toast(error.message || "画像を読み込めませんでした。", "danger"));
+  }
+
+  sourceSelect.addEventListener("change", resetAndLoad);
+  searchInput.addEventListener("input", () => {
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(resetAndLoad, 250);
+  });
+
+  pagination?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-page]");
+    if (!button || button.disabled) return;
+    currentPage = Number(button.dataset.page || 1);
     loadImages().catch((error) => NovelUI.toast(error.message || "画像を読み込めませんでした。", "danger"));
   });
 

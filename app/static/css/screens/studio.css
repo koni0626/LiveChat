@@ -11,6 +11,40 @@ body[data-screen="studio"] .studio-grid {
   gap: 0.85rem;
 }
 
+body[data-screen="studio"] .studio-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+body[data-screen="studio"] .studio-filter-bar .form-label {
+  margin-bottom: 0.3rem;
+  color: rgba(18, 28, 50, 0.66);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+body[data-screen="studio"] .studio-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+body[data-screen="studio"] .studio-pagination:empty {
+  display: none;
+}
+
+body[data-screen="studio"] .studio-pagination span {
+  color: rgba(18, 28, 50, 0.68);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
 body[data-screen="studio"] .studio-image-card {
   display: grid;
   gap: 0.45rem;
@@ -154,5 +188,11 @@ body[data-screen="studio"] .studio-prompt-section h4 {
 
   body[data-screen="studio"] .studio-side {
     position: static;
+  }
+}
+
+@media (max-width: 575.98px) {
+  body[data-screen="studio"] .studio-filter-bar {
+    grid-template-columns: 1fr;
   }
 }

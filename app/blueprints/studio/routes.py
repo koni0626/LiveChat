@@ -38,7 +38,20 @@ def _require_project(project_id: int):
 @studio_bp.route("/projects/<int:project_id>/studio/images", methods=["GET"])
 def list_studio_images(project_id: int):
     _, user = _require_project(project_id)
-    return json_response(studio_service.list_images(project_id, user.id))
+    page = request.args.get("page", default=1, type=int)
+    per_page = request.args.get("per_page", default=24, type=int)
+    source = request.args.get("source")
+    query = request.args.get("q")
+    return json_response(
+        studio_service.list_images_page(
+            project_id,
+            user.id,
+            page=page,
+            per_page=per_page,
+            source=source,
+            query=query,
+        )
+    )
 
 
 @studio_bp.route("/projects/<int:project_id>/studio/generate", methods=["POST"])

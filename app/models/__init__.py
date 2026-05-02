@@ -6,6 +6,7 @@ from .chat_message import ChatMessage
 from .chat_session import ChatSession
 from .character import Character
 from .character_memory_note import CharacterMemoryNote
+from .character_memory_summary import CharacterMemorySummary
 from .character_user_memory import CharacterUserMemory
 from .character_feed_profile import CharacterFeedProfile
 from .character_outfit import CharacterOutfit
@@ -40,6 +41,7 @@ __all__ = [
     "ChatSession",
     "Character",
     "CharacterMemoryNote",
+    "CharacterMemorySummary",
     "CharacterUserMemory",
     "CharacterFeedProfile",
     "CharacterOutfit",

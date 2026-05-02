@@ -30,11 +30,69 @@ class StudioService:
 
     def list_images(self, project_id: int, owner_user_id: int):
         images = []
-        images.extend(self._list_chat_images(project_id, owner_user_id))
+        images.extend(self._list_chat_images(project_id, owner_user_id, include_costumes=False))
+        images.extend(self._list_chat_images(project_id, owner_user_id, only_costumes=True))
         images.extend(self._list_story_images(project_id, owner_user_id))
         images.extend(self._list_outing_images(project_id, owner_user_id))
         images.extend(self._list_studio_images(project_id, owner_user_id))
         return sorted(images, key=lambda item: item.get("created_at") or "", reverse=True)
+
+    SOURCE_LABELS = {
+        "chat": "チャット",
+        "costume": "衣装",
+        "story": "ストーリー",
+        "outing": "おでかけ",
+        "studio": "編集画像",
+    }
+
+    def list_images_page(
+        self,
+        project_id: int,
+        owner_user_id: int,
+        page: int = 1,
+        per_page: int = 24,
+        source: str | None = None,
+        query: str | None = None,
+    ):
+        page = max(1, int(page or 1))
+        per_page = max(1, min(60, int(per_page or 24)))
+        sources = self._normalize_sources(source)
+        query_text = str(query or "").strip().lower()
+        offset = (page - 1) * per_page
+        window = offset + per_page
+        limit = None if query_text else window
+        images = []
+        if "chat" in sources:
+            images.extend(self._list_chat_images(project_id, owner_user_id, limit=limit, include_costumes=False))
+        if "costume" in sources:
+            images.extend(self._list_chat_images(project_id, owner_user_id, limit=limit, only_costumes=True))
+        if "story" in sources:
+            images.extend(self._list_story_images(project_id, owner_user_id, limit=limit))
+        if "outing" in sources:
+            images.extend(self._list_outing_images(project_id, owner_user_id, limit=limit))
+        if "studio" in sources:
+            images.extend(self._list_studio_images(project_id, owner_user_id, limit=limit))
+        if query_text:
+            images = [item for item in images if self._matches_query(item, query_text)]
+        sorted_images = sorted(images, key=lambda item: item.get("created_at") or "", reverse=True)
+        total = len(sorted_images) if query_text else self._count_images(project_id, owner_user_id, sources=sources)
+        total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
+        return {
+            "items": sorted_images[offset : offset + per_page],
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "total_pages": total_pages,
+                "has_prev": page > 1,
+                "has_next": page < total_pages,
+            },
+            "filters": {
+                "source": source or "all",
+                "query": query or "",
+                "sources": [{"value": key, "label": label} for key, label in self.SOURCE_LABELS.items()],
+            },
+        }
 
     def generate_variant(self, project_id: int, owner_user_id: int, payload: dict | None = None):
         payload = dict(payload or {})
@@ -100,8 +158,17 @@ class StudioService:
         )
         return self._serialize_studio_asset(asset)
 
-    def _list_chat_images(self, project_id: int, owner_user_id: int):
-        rows = (
+    def _list_chat_images(
+        self,
+        project_id: int,
+        owner_user_id: int,
+        limit: int | None = None,
+        *,
+        include_costumes: bool = True,
+        only_costumes: bool = False,
+    ):
+        costume_types = {"costume_initial", "costume_reference"}
+        query = (
             db.session.query(SessionImage, ChatSession, Asset)
             .join(ChatSession, ChatSession.id == SessionImage.session_id)
             .join(Asset, Asset.id == SessionImage.asset_id)
@@ -111,13 +178,17 @@ class StudioService:
                 Asset.deleted_at.is_(None),
             )
             .order_by(SessionImage.id.desc())
-            .all()
         )
+        if only_costumes:
+            query = query.filter(SessionImage.image_type.in_(costume_types))
+        elif not include_costumes:
+            query = query.filter(~SessionImage.image_type.in_(costume_types))
+        rows = query.limit(limit).all() if limit else query.all()
         return [
             self._serialize_image(
                 asset,
-                source="chat",
-                source_label="チャット",
+                source="costume" if image.image_type in costume_types else "chat",
+                source_label="衣装" if image.image_type in costume_types else "チャット",
                 source_image_id=image.id,
                 prompt_text=image.prompt_text,
                 image_type=image.image_type,
@@ -129,8 +200,8 @@ class StudioService:
             for image, session, asset in rows
         ]
 
-    def _list_story_images(self, project_id: int, owner_user_id: int):
-        rows = (
+    def _list_story_images(self, project_id: int, owner_user_id: int, limit: int | None = None):
+        query = (
             db.session.query(StoryImage, StorySession, Asset)
             .join(StorySession, StorySession.id == StoryImage.session_id)
             .join(Asset, Asset.id == StoryImage.asset_id)
@@ -140,8 +211,8 @@ class StudioService:
                 Asset.deleted_at.is_(None),
             )
             .order_by(StoryImage.id.desc())
-            .all()
         )
+        rows = query.limit(limit).all() if limit else query.all()
         return [
             self._serialize_image(
                 asset,
@@ -158,12 +229,13 @@ class StudioService:
             for image, session, asset in rows
         ]
 
-    def _list_studio_images(self, project_id: int, owner_user_id: int):
-        assets = Asset.query.filter(
+    def _list_studio_images(self, project_id: int, owner_user_id: int, limit: int | None = None):
+        query = Asset.query.filter(
             Asset.project_id == project_id,
             Asset.asset_type == "studio_image",
             Asset.deleted_at.is_(None),
-        ).order_by(Asset.id.desc()).all()
+        ).order_by(Asset.id.desc())
+        assets = query.limit(limit).all() if limit else query.all()
         items = []
         for asset in assets:
             metadata = self._load_json(asset.metadata_json) or {}
@@ -172,12 +244,13 @@ class StudioService:
             items.append(self._serialize_studio_asset(asset))
         return items
 
-    def _list_outing_images(self, project_id: int, owner_user_id: int):
-        assets = Asset.query.filter(
+    def _list_outing_images(self, project_id: int, owner_user_id: int, limit: int | None = None):
+        query = Asset.query.filter(
             Asset.project_id == project_id,
             Asset.asset_type == "outing_image",
             Asset.deleted_at.is_(None),
-        ).order_by(Asset.id.desc()).all()
+        ).order_by(Asset.id.desc())
+        assets = query.limit(limit).all() if limit else query.all()
         items = []
         outing_cache = {}
         for asset in assets:
@@ -211,6 +284,77 @@ class StudioService:
                 )
             )
         return items
+
+    def _count_images(self, project_id: int, owner_user_id: int, sources: set[str] | None = None):
+        sources = sources or set(self.SOURCE_LABELS)
+        costume_types = {"costume_initial", "costume_reference"}
+        total = 0
+        if "chat" in sources:
+            total += (
+                db.session.query(SessionImage.id)
+                .join(ChatSession, ChatSession.id == SessionImage.session_id)
+                .join(Asset, Asset.id == SessionImage.asset_id)
+                .filter(
+                    ChatSession.project_id == project_id,
+                    ChatSession.owner_user_id == owner_user_id,
+                    Asset.deleted_at.is_(None),
+                )
+                .filter(~SessionImage.image_type.in_(costume_types))
+                .count()
+            )
+        if "costume" in sources:
+            total += (
+                db.session.query(SessionImage.id)
+                .join(ChatSession, ChatSession.id == SessionImage.session_id)
+                .join(Asset, Asset.id == SessionImage.asset_id)
+                .filter(
+                    ChatSession.project_id == project_id,
+                    ChatSession.owner_user_id == owner_user_id,
+                    Asset.deleted_at.is_(None),
+                    SessionImage.image_type.in_(costume_types),
+                )
+                .count()
+            )
+        if "story" in sources:
+            total += (
+                db.session.query(StoryImage.id)
+                .join(StorySession, StorySession.id == StoryImage.session_id)
+                .join(Asset, Asset.id == StoryImage.asset_id)
+                .filter(
+                    StorySession.project_id == project_id,
+                    StorySession.owner_user_id == owner_user_id,
+                    Asset.deleted_at.is_(None),
+                )
+                .count()
+            )
+        if "outing" in sources:
+            total += len(self._list_outing_images(project_id, owner_user_id))
+        if "studio" in sources:
+            total += len(self._list_studio_images(project_id, owner_user_id))
+        return total
+
+    def _normalize_sources(self, source: str | None):
+        source = str(source or "all").strip().lower()
+        if source in {"", "all"}:
+            return set(self.SOURCE_LABELS)
+        return {source} if source in self.SOURCE_LABELS else set(self.SOURCE_LABELS)
+
+    def _matches_query(self, item: dict, query_text: str):
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        haystack = " ".join(
+            str(value or "")
+            for value in (
+                item.get("file_name"),
+                item.get("source"),
+                item.get("source_label"),
+                item.get("image_type"),
+                item.get("prompt_text"),
+                metadata.get("prompt"),
+                metadata.get("revised_prompt"),
+                metadata.get("instruction"),
+            )
+        ).lower()
+        return query_text in haystack
 
     def _serialize_studio_asset(self, asset):
         metadata = self._load_json(asset.metadata_json) or {}

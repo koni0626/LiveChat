@@ -2776,6 +2776,103 @@ body[data-screen="character-create"] .modal-backdrop {
   color: #dff6ff;
 }
 
+.character-memory-summary {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.character-memory-summary-empty {
+  padding: 1rem;
+  border: 1px dashed rgba(84, 177, 255, 0.24);
+  border-radius: 1rem;
+  background: rgba(7, 16, 30, 0.62);
+  color: rgba(210, 237, 255, 0.72);
+}
+
+.character-memory-summary-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid rgba(0, 245, 212, 0.2);
+  border-radius: 1rem;
+  background:
+    linear-gradient(180deg, rgba(8, 22, 38, 0.94), rgba(6, 15, 28, 0.88)),
+    radial-gradient(circle at top right, rgba(0, 245, 212, 0.12), transparent 44%);
+}
+
+.character-memory-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.character-memory-summary-meta span {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid rgba(104, 236, 255, 0.16);
+  border-radius: 999px;
+  color: rgba(219, 242, 255, 0.76);
+  background: rgba(104, 236, 255, 0.06);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.character-memory-summary-overview,
+.character-memory-summary-prompt {
+  margin: 0;
+  color: rgba(223, 246, 255, 0.88);
+  line-height: 1.75;
+}
+
+.character-memory-summary-prompt {
+  padding: 0.85rem;
+  border: 1px solid rgba(84, 177, 255, 0.14);
+  border-radius: 0.8rem;
+  background: rgba(4, 10, 20, 0.42);
+  white-space: pre-wrap;
+}
+
+.character-memory-summary-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.65rem;
+}
+
+.character-memory-summary-groups div {
+  padding: 0.75rem;
+  border: 1px solid rgba(84, 177, 255, 0.14);
+  border-radius: 0.75rem;
+  background: rgba(4, 10, 20, 0.34);
+}
+
+.character-memory-summary-groups strong {
+  color: #dff6ff;
+  font-size: 0.84rem;
+}
+
+.character-memory-summary-groups ul {
+  margin: 0.45rem 0 0;
+  padding-left: 1rem;
+  color: rgba(223, 246, 255, 0.78);
+}
+
+.character-memory-note-details {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.character-memory-note-details summary {
+  cursor: pointer;
+  color: rgba(210, 237, 255, 0.78);
+  font-weight: 800;
+}
+
+.character-memory-note-details[open] summary {
+  margin-bottom: 0.85rem;
+}
+
 .character-memory-note-list {
   display: grid;
   gap: 0.85rem;

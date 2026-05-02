@@ -6,6 +6,8 @@
   const canManageProject = root.dataset.canManageProject !== "false";
   const form = document.getElementById("characterMemoryNoteForm");
   const list = document.getElementById("characterMemoryNoteList");
+  const summaryPanel = document.getElementById("characterMemorySummary");
+  const summarizeButton = document.getElementById("characterMemorySummarizeButton");
   if (!form || !list) return;
 
   const categories = {
@@ -59,6 +61,61 @@
         <i class="bi bi-journal-sparkle"></i>
         <span>${NovelUI.escape(message)}</span>
       </div>
+    `;
+  }
+
+  function summaryEndpoint(action) {
+    const base = `/api/v1/characters/${characterId}/memory-summary`;
+    return action ? `${base}/${action}` : base;
+  }
+
+  function renderSummary(summary) {
+    if (!summaryPanel) return;
+    if (!characterId) {
+      summaryPanel.innerHTML = '<div class="character-memory-summary-empty">キャラクター保存後にAIメモ要約を作成できます。</div>';
+      if (summarizeButton) summarizeButton.disabled = true;
+      return;
+    }
+    if (summarizeButton) summarizeButton.disabled = !canManageProject;
+    const data = summary?.summary_json || {};
+    const promptText = summary?.prompt_text || data.prompt_text || "";
+    const updatedAt = formatDate(summary?.updated_at);
+    const noteCount = Number(summary?.source_note_count || 0);
+    if (!promptText && !noteCount) {
+      summaryPanel.innerHTML = `
+        <div class="character-memory-summary-empty">
+          まだ要約はありません。会話でAIメモが増えると自動更新されます。すぐ作る場合は「要約を更新」を押してください。
+        </div>
+      `;
+      return;
+    }
+    const groups = [
+      ["性格の変化", data.stable_traits],
+      ["癖", data.habits],
+      ["好み", data.preferences],
+      ["関係性フック", data.relationship_hooks],
+      ["境界線", data.boundaries],
+      ["未回収フック", data.open_threads],
+    ].filter(([, items]) => Array.isArray(items) && items.length);
+    summaryPanel.innerHTML = `
+      <article class="character-memory-summary-card">
+        <div class="character-memory-summary-meta">
+          <span>${noteCount ? `${noteCount}件のAIメモから要約` : "AIメモ要約"}</span>
+          <span>更新 ${NovelUI.escape(updatedAt)}</span>
+        </div>
+        ${data.overview ? `<p class="character-memory-summary-overview">${NovelUI.escape(data.overview)}</p>` : ""}
+        <div class="character-memory-summary-prompt">${NovelUI.escape(promptText)}</div>
+        ${groups.length ? `
+          <div class="character-memory-summary-groups">
+            ${groups.map(([label, items]) => `
+              <div>
+                <strong>${NovelUI.escape(label)}</strong>
+                <ul>${items.map((item) => `<li>${NovelUI.escape(item)}</li>`).join("")}</ul>
+              </div>
+            `).join("")}
+          </div>
+        ` : ""}
+      </article>
     `;
   }
 
@@ -128,6 +185,15 @@
     renderNotes(Array.isArray(notes) ? notes : []);
   }
 
+  async function loadSummary() {
+    if (!characterId) {
+      renderSummary(null);
+      return;
+    }
+    const summary = await NovelUI.api(summaryEndpoint());
+    renderSummary(summary);
+  }
+
   function payloadFromItem(item) {
     return {
       category: item.querySelector('[data-field="category"]')?.value || "other",
@@ -150,6 +216,7 @@
       await NovelUI.api(endpoint(), { method: "POST", body });
       form.reset();
       await loadNotes();
+      await loadSummary();
       NovelUI.toast("AIメモを追加しました。");
     } catch (error) {
       NovelUI.toast(error.message || "AIメモの追加に失敗しました。", "danger");
@@ -173,6 +240,7 @@
         NovelUI.toast("AIメモを更新しました。");
       }
       await loadNotes();
+      await loadSummary();
     } catch (error) {
       NovelUI.toast(error.message || "AIメモの更新に失敗しました。", "danger");
     } finally {
@@ -189,11 +257,33 @@
     try {
       await NovelUI.api(endpoint(noteId), { method: "PATCH", body: payloadFromItem(item) });
       await loadNotes();
+      await loadSummary();
     } catch (error) {
       NovelUI.toast(error.message || "AIメモの更新に失敗しました。", "danger");
     }
   });
 
+  summarizeButton?.addEventListener("click", async () => {
+    if (!characterId || !canManageProject) return;
+    const original = summarizeButton.innerHTML;
+    summarizeButton.disabled = true;
+    summarizeButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>要約中...';
+    try {
+      const summary = await NovelUI.api(summaryEndpoint("summarize"), { method: "POST", body: {} });
+      renderSummary(summary);
+      NovelUI.toast("AIメモ要約を更新しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "AIメモ要約に失敗しました。", "danger");
+    } finally {
+      summarizeButton.disabled = !canManageProject;
+      summarizeButton.innerHTML = original;
+    }
+  });
+
+  loadSummary().catch((error) => {
+    renderSummary(null);
+    NovelUI.toast(error.message || "AIメモ要約の読み込みに失敗しました。", "danger");
+  });
   loadNotes().catch((error) => {
     renderEmpty("AIメモの読み込みに失敗しました。");
     NovelUI.toast(error.message || "AIメモの読み込みに失敗しました。", "danger");

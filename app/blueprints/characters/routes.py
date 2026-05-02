@@ -249,6 +249,25 @@ def list_character_memory_notes(character_id: int):
     return json_response(notes, meta={"character_id": character_id, "count": len(notes)})
 
 
+@characters_bp.route("/characters/<int:character_id>/memory-summary", methods=["GET"])
+def get_character_memory_summary(character_id: int):
+    _character, user = _require_existing_character(character_id)
+    summary = character_memory_note_service.get_summary(user.id, character_id)
+    return json_response(character_memory_note_service.serialize_summary(summary))
+
+
+@characters_bp.route("/characters/<int:character_id>/memory-summary/summarize", methods=["POST"])
+def summarize_character_memory_notes(character_id: int):
+    character, user = _require_existing_character(character_id, manage=True)
+    summary = character_memory_note_service.summarize_notes(
+        character_service._text_ai_client,
+        user.id,
+        _serialize_character(character),
+        force=True,
+    )
+    return json_response(summary)
+
+
 @characters_bp.route("/characters/<int:character_id>/memory-notes", methods=["POST"])
 def create_character_memory_note(character_id: int):
     _character, user = _require_existing_character(character_id, manage=True)
