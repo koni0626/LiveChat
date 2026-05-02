@@ -99,6 +99,20 @@
     return payload?.data ?? payload;
   }
 
+  async function generateShortStory(sessionId, body = {}) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/short-story`, {
+      method: "POST",
+      body,
+    });
+  }
+
+  async function saveShortStory(sessionId, story) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/short-stories/save`, {
+      method: "POST",
+      body: { story },
+    });
+  }
+
   async function extractState(sessionId) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/state/extract`, {
       method: "POST",
@@ -160,6 +174,8 @@
     uploadCostume,
     postMessage,
     analyzePlayerReaction,
+    generateShortStory,
+    saveShortStory,
     generateProxyPlayerMessage,
     postIdleMessage,
     extractState,

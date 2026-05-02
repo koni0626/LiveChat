@@ -13,6 +13,7 @@ from .live_chat_context_service import LiveChatContextService
 from .live_chat_gift_service import LiveChatGiftService
 from .live_chat_media_service import LiveChatMediaService
 from .live_chat_serializer import LiveChatSerializer
+from .live_chat_short_story_service import LiveChatShortStoryService
 from .live_chat_session_workflow_service import LiveChatSessionWorkflowService
 from .project_service import ProjectService
 from .session_gift_event_service import SessionGiftEventService
@@ -139,6 +140,15 @@ class LiveChatService:
             update_session_memory=self._update_session_memory,
             update_conversation_evaluation=self._update_conversation_evaluation,
             serialize_message=self._serialize_message,
+        )
+        self._short_story_service = LiveChatShortStoryService(
+            text_ai_client=self._text_ai_client,
+            image_ai_client=self._image_ai_client,
+            chat_session_service=self._chat_session_service,
+            asset_service=self._asset_service,
+            session_image_service=self._session_image_service,
+            serialize_session_image=self._serialize_session_image,
+            context_provider=self.get_session_context,
         )
 
     def _load_json(self, value):
@@ -283,3 +293,9 @@ class LiveChatService:
 
     def analyze_player_reaction(self, session_id: int, upload_file):
         return self._player_reaction_service.analyze_frame(session_id, upload_file)
+
+    def generate_short_story(self, session_id: int, payload: dict | None = None):
+        return self._short_story_service.generate_short_story(session_id, payload)
+
+    def save_short_story(self, session_id: int, payload: dict | None = None):
+        return self._short_story_service.save_short_story(session_id, payload)

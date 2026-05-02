@@ -293,6 +293,33 @@ def analyze_chat_player_reaction(session_id: int):
     return json_response(result, status=201)
 
 
+@chat_bp.route("/chat/sessions/<int:session_id>/short-story", methods=["POST"])
+def generate_chat_short_story(session_id: int):
+    _require_session(session_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_global_image_generation_settings(payload)
+    try:
+        result = live_chat_service.generate_short_story(session_id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
+@chat_bp.route("/chat/sessions/<int:session_id>/short-stories/save", methods=["POST"])
+def save_chat_short_story(session_id: int):
+    _require_session(session_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = live_chat_service.save_short_story(session_id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
 @chat_bp.route("/chat/sessions/<int:session_id>/messages/<int:message_id>", methods=["DELETE"])
 def delete_chat_message(session_id: int, message_id: int):
     _require_session(session_id, for_manage=True)

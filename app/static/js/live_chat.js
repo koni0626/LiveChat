@@ -35,6 +35,24 @@
   const cameraStatusText = document.getElementById("liveChatCameraStatusText");
   const cameraVideo = document.getElementById("liveChatCameraVideo");
   const cameraCanvas = document.getElementById("liveChatCameraCanvas");
+  const shortStoryButton = document.getElementById("liveChatGenerateShortStoryButton");
+  const shortStoryToneSelect = document.getElementById("liveChatShortStoryToneSelect");
+  const shortStoryLengthSelect = document.getElementById("liveChatShortStoryLengthSelect");
+  const shortStoryInstructionInput = document.getElementById("liveChatShortStoryInstructionInput");
+  const shortStoryImagesCheckbox = document.getElementById("liveChatShortStoryImagesCheckbox");
+  const saveShortStoryButton = document.getElementById("liveChatSaveShortStoryButton");
+  const shortStoryResult = document.getElementById("liveChatShortStoryResult");
+  const savedShortStories = document.getElementById("liveChatSavedShortStories");
+  const savedShortStoryList = document.getElementById("liveChatSavedShortStoryList");
+  const shortStoryMeta = document.getElementById("liveChatShortStoryMeta");
+  const shortStoryTitle = document.getElementById("liveChatShortStoryTitle");
+  const shortStorySynopsis = document.getElementById("liveChatShortStorySynopsis");
+  const shortStoryBody = document.getElementById("liveChatShortStoryBody");
+  const shortStoryAfterword = document.getElementById("liveChatShortStoryAfterword");
+  const shortStoryOpeningImageWrap = document.getElementById("liveChatShortStoryOpeningImageWrap");
+  const shortStoryOpeningImage = document.getElementById("liveChatShortStoryOpeningImage");
+  const shortStoryEndingImageWrap = document.getElementById("liveChatShortStoryEndingImageWrap");
+  const shortStoryEndingImage = document.getElementById("liveChatShortStoryEndingImage");
   const cameraFeatureEnabled = false;
 
   let currentContext = null;
@@ -45,6 +63,7 @@
   let cameraEnabled = false;
   let cameraStream = null;
   let cameraBusy = false;
+  let currentShortStory = null;
   let idleTalkTimer = null;
   let idleTalkBusy = false;
   let idleTalksSincePlayerInput = 0;
@@ -106,6 +125,7 @@
     renderSceneChoices(context);
     renderObjectiveNotes(context);
     renderPlayerReaction(context);
+    renderSavedShortStories(context);
   }
 
   function getInitialObjective(context) {
@@ -180,6 +200,131 @@
       cameraStatus.classList.remove("is-on");
       cameraStatusText.textContent = reaction ? `カメラOFF / 最後の反応 ${reactionLabel(reaction)}` : "カメラはOFFです";
     }
+  }
+
+  function renderShortStory(story) {
+    if (!shortStoryResult || !shortStoryTitle || !shortStoryBody) return;
+    currentShortStory = story;
+    const paragraphs = String(story?.body || "")
+      .split(/\n{2,}|\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    shortStoryTitle.textContent = story?.title || "チャットから生まれた短編";
+    if (shortStorySynopsis) {
+      shortStorySynopsis.textContent = story?.synopsis || "";
+      shortStorySynopsis.hidden = !story?.synopsis;
+    }
+    shortStoryBody.innerHTML = paragraphs.length
+      ? paragraphs.map((line) => `<p>${NovelUI.escape(line)}</p>`).join("")
+      : '<p>本文を生成できませんでした。</p>';
+    if (shortStoryAfterword) {
+      shortStoryAfterword.textContent = story?.afterword || "";
+      shortStoryAfterword.hidden = !story?.afterword;
+    }
+    if (shortStoryMeta) {
+      const count = Number(story?.source_message_count || 0);
+      shortStoryMeta.textContent = count ? `${count}件のログから生成` : "チャットログから生成";
+    }
+    renderShortStoryImage(shortStoryOpeningImageWrap, shortStoryOpeningImage, story?.images?.opening);
+    renderShortStoryImage(shortStoryEndingImageWrap, shortStoryEndingImage, story?.images?.ending);
+    if (saveShortStoryButton) {
+      saveShortStoryButton.disabled = Boolean(story?.saved_at);
+      saveShortStoryButton.textContent = story?.saved_at ? "保存済み" : "保存";
+    }
+    shortStoryResult.classList.remove("is-hidden");
+  }
+
+  function renderSavedShortStories(context) {
+    if (!savedShortStories || !savedShortStoryList) return;
+    const stories = context?.session?.settings_json?.saved_short_stories;
+    if (!Array.isArray(stories) || !stories.length) {
+      savedShortStories.classList.add("is-hidden");
+      savedShortStoryList.innerHTML = "";
+      return;
+    }
+    savedShortStories.classList.remove("is-hidden");
+    savedShortStoryList.innerHTML = stories.slice().reverse().map((story, index) => {
+      const title = story?.title || "無題の短編";
+      const count = Number(story?.source_message_count || 0);
+      const source = count ? `${count}件` : "保存済み";
+      return `
+        <button class="live-chat-saved-short-story" type="button" data-saved-short-story-index="${stories.length - 1 - index}">
+          <span>${NovelUI.escape(title)}</span>
+          <small>${NovelUI.escape(source)}</small>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function renderShortStoryImage(wrap, image, item) {
+    const mediaUrl = item?.asset?.media_url;
+    if (!wrap || !image) return;
+    if (!mediaUrl) {
+      image.removeAttribute("src");
+      wrap.classList.add("is-hidden");
+      return;
+    }
+    image.src = mediaUrl;
+    wrap.classList.remove("is-hidden");
+  }
+
+  async function generateShortStory() {
+    if (!shortStoryButton) return;
+    const originalText = shortStoryButton.textContent;
+    const payload = {
+      tone: shortStoryToneSelect?.value || "",
+      length: shortStoryLengthSelect?.value || "",
+      instruction: shortStoryInstructionInput?.value || "",
+      generate_images: shortStoryImagesCheckbox?.checked !== false,
+    };
+    try {
+      shortStoryButton.disabled = true;
+      if (saveShortStoryButton) saveShortStoryButton.disabled = true;
+      shortStoryButton.innerHTML = payload.generate_images
+        ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>本文と画像を作成中...'
+        : '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>作成中...';
+      const story = await LiveChatApi.generateShortStory(sessionId, payload);
+      renderShortStory(story);
+      NovelUI.toast("ショートストーリーを作成しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "ショートストーリーの作成に失敗しました。", "danger");
+    } finally {
+      shortStoryButton.disabled = false;
+      shortStoryButton.textContent = originalText;
+    }
+  }
+
+  async function saveShortStory() {
+    if (!saveShortStoryButton || !currentShortStory) return;
+    const originalText = saveShortStoryButton.textContent;
+    try {
+      saveShortStoryButton.disabled = true;
+      saveShortStoryButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>保存中...';
+      const result = await LiveChatApi.saveShortStory(sessionId, currentShortStory);
+      currentShortStory = result?.saved_story || currentShortStory;
+      saveShortStoryButton.textContent = "保存済み";
+      if (currentContext) {
+        const settings = currentContext.session.settings_json || {};
+        const saved = Array.isArray(settings.saved_short_stories) ? settings.saved_short_stories : [];
+        settings.saved_short_stories = [...saved, currentShortStory].slice(-20);
+        currentContext.session.settings_json = settings;
+        renderSavedShortStories(currentContext);
+      }
+      NovelUI.toast("ショートストーリーを保存しました。");
+    } catch (error) {
+      saveShortStoryButton.disabled = false;
+      saveShortStoryButton.textContent = originalText;
+      NovelUI.toast(error.message || "ショートストーリーの保存に失敗しました。", "danger");
+    }
+  }
+
+  function showSavedShortStory(event) {
+    const button = event.target.closest("[data-saved-short-story-index]");
+    if (!button || !currentContext) return;
+    const stories = currentContext.session?.settings_json?.saved_short_stories;
+    const index = Number(button.dataset.savedShortStoryIndex);
+    if (!Array.isArray(stories) || !stories[index]) return;
+    renderShortStory(stories[index]);
   }
 
   async function setCameraEnabled(enabled) {
@@ -476,6 +621,10 @@
       proxyMessageButton.textContent = originalText;
     }
   });
+
+  shortStoryButton?.addEventListener("click", generateShortStory);
+  saveShortStoryButton?.addEventListener("click", saveShortStory);
+  savedShortStoryList?.addEventListener("click", showSavedShortStory);
 
   giftController = LiveChatGift.createGiftController({
     giftUploadInput: document.getElementById("liveChatGiftUploadInput"),

@@ -81,6 +81,67 @@
       </div>
     </section>
 
+    <section class="live-chat-short-story-card" id="liveChatShortStoryCard">
+      <div class="live-chat-short-story-head">
+        <div>
+          <h4>ショートストーリー</h4>
+          <p>作風や追加指示を指定して、現在のチャットログを読み切りの短編にします。</p>
+        </div>
+        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatGenerateShortStoryButton">短編を作成</button>
+      </div>
+      <div class="live-chat-short-story-controls">
+        <div>
+          <label class="form-label" for="liveChatShortStoryToneSelect">作風</label>
+          <select class="form-select" id="liveChatShortStoryToneSelect">
+            <option value="余韻のあるビジュアルノベル調" selected>おまかせ</option>
+            <option value="会話のテンポがよいギャグ短編。オチや軽いツッコミを入れる">ギャグ</option>
+            <option value="甘さと距離感を大事にしたロマンス寄りの短編">ロマンス</option>
+            <option value="露骨な描写を避け、視線や間、余韻で読ませる官能小説寄りの短編">官能寄り</option>
+            <option value="緊張感と葛藤を強めたシリアスな短編">シリアス</option>
+            <option value="不穏さと余白を残すホラー寄りの短編">ホラー</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label" for="liveChatShortStoryLengthSelect">本文量</label>
+          <select class="form-select" id="liveChatShortStoryLengthSelect">
+            <option value="800〜1200字">短め</option>
+            <option value="1200〜1800字" selected>標準</option>
+            <option value="1800〜2600字">長め</option>
+          </select>
+        </div>
+        <div class="live-chat-short-story-instruction">
+          <label class="form-label" for="liveChatShortStoryInstructionInput">追加指示</label>
+          <textarea class="form-control" id="liveChatShortStoryInstructionInput" rows="2" placeholder="例: もっとギャグ強め、最後はしっとり終える、凛の照れ隠しを多めにする"></textarea>
+        </div>
+        <label class="live-chat-short-story-image-toggle" for="liveChatShortStoryImagesCheckbox">
+          <input class="form-check-input" id="liveChatShortStoryImagesCheckbox" type="checkbox" checked>
+          <span>オープニング画像とラスト画像も生成する</span>
+        </label>
+      </div>
+      <section class="live-chat-saved-short-stories is-hidden" id="liveChatSavedShortStories">
+        <div class="live-chat-saved-short-stories-head">保存済み短編</div>
+        <div class="live-chat-saved-short-story-list" id="liveChatSavedShortStoryList"></div>
+      </section>
+      <article class="live-chat-short-story-result is-hidden" id="liveChatShortStoryResult" aria-live="polite">
+        <div class="live-chat-short-story-meta" id="liveChatShortStoryMeta"></div>
+        <h5 id="liveChatShortStoryTitle"></h5>
+        <p class="live-chat-short-story-synopsis" id="liveChatShortStorySynopsis"></p>
+        <figure class="live-chat-short-story-image is-hidden" id="liveChatShortStoryOpeningImageWrap">
+          <img id="liveChatShortStoryOpeningImage" alt="ショートストーリーのオープニング画像">
+          <figcaption>オープニング画像</figcaption>
+        </figure>
+        <div class="live-chat-short-story-body" id="liveChatShortStoryBody"></div>
+        <figure class="live-chat-short-story-image is-hidden" id="liveChatShortStoryEndingImageWrap">
+          <img id="liveChatShortStoryEndingImage" alt="ショートストーリーのラスト画像">
+          <figcaption>ラスト画像</figcaption>
+        </figure>
+        <p class="live-chat-short-story-afterword" id="liveChatShortStoryAfterword"></p>
+        <div class="live-chat-short-story-actions">
+          <button class="btn btn-sm btn-dark" type="button" id="liveChatSaveShortStoryButton" disabled>保存</button>
+        </div>
+      </article>
+    </section>
+
     <form class="live-chat-compose" id="liveChatComposeForm">
       <div class="live-chat-compose-head">
         <label class="form-label" for="liveChatComposeInput">メッセージ</label>
