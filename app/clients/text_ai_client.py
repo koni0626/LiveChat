@@ -2,6 +2,8 @@ import json
 import os
 import base64
 import mimetypes
+import re
+import time
 from typing import Any, Optional
 
 import requests
@@ -32,7 +34,7 @@ class TextAIClient:
         return "max_tokens"
 
     def _resolve_timeout(self) -> int:
-        return int(os.getenv("TEXT_AI_TIMEOUT_SECONDS", "120"))
+        return int(os.getenv("TEXT_AI_TIMEOUT_SECONDS", "900"))
 
     def _normalize_prompt(self, prompt: str) -> str:
         value = str(prompt or "").strip()
@@ -54,30 +56,86 @@ class TextAIClient:
         return f"data:{mime_type};base64,{encoded}"
 
     def _call_openai_chat(self, payload: dict[str, Any]) -> dict[str, Any]:
-        try:
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self._get_api_key()}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=self._resolve_timeout(),
-            )
-            response.raise_for_status()
-            return response.json()
-        except requests.Timeout as exc:
-            raise RuntimeError("text generation request timed out") from exc
-        except requests.RequestException as exc:
-            raise RuntimeError("text generation request failed") from exc
+        attempts = int(os.getenv("TEXT_AI_RETRY_ATTEMPTS", "3"))
+        retry_statuses = {502, 503, 504}
+        last_error: Exception | None = None
+        for attempt in range(max(1, attempts)):
+            try:
+                response = requests.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self._get_api_key()}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=self._resolve_timeout(),
+                )
+                response.raise_for_status()
+                return response.json()
+            except requests.Timeout as exc:
+                last_error = exc
+                if attempt < attempts - 1:
+                    time.sleep(min(60, 10 * (attempt + 1)))
+                    continue
+                raise RuntimeError("text generation request timed out") from exc
+            except requests.HTTPError as exc:
+                response = exc.response
+                if response is not None and response.status_code in retry_statuses and attempt < attempts - 1:
+                    last_error = exc
+                    time.sleep(min(60, 10 * (attempt + 1)))
+                    continue
+                raise RuntimeError(self._format_openai_error(response)) from exc
+            except requests.RequestException as exc:
+                last_error = exc
+                if attempt < attempts - 1:
+                    time.sleep(min(60, 10 * (attempt + 1)))
+                    continue
+                raise RuntimeError("text generation request failed") from exc
+        raise RuntimeError("text generation request failed") from last_error
+
+    def _format_openai_error(self, response) -> str:
+        message = "text generation request failed"
+        status_code = getattr(response, "status_code", None)
+        if response is not None:
+            try:
+                error_payload = response.json()
+            except ValueError:
+                error_payload = None
+            if isinstance(error_payload, dict):
+                error = error_payload.get("error")
+                if isinstance(error, dict):
+                    message = error.get("message") or error.get("code") or message
+                elif isinstance(error, str):
+                    message = error
+                else:
+                    message = error_payload.get("message") or message
+            elif response.text:
+                raw_text = response.text.strip()
+                title_match = re.search(r"<title>\s*(.*?)\s*</title>", raw_text, flags=re.I | re.S)
+                if title_match:
+                    message = re.sub(r"\s+", " ", title_match.group(1)).strip() or message
+                else:
+                    message = re.sub(r"\s+", " ", raw_text)[:500]
+            if status_code in {502, 503, 504}:
+                message = f"OpenAI API is temporarily unavailable ({status_code}). Please retry in a few minutes. Detail: {message}"
+            elif status_code:
+                message = f"text generation request failed ({status_code}): {message}"
+        return message
 
     def _extract_text(self, response_json: dict[str, Any]) -> str:
         choices = response_json.get("choices") or []
         if not choices:
             raise RuntimeError("text generation response is invalid")
-        message = choices[0].get("message") or {}
+        first_choice = choices[0]
+        message = first_choice.get("message") or {}
         content = message.get("content")
         if not isinstance(content, str) or not content.strip():
+            finish_reason = first_choice.get("finish_reason")
+            if finish_reason == "length":
+                raise RuntimeError(
+                    "text generation response was truncated before any text was produced; "
+                    "the model used all available output tokens for reasoning. Increase max_tokens or reduce the requested scope."
+                )
             raise RuntimeError("text generation response is invalid")
         return content.strip()
 
@@ -110,7 +168,7 @@ class TextAIClient:
         normalized_prompt = self._normalize_prompt(prompt)
         resolved_model = self._resolve_vision_model(model)
         payload: dict[str, Any] = {"model": resolved_model, "messages": self._build_messages(normalized_prompt, system_prompt)}
-        if temperature is not None:
+        if temperature is not None and not resolved_model.lower().startswith("gpt-5"):
             payload["temperature"] = temperature
         if response_format is not None:
             payload["response_format"] = response_format

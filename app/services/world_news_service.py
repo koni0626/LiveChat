@@ -12,6 +12,7 @@ from PIL import Image
 
 from ..clients.image_ai_client import ImageAIClient
 from ..clients.text_ai_client import TextAIClient
+from ..models import CinemaNovel, CinemaNovelChapter
 from ..repositories.character_repository import CharacterRepository
 from ..repositories.outing_session_repository import OutingSessionRepository
 from ..repositories.world_location_repository import WorldLocationRepository
@@ -23,7 +24,7 @@ from .world_service import WorldService
 
 
 class WorldNewsService:
-    VALID_TYPES = {"location_news", "character_sighting", "relationship", "outing_afterglow", "event_hint"}
+    VALID_TYPES = {"location_news", "character_sighting", "relationship", "outing_afterglow", "event_hint", "cinema_novel"}
 
     def __init__(
         self,
@@ -163,20 +164,23 @@ class WorldNewsService:
         characters = self._characters.list_by_project(project_id)[:12]
         locations = self._locations.list_by_project(project_id)[:16]
         outings = self._outings.list_by_project_user(project_id, 1, limit=8)
+        novels = self._recent_cinema_novel_contexts(project_id, limit=6)
         prompt = f"""
 Return only JSON.
 Create {count} world news / rumor items for a Japanese character world app.
 They should make the world feel alive outside direct chat.
 
 Required shape:
-{{"items":[{{"news_type":"location_news|character_sighting|relationship|event_hint","title":"...", "body":"...", "summary":"...", "importance":1-5, "related_character_id": null or number, "related_location_id": null or number}}]}}
+{{"items":[{{"news_type":"location_news|character_sighting|relationship|event_hint|cinema_novel","title":"...", "body":"...", "summary":"...", "importance":1-5, "related_character_id": null or number, "related_location_id": null or number, "source_ref_type": null or "cinema_novel", "source_ref_id": null or number}}]}}
 
 Rules:
 - Japanese only.
 - Keep each body 100-220 chars.
-- Include a mix of facility news, character sightings, and character relationship rumors.
+- Include a mix of facility news, character sightings, character relationship rumors, and novel-related rumors if cinema novels are provided.
 - Do not claim huge irreversible events. Make them small hooks for chat or outing.
 - Use only provided character/location IDs.
+- If using a cinema novel as inspiration, make it sound like an in-world screening rumor, production note, audience reaction, character sighting around the theater, or a small story-world echo. Do not summarize the whole novel.
+- For novel-related items, set news_type to "cinema_novel", source_ref_type to "cinema_novel", and source_ref_id to the provided novel id.
 
 Project: {getattr(project, "title", "") or ""}
 Project summary: {getattr(project, "summary", "") or ""}
@@ -185,6 +189,7 @@ World overview: {getattr(world, "overview", "") if world else ""}
 Characters: {json_util.dumps([self._character_context(c) for c in characters])}
 Locations: {json_util.dumps([self._location_context(l) for l in locations])}
 Recent outings: {json_util.dumps([{"id": o.id, "title": o.title, "summary": o.memory_summary or o.summary} for o in outings])}
+Cinema novels: {json_util.dumps(novels)}
 """.strip()
         result = self._text_ai_client.generate_text(
             prompt,
@@ -208,6 +213,7 @@ Required keys:
 {{"news_type":"outing_afterglow|character_sighting|relationship", "title":"...", "body":"...", "summary":"...", "importance":1-5}}
 
 Character: {character.name or ""}
+Character overview: {getattr(character, "character_summary", None) or ""}
 Character personality: {character.personality or ""}
 Location: {location.name or ""}
 Location description: {location.description or ""}
@@ -529,6 +535,8 @@ Selected choices: {json_util.dumps((state or {}).get("selected_choices") or [])}
         return file_name, file_path, len(raw_bytes), width, height
 
     def _default_return_url(self, project_id: int, payload: dict) -> str:
+        if payload.get("source_ref_type") == "cinema_novel" and payload.get("source_ref_id"):
+            return f"/projects/{project_id}/cinema-novels"
         location_id = payload.get("related_location_id")
         if location_id:
             return f"/projects/{project_id}/outings"
@@ -551,10 +559,68 @@ Selected choices: {json_util.dumps((state or {}).get("selected_choices") or [])}
         return location.id if location and location.project_id == project_id else None
 
     def _character_context(self, character) -> dict:
-        return {"id": character.id, "name": character.name, "personality": character.personality}
+        return {
+            "id": character.id,
+            "name": character.name,
+            "character_summary": getattr(character, "character_summary", None),
+            "personality": character.personality,
+        }
 
     def _location_context(self, location) -> dict:
         return {"id": location.id, "name": location.name, "type": location.location_type, "description": location.description}
+
+    def _recent_cinema_novel_contexts(self, project_id: int, *, limit: int = 6) -> list[dict]:
+        novels = (
+            CinemaNovel.query.filter(
+                CinemaNovel.project_id == project_id,
+                CinemaNovel.deleted_at.is_(None),
+            )
+            .order_by(CinemaNovel.updated_at.desc(), CinemaNovel.id.desc())
+            .limit(limit)
+            .all()
+        )
+        contexts = []
+        for novel in novels:
+            production = self._load_json(getattr(novel, "production_json", None))
+            source_input = production.get("source_input") if isinstance(production.get("source_input"), dict) else {}
+            chapters = (
+                CinemaNovelChapter.query.filter(
+                    CinemaNovelChapter.novel_id == novel.id,
+                    CinemaNovelChapter.deleted_at.is_(None),
+                )
+                .order_by(CinemaNovelChapter.chapter_no.asc(), CinemaNovelChapter.sort_order.asc(), CinemaNovelChapter.id.asc())
+                .limit(8)
+                .all()
+            )
+            contexts.append(
+                {
+                    "id": novel.id,
+                    "title": novel.title,
+                    "subtitle": novel.subtitle,
+                    "description": self._shorten(getattr(novel, "description", None), 600),
+                    "status": novel.status,
+                    "main_character": source_input.get("main_character") or "",
+                    "genre": source_input.get("genre") or "",
+                    "theme": source_input.get("theme") or "",
+                    "concept_note": self._shorten(source_input.get("concept_note"), 500),
+                    "outline": self._shorten(production.get("outline_markdown"), 1200),
+                    "chapters": [
+                        {
+                            "chapter_no": chapter.chapter_no,
+                            "title": chapter.title,
+                            "excerpt": self._shorten(chapter.body_markdown, 350),
+                        }
+                        for chapter in chapters
+                    ],
+                }
+            )
+        return contexts
+
+    def _shorten(self, value, limit: int) -> str:
+        text = str(value or "").strip().replace("\r\n", "\n")
+        if len(text) <= limit:
+            return text
+        return text[:limit].rstrip() + "..."
 
     def _serialize_character(self, character) -> dict | None:
         if not character:
@@ -601,6 +667,7 @@ Selected choices: {json_util.dumps((state or {}).get("selected_choices") or [])}
             "relationship": "関係の噂",
             "outing_afterglow": "おでかけ後日談",
             "event_hint": "イベント予告",
+            "cinema_novel": "ノベル",
         }.get(news_type, "噂")
 
     def _load_json(self, value) -> dict:

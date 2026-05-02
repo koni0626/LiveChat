@@ -157,7 +157,7 @@ class LiveChatShortStoryService:
         lines.append("登場キャラクター:")
         for character in context.get("characters") or []:
             lines.append(
-                f"- {character.get('name')}: 性格={character.get('personality') or ''}, 口調={character.get('speech_style') or ''}, 一人称={character.get('first_person') or ''}, 二人称={character.get('second_person') or ''}"
+                f"- {character.get('name')}: 概要={character.get('character_summary') or ''}, 性格={character.get('personality') or ''}, 口調={character.get('speech_style') or ''}, 一人称={character.get('first_person') or ''}, 二人称={character.get('second_person') or ''}"
             )
         lines.append("会話ログ:")
         for message in messages:
@@ -221,7 +221,7 @@ class LiveChatShortStoryService:
         characters = []
         for character in context.get("characters") or []:
             characters.append(
-                f"- {character.get('name')}: 外見={character.get('appearance_summary') or ''}, 性格={character.get('personality') or ''}, 口調={character.get('speech_style') or ''}"
+                f"- {character.get('name')}: 概要={character.get('character_summary') or ''}, 外見={character.get('appearance_summary') or ''}, 性格={character.get('personality') or ''}, 口調={character.get('speech_style') or ''}"
             )
         role_line = (
             "オープニング画像。短編が始まる直前の期待感、舞台、登場人物の関係性が伝わる1枚。"

@@ -284,6 +284,7 @@ world_overview: {getattr(world, "overview", "") if world else ""}
 world_tone: {getattr(world, "tone", "") if world else ""}
 character_name: {character.name or ""}
 character_nickname: {character.nickname or ""}
+character_summary: {getattr(character, "character_summary", None) or ""}
 character_personality: {character.personality or ""}
 character_speech_style: {character.speech_style or ""}
 character_memory: {character.memory_notes or ""}
@@ -504,6 +505,7 @@ previous_steps: {json_util.dumps(previous_steps[-3:])}
                 "The image should change pose, expression, camera, lighting, and local staging to match this step.",
                 "Keep it romantic and commercially appealing, but avoid explicit nudity, sexual acts, nipples, genitals, fetish framing, transparent clothing emphasis, or hands on breasts/genitals.",
                 f"Character: {character.name or ''}",
+                f"Character overview: {getattr(character, 'character_summary', None) or ''}",
                 f"Character appearance: {character.appearance_summary or ''}",
                 f"Character personality: {character.personality or ''}",
                 f"Location: {location.name or ''}",
@@ -655,6 +657,7 @@ Character name: {character.name or ""}
 Nickname: {character.nickname or ""}
 First person: {character.first_person or ""}
 Second person: {character.second_person or ""}
+Character overview: {getattr(character, "character_summary", None) or ""}
 Personality: {character.personality or ""}
 Speech style: {character.speech_style or ""}
 Speech sample: {character.speech_sample or ""}

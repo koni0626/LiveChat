@@ -39,6 +39,14 @@ class LiveChatRoomRepository:
     def get(self, room_id: int, include_deleted: bool = False):
         return self._base_query(include_deleted).filter(LiveChatRoom.id == room_id).first()
 
+    def get_by_character(self, character_id: int, include_deleted: bool = False):
+        return (
+            self._base_query(include_deleted)
+            .filter(LiveChatRoom.character_id == character_id)
+            .order_by(LiveChatRoom.updated_at.desc(), LiveChatRoom.id.desc())
+            .first()
+        )
+
     def create(self, payload: dict):
         row = LiveChatRoom(
             project_id=payload["project_id"],

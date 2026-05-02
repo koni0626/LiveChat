@@ -13,6 +13,7 @@ class Character(db.Model, TimestampMixin, SoftDeleteMixin):
     age_impression = db.Column(db.String(100))
     first_person = db.Column(db.String(100))
     second_person = db.Column(db.String(100))
+    character_summary = db.Column(db.Text)
     personality = db.Column(db.Text)
     speech_style = db.Column(db.Text)
     speech_sample = db.Column(db.Text)

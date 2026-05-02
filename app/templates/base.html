@@ -53,6 +53,9 @@
     {% if screen_id == "world-news" %}
     <link href="{{ url_for('static', filename='css/screens/world_news.css') }}" rel="stylesheet">
     {% endif %}
+    {% if screen_id in ["cinema-novels", "cinema-novel-reader"] %}
+    <link href="{{ url_for('static', filename='css/screens/cinema_novel.css') }}" rel="stylesheet">
+    {% endif %}
     <meta name="csrf-token" content="{{ csrf_token }}">
   </head>
   <body data-screen="{{ screen_id }}" data-project-id="{{ project_id or '' }}">

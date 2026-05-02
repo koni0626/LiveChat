@@ -42,6 +42,7 @@
 
       <textarea class="d-none" name="appearance_summary"></textarea>
       <textarea class="d-none" name="art_style"></textarea>
+      <textarea class="d-none" name="character_summary"></textarea>
       <textarea class="d-none" name="personality"></textarea>
       <textarea class="d-none" name="likes_text"></textarea>
       <textarea class="d-none" name="dislikes_text"></textarea>
@@ -138,6 +139,12 @@
         <div class="d-flex gap-2 justify-content-end">
           <button class="btn btn-outline-light" type="submit">顔アイコンをアップロード</button>
         </div>
+      </form>
+      <form id="portraitGenerateForm" class="d-flex gap-2 justify-content-end">
+        <button class="btn btn-sunrise" type="submit" id="generatePortraitButton">
+          <i class="bi bi-camera-fill"></i>
+          <span>顔写真をAI生成</span>
+        </button>
       </form>
     </div>
 

@@ -184,6 +184,7 @@ class StoryService:
                 f"ワールド名: {getattr(project, 'title', '')}",
                 f"ワールド説明: {getattr(project, 'summary', '') or ''}",
                 f"メインキャラクター: {character_name}",
+                f"キャラクター概要: {getattr(character, 'character_summary', '') if character else ''}",
                 f"キャラクター性格: {getattr(character, 'personality', '') if character else ''}",
                 f"キャラクター外見: {getattr(character, 'appearance_summary', '') if character else ''}",
                 "必ず以下を含めてください。",

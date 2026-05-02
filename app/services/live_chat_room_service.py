@@ -38,6 +38,9 @@ class LiveChatRoomService:
     def get_room(self, room_id: int):
         return self._repo.get(room_id)
 
+    def get_room_by_character(self, character_id: int):
+        return self._repo.get_by_character(character_id)
+
     def serialize_room(self, room, *, include_counts: bool = False, owner_user_id: int | None = None):
         if not room:
             return None
@@ -127,6 +130,19 @@ class LiveChatRoomService:
             return None
         normalized = self._normalize_payload(project_id, payload, created_by_user_id=created_by_user_id, require_all=True)
         return self._repo.create(normalized)
+
+    def build_objective_draft(self, project_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        try:
+            character_id = int(payload.get("character_id") or 0)
+        except (TypeError, ValueError):
+            character_id = 0
+        if character_id <= 0:
+            raise ValueError("character_id is required")
+        character = self._character_service.get_character(character_id)
+        if not character or character.project_id != project_id:
+            raise ValueError("character_id is invalid")
+        return self._character_service.build_default_live_chat_room_payload(character)
 
     def update_room(self, room_id: int, payload: dict | None):
         payload = dict(payload or {})

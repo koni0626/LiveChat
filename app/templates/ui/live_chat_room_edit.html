@@ -50,10 +50,16 @@
               <h4>キャラクターへの指示</h4>
               <p>このルームでAIキャラクターに守ってほしい会話方針をMarkdownで入力します。</p>
             </div>
-            <button class="btn btn-sm btn-outline-light" type="button" id="liveChatRoomObjectiveEditButton">
-              <i class="bi bi-pencil-square"></i>
-              <span>編集</span>
-            </button>
+            <div class="d-flex gap-2 flex-wrap justify-content-end">
+              <button class="btn btn-sm btn-outline-light" type="button" id="liveChatRoomObjectiveGenerateButton">
+                <i class="bi bi-stars"></i>
+                <span>自動生成</span>
+              </button>
+              <button class="btn btn-sm btn-outline-light" type="button" id="liveChatRoomObjectiveEditButton">
+                <i class="bi bi-pencil-square"></i>
+                <span>編集</span>
+              </button>
+            </div>
           </div>
           <div class="markdown-summary-body" id="liveChatRoomObjectivePreview">まだ入力されていません。</div>
         </article>
@@ -191,6 +197,7 @@
   });
   const objectivePreview = document.getElementById("liveChatRoomObjectivePreview");
   const objectiveEditButton = document.getElementById("liveChatRoomObjectiveEditButton");
+  const objectiveGenerateButton = document.getElementById("liveChatRoomObjectiveGenerateButton");
   const objectiveModalElement = document.getElementById("liveChatRoomObjectiveModal");
   if (objectiveModalElement) document.body.appendChild(objectiveModalElement);
   const objectiveModal = objectiveModalElement ? new bootstrap.Modal(objectiveModalElement) : null;
@@ -288,6 +295,51 @@
     proxyPlayerObjectiveModal.hide();
   }
 
+  function setObjectiveGenerating(active) {
+    if (!objectiveGenerateButton) return;
+    objectiveGenerateButton.disabled = active;
+    objectiveGenerateButton.innerHTML = active
+      ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>生成中...'
+      : '<i class="bi bi-stars"></i><span>自動生成</span>';
+  }
+
+  async function generateObjectiveDraft() {
+    const characterId = Number(roomForm.character_id.value || 0);
+    if (!characterId) {
+      NovelUI.toast("先にキャラクターを選択してください。", "warning");
+      characterSelect.focus();
+      return;
+    }
+    setObjectiveGenerating(true);
+    try {
+      const draft = await NovelUI.api(`/api/v1/projects/${projectId}/chat/rooms/objective-draft`, {
+        method: "POST",
+        body: { character_id: characterId },
+      });
+      if (!roomForm.title.value.trim()) {
+        roomForm.title.value = draft.title || "";
+      }
+      if (!roomForm.description.value.trim()) {
+        roomForm.description.value = draft.description || "";
+      }
+      roomForm.conversation_objective.value = draft.conversation_objective || "";
+      roomForm.proxy_player_objective.value = draft.proxy_player_objective || "";
+      if (!roomForm.proxy_player_gender.value.trim()) {
+        roomForm.proxy_player_gender.value = draft.proxy_player_gender || "";
+      }
+      if (!roomForm.proxy_player_speech_style.value.trim()) {
+        roomForm.proxy_player_speech_style.value = draft.proxy_player_speech_style || "";
+      }
+      renderObjectivePreview();
+      renderProxyPlayerObjectivePreview();
+      NovelUI.toast("キャラクター設定から指示を自動生成しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "指示の自動生成に失敗しました。", "danger");
+    } finally {
+      setObjectiveGenerating(false);
+    }
+  }
+
   function fillRoom(room) {
     roomForm.title.value = room.title || "";
     roomForm.character_id.value = room.character_id || "";
@@ -355,6 +407,7 @@
   });
 
   objectiveEditButton?.addEventListener("click", openObjectiveEditor);
+  objectiveGenerateButton?.addEventListener("click", generateObjectiveDraft);
   objectiveApplyButton?.addEventListener("click", applyObjectiveEditor);
   objectiveMarkdownInput?.addEventListener("input", () => {
     objectiveMarkdownPreview.innerHTML = markdownToHtml(objectiveMarkdownInput.value);

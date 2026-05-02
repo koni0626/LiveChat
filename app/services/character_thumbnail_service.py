@@ -1,9 +1,13 @@
+import base64
+import binascii
 import os
+from datetime import datetime
 from typing import Any
 
 from flask import current_app
 from PIL import Image
 
+from ..clients.image_ai_client import ImageAIClient
 from ..clients.text_ai_client import TextAIClient
 from ..services.asset_service import AssetService
 from ..utils import json_util
@@ -17,11 +21,72 @@ class CharacterThumbnailService:
         *,
         asset_service: AssetService | None = None,
         text_ai_client: TextAIClient | None = None,
+        image_ai_client: ImageAIClient | None = None,
     ):
         self._asset_service = asset_service or AssetService()
         self._text_ai_client = text_ai_client or TextAIClient()
+        self._image_ai_client = image_ai_client or ImageAIClient()
 
-    def generate_for_character(self, character):
+    def generate_for_character(self, character, payload: dict | None = None):
+        payload = dict(payload or {})
+        if not character:
+            return None
+        base_asset = None
+        reference_paths = []
+        if getattr(character, "base_asset_id", None):
+            base_asset = self._asset_service.get_asset(character.base_asset_id)
+            if base_asset and base_asset.file_path and os.path.exists(base_asset.file_path):
+                reference_paths.append(base_asset.file_path)
+
+        prompt = self._build_portrait_prompt(character, has_reference=bool(reference_paths), payload=payload)
+        result = self._image_ai_client.generate_image(
+            prompt,
+            size=payload.get("size") or "1024x1024",
+            quality=payload.get("quality") or "medium",
+            model=payload.get("model") or payload.get("image_ai_model"),
+            provider=payload.get("provider") or payload.get("image_ai_provider"),
+            output_format="png",
+            background="opaque",
+            input_image_paths=reference_paths,
+            input_fidelity="high" if reference_paths else None,
+        )
+        image_base64 = result.get("image_base64")
+        if not image_base64:
+            raise RuntimeError("image generation response did not include image_base64")
+
+        file_name, file_path, file_size, width, height = self._store_generated_portrait(
+            project_id=character.project_id,
+            character_id=character.id,
+            image_base64=image_base64,
+        )
+
+        asset = self._asset_service.create_asset(
+            character.project_id,
+            {
+                "asset_type": "character_thumbnail",
+                "file_name": file_name,
+                "file_path": file_path,
+                "mime_type": "image/png",
+                "file_size": file_size,
+                "width": width,
+                "height": height,
+                "metadata_json": json_util.dumps(
+                    {
+                        "source": "character_portrait_generation",
+                        "base_asset_id": getattr(base_asset, "id", None),
+                        "prompt": prompt,
+                        "revised_prompt": result.get("revised_prompt"),
+                        "model": result.get("model"),
+                        "quality": result.get("quality"),
+                        "size": payload.get("size") or "1024x1024",
+                        "reference_image_count": len(reference_paths),
+                    }
+                ),
+            },
+        )
+        return asset
+
+    def crop_from_base_image(self, character):
         if not character or not getattr(character, "base_asset_id", None):
             return None
         base_asset = self._asset_service.get_asset(character.base_asset_id)
@@ -69,6 +134,71 @@ class CharacterThumbnailService:
             },
         )
         return asset
+
+    def _build_portrait_prompt(self, character, *, has_reference: bool, payload: dict) -> str:
+        art_style = str(payload.get("art_style") or getattr(character, "art_style", None) or "").strip()
+        parts = [
+            "Create a striking square face portrait for a Japanese visual novel / live chat character.",
+            "This is not a plain ID photo. Make it an appealing key portrait that clearly sells the character's personality.",
+            "Show exactly one character, bust-up or close face portrait, expressive eyes, polished lighting, cinematic composition.",
+            "Keep the face, hairstyle, age impression, colors, outfit direction, and art style consistent with the character settings.",
+            "No text, no words, no letters, no subtitles, no captions, no speech bubbles, no readable signs, no UI overlay, no watermark, no logo.",
+            "Avoid generic beauty. Prioritize a memorable expression, pose, lighting, and background motif that match the character concept.",
+            f"Name: {character.name}",
+        ]
+        if has_reference:
+            parts.append(
+                "Use the provided full-body reference image as the primary identity reference. Preserve the same character, hairstyle, face impression, outfit motifs, and color palette."
+            )
+        if getattr(character, "nickname", None):
+            parts.append(f"Nickname: {character.nickname}")
+        if getattr(character, "gender", None):
+            parts.append(f"Gender: {character.gender}")
+        if getattr(character, "age_impression", None):
+            parts.append(f"Age impression: {character.age_impression}")
+        if getattr(character, "first_person", None):
+            parts.append(f"First person: {character.first_person}")
+        if getattr(character, "second_person", None):
+            parts.append(f"How they call the player: {character.second_person}")
+        if getattr(character, "character_summary", None):
+            parts.append(f"Character overview and concept: {character.character_summary}")
+        if getattr(character, "appearance_summary", None):
+            parts.append(f"Appearance: {character.appearance_summary}")
+        if getattr(character, "personality", None):
+            parts.append(f"Personality: {character.personality}")
+        if getattr(character, "speech_style", None):
+            parts.append(f"Speech style: {character.speech_style}")
+        if getattr(character, "speech_sample", None):
+            parts.append(f"Sample lines: {character.speech_sample}")
+        if getattr(character, "ng_rules", None):
+            parts.append(f"Do not violate these character rules: {character.ng_rules}")
+        if art_style:
+            parts.append(f"Art style: {art_style}")
+        else:
+            parts.append("Art style: high-quality Japanese anime visual novel portrait art, consistent linework and colors.")
+        parts.append("Background: simple but atmospheric motif that supports the character concept without distracting from the face.")
+        return "\n".join(parts)
+
+    def _store_generated_portrait(self, *, project_id: int, character_id: int, image_base64: str):
+        try:
+            raw_bytes = base64.b64decode(image_base64)
+        except (binascii.Error, ValueError) as exc:
+            raise RuntimeError("generated image payload is invalid") from exc
+        output_dir = self._build_output_directory(project_id)
+        os.makedirs(output_dir, exist_ok=True)
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        file_name = f"character_{character_id}_portrait_{timestamp}.png"
+        file_path = os.path.join(output_dir, file_name)
+        with open(file_path, "wb") as file_handle:
+            file_handle.write(raw_bytes)
+        width = None
+        height = None
+        try:
+            with Image.open(file_path) as image:
+                width, height = image.size
+        except Exception:
+            width = height = self.THUMBNAIL_SIZE
+        return file_name, file_path, len(raw_bytes), width, height
 
     def _build_output_directory(self, project_id: int) -> str:
         storage_root = current_app.config.get("STORAGE_ROOT")

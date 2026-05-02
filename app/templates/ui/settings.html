@@ -50,6 +50,46 @@
         </select>
       </div>
       <div class="col-12">
+        <hr>
+        <h4 class="mb-2">ノベル / 小説作成設定</h4>
+        <p class="text-secondary mb-0">通常のチャット生成とは別に、長編小説・章立て・事前生成画像で使うモデルを設定します。</p>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">小説作成テキストモデル</label>
+        <input class="form-control" name="cinema_novel_text_model" value="gpt-5.5">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">章の目標文字数</label>
+        <input class="form-control" type="number" min="1000" max="30000" step="500" name="cinema_novel_chapter_target_chars" value="3500">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">小説画像プロバイダー</label>
+        <select class="form-select" name="cinema_novel_image_ai_provider" id="cinemaNovelImageProviderSelect">
+          <option value="openai">OpenAI</option>
+          <option value="grok">Grok / xAI</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">小説画像モデル</label>
+        <input class="form-control" name="cinema_novel_image_ai_model" value="gpt-image-2" id="cinemaNovelImageModelInput">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">小説画像品質</label>
+        <select class="form-select" name="cinema_novel_default_quality">
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">小説画像サイズ</label>
+        <select class="form-select" name="cinema_novel_default_size">
+          <option value="1024x1024">1024x1024</option>
+          <option value="1024x1536">1024x1536</option>
+          <option value="1536x1024">1536x1024</option>
+        </select>
+      </div>
+      <div class="col-12">
         <label class="form-label">メモ</label>
         <textarea class="form-control" rows="4" readonly>この画面はログイン中ユーザーの既定値を保存します。API キーやストレージ固有のようなサーバー設定はここでは変更しません。</textarea>
       </div>
@@ -67,6 +107,8 @@
   const form = document.getElementById("settingsForm");
   const providerSelect = document.getElementById("imageAiProviderSelect");
   const modelInput = document.getElementById("imageAiModelInput");
+  const cinemaNovelProviderSelect = document.getElementById("cinemaNovelImageProviderSelect");
+  const cinemaNovelModelInput = document.getElementById("cinemaNovelImageModelInput");
   const preferPortraitOnMobileInput = document.getElementById("preferPortraitOnMobile");
   let providerDefaultModels = { openai: "gpt-image-2", grok: "grok-imagine-image" };
 
@@ -87,12 +129,25 @@
     }
   }
 
+  function applyCinemaNovelProviderModelDefault(previousProvider) {
+    const provider = cinemaNovelProviderSelect?.value || "openai";
+    const previousDefault = providerDefaultModels[previousProvider];
+    const currentValue = (cinemaNovelModelInput?.value || "").trim();
+    const incompatible =
+      (provider === "grok" && /^(gpt-|dall-e)/i.test(currentValue)) ||
+      (provider === "openai" && /^grok-/i.test(currentValue));
+    if (cinemaNovelModelInput && (!currentValue || currentValue === previousDefault || incompatible)) {
+      cinemaNovelModelInput.value = providerDefaultModels[provider] || currentValue;
+    }
+  }
+
   async function loadSettings() {
     const settings = await NovelUI.api("/api/v1/settings");
     providerDefaultModels = settings?.available_options?.provider_default_models || providerDefaultModels;
     NovelUI.fillForm(form, settings);
     syncMobilePortraitToggle(settings);
     if (providerSelect) providerSelect.dataset.previousProvider = providerSelect.value || "openai";
+    if (cinemaNovelProviderSelect) cinemaNovelProviderSelect.dataset.previousProvider = cinemaNovelProviderSelect.value || "openai";
   }
 
   form.addEventListener("submit", async (event) => {
@@ -128,6 +183,11 @@
 
   providerSelect?.addEventListener("change", (event) => {
     applyProviderModelDefault(event.target.dataset.previousProvider || "openai");
+    event.target.dataset.previousProvider = event.target.value;
+  });
+
+  cinemaNovelProviderSelect?.addEventListener("change", (event) => {
+    applyCinemaNovelProviderModelDefault(event.target.dataset.previousProvider || "openai");
     event.target.dataset.previousProvider = event.target.value;
   });
 

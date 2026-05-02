@@ -10,6 +10,9 @@ from .character_memory_summary import CharacterMemorySummary
 from .character_user_memory import CharacterUserMemory
 from .character_feed_profile import CharacterFeedProfile
 from .character_outfit import CharacterOutfit
+from .cinema_novel import CinemaNovel
+from .cinema_novel_chapter import CinemaNovelChapter
+from .cinema_novel_progress import CinemaNovelProgress
 from .feed_like import FeedLike
 from .feed_post import FeedPost
 from .live_chat_room import LiveChatRoom
@@ -45,6 +48,9 @@ __all__ = [
     "CharacterUserMemory",
     "CharacterFeedProfile",
     "CharacterOutfit",
+    "CinemaNovel",
+    "CinemaNovelChapter",
+    "CinemaNovelProgress",
     "FeedLike",
     "FeedPost",
     "LiveChatRoom",

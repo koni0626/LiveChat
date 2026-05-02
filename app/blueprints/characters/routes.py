@@ -103,6 +103,7 @@ def _serialize_character(character):
         "age_impression": character.age_impression,
         "first_person": character.first_person,
         "second_person": character.second_person,
+        "character_summary": getattr(character, "character_summary", None),
         "personality": character.personality,
         "speech_style": character.speech_style,
         "speech_sample": character.speech_sample,
@@ -146,6 +147,7 @@ def list_characters(project_id: int):
             if keyword in (character.name or "").lower()
             or keyword in (character.nickname or "").lower()
             or keyword in (character.gender or "").lower()
+            or keyword in (getattr(character, "character_summary", None) or "").lower()
             or keyword in (character.speech_style or "").lower()
             or keyword in (character.appearance_summary or "").lower()
         ]
@@ -158,10 +160,10 @@ def list_characters(project_id: int):
 
 @characters_bp.route("/projects/<int:project_id>/characters", methods=["POST"])
 def create_character(project_id: int):
-    require_project_manage(project_id)
+    _project, user = require_project_manage(project_id)
     payload = request.get_json(silent=True) or {}
     try:
-        character = character_service.create_character(project_id, payload)
+        character = character_service.create_character(project_id, payload, created_by_user_id=user.id)
     except (KeyError, ValueError) as exc:
         return json_response({"message": str(exc)}, status=400)
     return json_response(_serialize_character(character), status=201)
@@ -216,6 +218,25 @@ def generate_character_base_image(character_id: int):
     payload = user_setting_service.apply_global_image_generation_settings(payload)
     try:
         character = character_service.generate_base_image(character_id, payload)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    if not character:
+        return json_response({"message": "not_found"}, status=404)
+    return json_response(_serialize_character(character))
+
+
+@characters_bp.route("/characters/<int:character_id>/portrait/generate", methods=["POST"])
+def generate_character_portrait_image(character_id: int):
+    payload = request.get_json(silent=True) or {}
+    existing = character_service.get_character(character_id)
+    if not existing:
+        raise NotFoundError()
+    require_project_manage(existing.project_id)
+    payload = user_setting_service.apply_global_image_generation_settings(payload)
+    try:
+        character = character_service.generate_portrait_image(character_id, payload)
     except ValueError as exc:
         return json_response({"message": str(exc)}, status=400)
     except RuntimeError as exc:

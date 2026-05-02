@@ -76,7 +76,7 @@ class Config:
     XAI_IMAGE_MODEL = os.getenv("XAI_IMAGE_MODEL", "grok-imagine-image")
     IMAGE_DEFAULT_QUALITY = os.getenv("IMAGE_DEFAULT_QUALITY", "medium")
     IMAGE_PROMPT_SAFETY_MODE = os.getenv("IMAGE_PROMPT_SAFETY_MODE", "both")
-    TEXT_AI_TIMEOUT_SECONDS = int(os.getenv("TEXT_AI_TIMEOUT_SECONDS", "120"))
+    TEXT_AI_TIMEOUT_SECONDS = int(os.getenv("TEXT_AI_TIMEOUT_SECONDS", "900"))
     IMAGE_AI_TIMEOUT_SECONDS = int(os.getenv("IMAGE_AI_TIMEOUT_SECONDS", "60"))
     LETTER_COOLDOWN_MINUTES = int(os.getenv("LETTER_COOLDOWN_MINUTES", "360"))
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(12 * 1024 * 1024)))

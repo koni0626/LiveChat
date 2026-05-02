@@ -634,6 +634,7 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
             "id": character.id,
             "name": character.name,
             "nickname": character.nickname,
+            "character_summary": getattr(character, "character_summary", None),
             "personality": character.personality,
             "speech_style": character.speech_style,
             "appearance": character.appearance_summary,
@@ -660,6 +661,8 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
             lines.append(f"Character: {character.name}")
             if character.nickname:
                 lines.append(f"Nickname: {character.nickname}")
+            if getattr(character, "character_summary", None):
+                lines.append(f"Character overview: {character.character_summary}")
             if character.appearance_summary:
                 lines.append(f"Appearance: {character.appearance_summary}")
             if character.personality:

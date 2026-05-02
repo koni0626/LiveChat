@@ -34,6 +34,7 @@ def _project_nav(project_id: int | None, current_user: User | None = None):
         links.append({"label": "ワールドニュース", "icon": "bi-newspaper", "href": url_for("ui.world_news_page", project_id=project_id)})
     links.append({"label": "チャットルーム", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)})
     links.append({"label": "セッション", "icon": "bi-dice-5", "href": url_for("ui.story_session_list_page", project_id=project_id)})
+    links.append({"label": "ノベル", "icon": "bi-film", "href": url_for("ui.cinema_novel_list_page", project_id=project_id)})
     links.append({"label": "スタジオ", "icon": "bi-palette", "href": url_for("ui.studio_page", project_id=project_id)})
     links.append({"label": "クローゼット", "icon": "bi-person-bounding-box", "href": url_for("ui.closet_page", project_id=project_id)})
     return links
@@ -208,6 +209,22 @@ def story_session_list_page(project_id: int):
 @ui_bp.route("/projects/<int:project_id>/story-sessions/<int:session_id>", methods=["GET"])
 def story_session_page(project_id: int, session_id: int):
     return _render("ui/story_session.html", title="セッション", screen_id="story-session", project_id=project_id, session_id=session_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/cinema-novels", methods=["GET"])
+def cinema_novel_list_page(project_id: int):
+    return _render("ui/cinema_novels.html", title="ノベル", screen_id="cinema-novels", project_id=project_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/cinema-novels/<int:novel_id>", methods=["GET"])
+def cinema_novel_reader_page(project_id: int, novel_id: int):
+    return _render(
+        "ui/cinema_novel_reader.html",
+        title="ノベル",
+        screen_id="cinema-novel-reader",
+        project_id=project_id,
+        novel_id=novel_id,
+    )
 
 
 @ui_bp.route("/projects/<int:project_id>/studio", methods=["GET"])

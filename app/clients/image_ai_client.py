@@ -246,6 +246,11 @@ class ImageAIClient:
 
         if not error_message:
             error_message = (response.text or "").strip() or fallback
+        if "<!DOCTYPE html" in error_message or "<html" in error_message.lower():
+            if status_code == 502 or "Bad gateway" in error_message:
+                error_message = "Bad gateway. The image API host returned a temporary 502 error."
+            else:
+                error_message = "The image API returned an HTML error page."
 
         if status_code:
             return f"{fallback} ({status_code}): {error_message}"

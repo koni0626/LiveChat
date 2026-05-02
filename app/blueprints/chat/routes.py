@@ -113,6 +113,17 @@ def create_project_chat_room(project_id: int):
     return json_response(live_chat_room_service.serialize_room(room, include_counts=True), status=201)
 
 
+@chat_bp.route("/projects/<int:project_id>/chat/rooms/objective-draft", methods=["POST"])
+def build_project_chat_room_objective_draft(project_id: int):
+    _require_project(project_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        draft = live_chat_room_service.build_objective_draft(project_id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    return json_response(draft)
+
+
 @chat_bp.route("/projects/<int:project_id>/chat/available-rooms", methods=["GET"])
 def list_available_chat_rooms(project_id: int):
     project, user = _require_project(project_id)

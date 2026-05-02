@@ -75,6 +75,7 @@ class LiveChatSerializer:
             "gender": character.gender,
             "first_person": character.first_person,
             "second_person": character.second_person,
+            "character_summary": getattr(character, "character_summary", None),
             "personality": character.personality,
             "speech_style": character.speech_style,
             "speech_sample": character.speech_sample,

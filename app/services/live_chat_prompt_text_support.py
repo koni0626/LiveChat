@@ -621,7 +621,7 @@ def build_opening_prompt(context: dict) -> str:
     lines.append("キャラクター:")
     for character in context["characters"]:
         lines.append(
-            f"- {character['name']}: nickname={character.get('nickname') or ''}, gender={character.get('gender') or ''}, first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}, ng_rules={character.get('ng_rules') or ''}"
+            f"- {character['name']}: nickname={character.get('nickname') or ''}, gender={character.get('gender') or ''}, first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}, ng_rules={character.get('ng_rules') or ''}"
         )
         if character.get("nickname"):
             lines.append(
@@ -722,7 +722,7 @@ def build_player_proxy_message_prompt(context: dict) -> str:
     session_memory_map = ((context.get("state") or {}).get("state_json") or {}).get("session_memory", {}).get("character_memories") or {}
     for character in context["characters"]:
         lines.append(
-            f"- {character['name']}: nickname={character.get('nickname') or ''}, gender={character.get('gender') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, second_person={character.get('second_person') or ''}"
+            f"- {character['name']}: nickname={character.get('nickname') or ''}, gender={character.get('gender') or ''}, character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, second_person={character.get('second_person') or ''}"
         )
         summary = _build_character_memory_summary(_flatten_character_memory(character, session_memory_map))
         if summary:
@@ -829,7 +829,7 @@ def build_idle_character_message_prompt(context: dict) -> str:
     character_memories = session_memory.get("character_memories") or {}
     for character in context["characters"]:
         lines.append(
-            f"- {character['name']}: nickname={character.get('nickname') or ''}, gender={character.get('gender') or ''}, first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}, ng_rules={character.get('ng_rules') or ''}"
+            f"- {character['name']}: nickname={character.get('nickname') or ''}, gender={character.get('gender') or ''}, first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}, ng_rules={character.get('ng_rules') or ''}"
         )
         summary = _build_character_memory_summary(_flatten_character_memory(character, character_memories))
         if summary:
@@ -1017,7 +1017,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     lines.append("キャラクター:")
     for character in context["characters"]:
         lines.append(
-            f"- {character['name']}: nickname={character.get('nickname') or ''}, gender={character.get('gender') or ''}, first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}, ng_rules={character.get('ng_rules') or ''}"
+            f"- {character['name']}: nickname={character.get('nickname') or ''}, gender={character.get('gender') or ''}, first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}, ng_rules={character.get('ng_rules') or ''}"
         )
         if character.get("nickname"):
             lines.append(
@@ -1182,7 +1182,7 @@ def build_narration_scene_prompt(context: dict, user_message_text: str, intent: 
         lines.append(world_map_context)
     for character in context["characters"]:
         lines.append(
-            f"- {character.get('name')}: appearance={character.get('appearance_summary') or ''}, personality={character.get('personality') or ''}"
+            f"- {character.get('name')}: character_summary={character.get('character_summary') or ''}, appearance={character.get('appearance_summary') or ''}, personality={character.get('personality') or ''}"
         )
     lines.append("直近の会話:")
     for message in context["messages"][-8:]:
@@ -1252,7 +1252,7 @@ def build_narration_reaction_prompt(context: dict, user_message_text: str, scene
     ]
     for character in context["characters"]:
         lines.append(
-            f"- {character.get('name')}: first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, sample={character.get('speech_sample') or ''}"
+            f"- {character.get('name')}: first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, sample={character.get('speech_sample') or ''}"
         )
     return "\n".join(lines)
 
@@ -1295,7 +1295,7 @@ def build_scene_choice_prompt(context: dict, speaker_name: str, message_text: st
         lines.append(world_map_context)
     for character in context["characters"]:
         lines.append(
-            f"- {character.get('name')}: personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, ng_rules={character.get('ng_rules') or ''}"
+            f"- {character.get('name')}: character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, ng_rules={character.get('ng_rules') or ''}"
         )
     lines.append("直近の会話:")
     for message in context["messages"][-8:]:
@@ -1340,7 +1340,7 @@ def build_choice_execution_prompt(context: dict, choice: dict) -> str:
     ]
     for character in context["characters"]:
         lines.append(
-            f"- {character.get('name')}: personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, likes={character.get('likes_text') or ''}, dislikes={character.get('dislikes_text') or ''}, ng_rules={character.get('ng_rules') or ''}"
+            f"- {character.get('name')}: character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, likes={character.get('likes_text') or ''}, dislikes={character.get('dislikes_text') or ''}, ng_rules={character.get('ng_rules') or ''}"
         )
     lines.append("直近の会話:")
     for message in context["messages"][-10:]:
@@ -1374,7 +1374,7 @@ def build_costume_rewrite_prompt(context: dict, character: dict, instruction: st
         "The output should describe clothing only, not a full scene illustration.",
         "Japanese output is preferred.",
         f"Original user instruction: {instruction}",
-        f"Character: name={character.get('name') or ''}, gender={character.get('gender') or ''}, personality={character.get('personality') or ''}, art_style={character.get('art_style') or ''}",
+        f"Character: name={character.get('name') or ''}, gender={character.get('gender') or ''}, character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, art_style={character.get('art_style') or ''}",
         "Conversation and current scene context:",
         costume_context,
     ]
@@ -1433,7 +1433,7 @@ def build_image_prompt_safety_rewrite_prompt(context: dict, prompt: str, purpose
     ]
     for character in context.get("characters") or []:
         lines.append(
-            f"- {character.get('name')}: gender={character.get('gender') or ''}, identity/appearance notes={character.get('appearance_summary') or ''}, personality={character.get('personality') or ''}, art_style={character.get('art_style') or ''}"
+            f"- {character.get('name')}: gender={character.get('gender') or ''}, character_summary={character.get('character_summary') or ''}, identity/appearance notes={character.get('appearance_summary') or ''}, personality={character.get('personality') or ''}, art_style={character.get('art_style') or ''}"
         )
     lines.extend(
         [
@@ -1795,7 +1795,7 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
     session_memory_map = ((context.get("state") or {}).get("state_json") or {}).get("session_memory", {}).get("character_memories") or {}
     for character in context["characters"]:
         lines.append(
-            f"- {character['name']}: nickname={character.get('nickname') or ''}, gender={character.get('gender') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}"
+            f"- {character['name']}: nickname={character.get('nickname') or ''}, gender={character.get('gender') or ''}, character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}"
         )
         summary = _build_character_memory_summary(_flatten_character_memory(character, session_memory_map))
         if summary:

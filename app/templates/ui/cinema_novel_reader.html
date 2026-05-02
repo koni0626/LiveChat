@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="cinema-reader-shell" data-project-id="{{ project_id }}" data-novel-id="{{ novel_id }}">
+  <section class="cinema-reader-stage">
+    <div class="cinema-reader-screen" id="cinemaReaderScreen">
+      <div class="cinema-reader-still-wrap" id="cinemaReaderStillWrap">
+        <div class="cinema-reader-placeholder">
+          <i class="bi bi-film"></i>
+          <span>Prebuilt Novel</span>
+        </div>
+      </div>
+      <div class="cinema-reader-textbox">
+        <div class="cinema-reader-speaker" id="cinemaReaderSpeaker" hidden></div>
+        <div class="cinema-reader-text" id="cinemaReaderText"></div>
+        <div class="cinema-reader-footer">
+          <div id="cinemaReaderPosition">-</div>
+          <div class="cinema-reader-actions">
+            <button class="btn btn-sm btn-outline-light" type="button" id="cinemaReaderBookmarkButton">
+              <i class="bi bi-bookmark-check"></i>
+              栞
+            </button>
+            <button class="btn btn-sm btn-outline-light" type="button" id="cinemaReaderInlinePrevButton">Prev</button>
+            <button class="btn btn-sm btn-light" type="button" id="cinemaReaderNextButton">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <aside class="cinema-reader-side">
+    <a class="btn btn-outline-dark w-100 mb-3" href="{{ url_for('ui.cinema_novel_list_page', project_id=project_id) }}">
+      <i class="bi bi-arrow-left"></i>
+      作品一覧へ
+    </a>
+    <h2 id="cinemaReaderTitle">Loading...</h2>
+    <p id="cinemaReaderDescription"></p>
+    <div class="cinema-reader-progress">
+      <div class="cinema-reader-progress-bar" id="cinemaReaderProgressBar"></div>
+    </div>
+    <div class="cinema-reader-side-actions">
+      <button class="btn btn-outline-dark" type="button" id="cinemaReaderPrevButton">Prev</button>
+      <button class="btn btn-outline-dark" type="button" id="cinemaReaderContinueButton">続きから</button>
+    </div>
+    <label class="form-label mt-3" for="cinemaReaderChapterSelect">章</label>
+    <select class="form-select" id="cinemaReaderChapterSelect"></select>
+    <div class="cinema-reader-chapter-list" id="cinemaReaderChapterList"></div>
+  </aside>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/cinema_novel_reader.js') }}"></script>
+{% endblock %}

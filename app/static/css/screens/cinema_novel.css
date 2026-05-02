@@ -1,0 +1,570 @@
+.cinema-list-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.cinema-list-head h2,
+.cinema-reader-side h2 {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.cinema-list-head p,
+.cinema-reader-side p {
+  margin: .35rem 0 0;
+  color: rgba(180, 221, 255, .72);
+}
+
+.cinema-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.cinema-production-panel {
+  display: grid;
+  gap: .85rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(84, 177, 255, .22);
+  border-radius: 1.2rem;
+  background:
+    radial-gradient(circle at top right, rgba(189, 92, 255, .12), transparent 38%),
+    radial-gradient(circle at bottom left, rgba(0, 245, 212, .08), transparent 42%),
+    linear-gradient(180deg, rgba(8, 17, 31, .96), rgba(8, 18, 35, .88));
+  color: #e7f9ff;
+  box-shadow:
+    0 18px 42px rgba(1, 6, 18, .28),
+    inset 0 0 0 1px rgba(255, 255, 255, .035);
+}
+
+.cinema-production-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.cinema-production-panel p {
+  margin: .25rem 0 0;
+  color: rgba(220, 246, 255, .68);
+  font-size: .85rem;
+}
+
+.cinema-production-form {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1.3fr .6fr;
+  gap: .75rem;
+}
+
+.cinema-production-form .form-control,
+.cinema-production-form .form-select {
+  border-color: rgba(84, 177, 255, .16);
+  background: rgba(4, 10, 20, .74);
+  color: #e7f9ff;
+}
+
+.cinema-production-form .form-control::placeholder {
+  color: rgba(180, 221, 255, .58);
+}
+
+.cinema-production-panel .form-label {
+  color: rgba(220, 246, 255, .78);
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.cinema-production-form textarea,
+.cinema-production-form button {
+  grid-column: span 2;
+}
+
+.cinema-production-result {
+  margin-top: 1rem;
+}
+
+.cinema-production-result-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: .5rem;
+}
+
+.cinema-production-result-meta {
+  margin-bottom: .35rem;
+  color: rgba(180, 221, 255, .72);
+  font-size: .85rem;
+}
+
+.cinema-production-result pre {
+  max-height: 420px;
+  padding: 1rem;
+  overflow: auto;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, .14);
+  background: rgba(10, 16, 28, .88);
+  color: #e2e8f0;
+  white-space: pre-wrap;
+}
+
+.cinema-production-textarea-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.cinema-production-textarea-grid label {
+  display: grid;
+  gap: .4rem;
+  min-width: 0;
+  color: rgba(220, 246, 255, .82);
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.cinema-production-textarea-grid textarea {
+  min-height: 260px;
+  border-color: rgba(84, 177, 255, .16);
+  background: rgba(4, 10, 20, .74);
+  color: #e7f9ff;
+  resize: vertical;
+}
+
+.cinema-title-image-preview {
+  margin: 0 0 .85rem;
+  overflow: hidden;
+  border: 1px solid rgba(84, 177, 255, .18);
+  border-radius: .9rem;
+  background: rgba(4, 10, 20, .76);
+}
+
+.cinema-title-image-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(70vh, 720px);
+  object-fit: contain;
+  background: #030712;
+}
+
+.cinema-title-image-preview figcaption {
+  padding: .55rem .75rem;
+  color: rgba(220, 246, 255, .74);
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.cinema-novel-card {
+  background: rgba(5, 12, 24, .72);
+  border: 1px solid rgba(84, 177, 255, .18);
+  border-radius: .9rem;
+  color: #dff6ff;
+  overflow: hidden;
+}
+
+.cinema-novel-card-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.cinema-novel-poster {
+  aspect-ratio: 16 / 10;
+  background: rgba(4, 10, 20, .82);
+}
+
+.cinema-novel-poster img,
+.cinema-reader-still-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cinema-novel-poster img.cinema-novel-title-poster {
+  object-fit: contain;
+  padding: .35rem;
+  background: #030712;
+}
+
+.cinema-novel-poster-empty,
+.cinema-reader-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, .8);
+}
+
+.cinema-novel-poster-empty i,
+.cinema-reader-placeholder i {
+  font-size: 2.4rem;
+}
+
+.cinema-reader-placeholder {
+  align-content: center;
+  gap: .5rem;
+  background:
+    radial-gradient(circle at 30% 10%, rgba(220, 38, 38, .32), transparent 32%),
+    radial-gradient(circle at 70% 25%, rgba(59, 130, 246, .28), transparent 34%),
+    linear-gradient(135deg, #111827, #030712);
+}
+
+.cinema-novel-card-body {
+  padding: .85rem;
+}
+
+.cinema-novel-status {
+  color: #67e8f9;
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.cinema-novel-card-body h3 {
+  margin: .25rem 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.cinema-novel-card-body p {
+  margin: 0;
+  color: rgba(180, 221, 255, .72);
+  font-size: .9rem;
+}
+
+.cinema-novel-card-actions {
+  padding: 0 .85rem .85rem;
+}
+
+.cinema-production-panel-head,
+.cinema-chapter-production-grid {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cinema-chapter-production-grid {
+  align-items: end;
+  margin-top: 1rem;
+}
+
+.cinema-chapter-production-grid > div:first-child {
+  flex: 1;
+}
+
+.cinema-chapter-production-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+}
+
+.cinema-overwrite-images-check {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  margin: 0 .25rem;
+  color: rgba(220, 246, 255, .78);
+  font-size: .88rem;
+  white-space: nowrap;
+}
+
+.cinema-chapter-production-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr);
+  gap: 1rem;
+  margin-top: .75rem;
+}
+
+.cinema-chapter-work-panel {
+  min-width: 0;
+  padding: .85rem;
+  border: 1px solid rgba(84, 177, 255, .16);
+  border-radius: .9rem;
+  background: rgba(4, 10, 20, .54);
+}
+
+.cinema-chapter-work-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-bottom: .35rem;
+}
+
+.cinema-chapter-work-head h4 {
+  margin: 0;
+  font-size: .95rem;
+  font-weight: 700;
+}
+
+.cinema-chapter-work-head span {
+  color: rgba(180, 221, 255, .72);
+  font-size: .82rem;
+}
+
+.cinema-chapter-draft-textarea {
+  height: 72vh;
+  min-height: 760px;
+  max-height: none;
+  margin-top: 0;
+  border-color: rgba(84, 177, 255, .16);
+  background: rgba(4, 10, 20, .74);
+  color: #e7f9ff;
+  font-family: "M PLUS 1", sans-serif;
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.cinema-image-plan-textarea {
+  min-height: 420px;
+  margin-top: 0;
+  border-color: rgba(84, 177, 255, .16);
+  background: rgba(4, 10, 20, .74);
+  color: #e7f9ff;
+  font-family: "IBM Plex Mono", "M PLUS 1", monospace;
+  font-size: .9rem;
+  line-height: 1.65;
+}
+
+.cinema-generated-image-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+  margin-top: .75rem;
+}
+
+.cinema-generated-image-empty {
+  grid-column: 1 / -1;
+  padding: .85rem;
+  border: 1px dashed rgba(84, 177, 255, .28);
+  border-radius: 1rem;
+  color: rgba(180, 221, 255, .72);
+  font-size: .9rem;
+}
+
+.cinema-generated-image-card {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(84, 177, 255, .18);
+  border-radius: .9rem;
+  background: rgba(5, 12, 24, .72);
+}
+
+.cinema-generated-image-card a {
+  display: block;
+  aspect-ratio: 16 / 10;
+  background: #0f172a;
+}
+
+.cinema-generated-image-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cinema-generated-image-card figcaption {
+  padding: .45rem .55rem;
+  color: rgba(180, 221, 255, .82);
+  font-size: .82rem;
+}
+
+.cinema-reader-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 1rem;
+  min-height: calc(100vh - 160px);
+}
+
+.cinema-reader-stage,
+.cinema-reader-side {
+  min-width: 0;
+}
+
+.cinema-reader-screen {
+  position: relative;
+  min-height: 680px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #030712;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, .28);
+}
+
+.cinema-reader-still-wrap {
+  position: absolute;
+  inset: 0;
+}
+
+.cinema-reader-textbox {
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  bottom: 1rem;
+  min-height: 9.5rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(255, 255, 255, .28);
+  border-radius: 1rem;
+  background: rgba(10, 16, 28, .20);
+  color: #fff;
+  backdrop-filter: none;
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+}
+
+.cinema-reader-speaker {
+  font-size: .92rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: rgba(255, 244, 218, .96);
+}
+
+.cinema-reader-speaker[hidden] {
+  display: none;
+}
+
+.cinema-reader-text {
+  min-height: 72px;
+  white-space: pre-wrap;
+  line-height: 1.85;
+  font-size: 1rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .35);
+}
+
+.cinema-reader-footer,
+.cinema-reader-actions,
+.cinema-reader-side-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.cinema-reader-footer {
+  margin-top: auto;
+  color: #cbd5e1;
+  font-size: .85rem;
+}
+
+.cinema-reader-side {
+  padding: 1rem;
+  border: 1px solid rgba(84, 177, 255, .18);
+  border-radius: .9rem;
+  background: rgba(5, 12, 24, .72);
+  color: #dff6ff;
+}
+
+.cinema-reader-progress {
+  height: 8px;
+  margin: 1rem 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.cinema-reader-progress-bar {
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #b91c1c, #2563eb);
+  transition: width .2s ease;
+}
+
+.cinema-reader-chapter-list {
+  display: grid;
+  gap: .4rem;
+  max-height: 420px;
+  margin-top: 1rem;
+  overflow: auto;
+}
+
+.cinema-reader-chapter-button {
+  display: flex;
+  gap: .55rem;
+  align-items: center;
+  width: 100%;
+  padding: .55rem .65rem;
+  border: 1px solid rgba(84, 177, 255, .16);
+  border-radius: .8rem;
+  background: rgba(4, 10, 20, .64);
+  color: #dff6ff;
+  text-align: left;
+}
+
+.cinema-reader-chapter-button span {
+  color: #67e8f9;
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 700;
+}
+
+.cinema-reader-chapter-button.active {
+  border-color: rgba(0, 245, 212, .72);
+  background: rgba(0, 245, 212, .12);
+  color: #e7f9ff;
+}
+
+@media (max-width: 980px) {
+  .cinema-reader-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .cinema-reader-screen {
+    min-height: 560px;
+  }
+}
+
+@media (max-width: 640px) {
+  .cinema-list-head {
+    display: block;
+  }
+
+  .cinema-list-head .btn {
+    width: 100%;
+    margin-top: .75rem;
+  }
+
+  .cinema-production-form {
+    grid-template-columns: 1fr;
+  }
+
+  .cinema-production-panel-head,
+  .cinema-chapter-production-grid {
+    display: block;
+  }
+
+  .cinema-chapter-production-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .cinema-generated-image-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cinema-chapter-production-actions {
+    margin-top: .75rem;
+  }
+
+  .cinema-production-form textarea,
+  .cinema-production-form button {
+    grid-column: auto;
+  }
+
+  .cinema-production-textarea-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cinema-reader-screen {
+    min-height: 520px;
+    border-radius: 0;
+  }
+
+  .cinema-reader-textbox {
+    left: .75rem;
+    right: .75rem;
+    bottom: .75rem;
+    min-height: 190px;
+  }
+}

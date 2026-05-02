@@ -19,6 +19,10 @@
   const thumbnailAssetPreview = document.getElementById("thumbnailAssetPreview");
   const thumbnailAssetDropzone = document.getElementById("thumbnailAssetDropzone");
   const thumbnailAssetFileInput = thumbnailAssetUploadForm?.querySelector('[name="file"]');
+  const portraitGenerateForm = document.getElementById("portraitGenerateForm");
+  const generatePortraitButton = document.getElementById("generatePortraitButton");
+  const generatePortraitButtonDefaultHtml = generatePortraitButton?.innerHTML || '<i class="bi bi-camera-fill"></i><span>顔写真をAI生成</span>';
+  let portraitGenerationInProgress = false;
   const markdownGrid = document.getElementById("characterMarkdownGrid");
   const modalElement = document.getElementById("markdownEditorModal");
   document.body.appendChild(modalElement);
@@ -30,6 +34,7 @@
   const markdownFields = [
     { name: "appearance_summary", label: "外見要約", hint: "見た目、服装、雰囲気、画像生成で守りたい特徴", placeholder: "## 全体印象\n- \n\n## 髪・顔\n- \n\n## 衣装\n- " },
     { name: "art_style", label: "画風", hint: "ライブチャット画像、場面転換画像、メール画像で優先する絵柄・塗り・色味", placeholder: "- サイバー都市のネオン感\n- 高品質な日本アニメ調\n- 線は繊細、塗りは透明感強め\n- 文字・字幕・吹き出しなし" },
+    { name: "character_summary", label: "キャラクター概要", hint: "所属、肩書き、思想、能力、弱点、他キャラとの関係など。チャット、ストーリー、おでかけで強く参照します。", placeholder: "## 基本コンセプト\n- \n\n## 肩書き・キャッチコピー\n- \n\n## 所属・能力\n- \n\n## 思想・弱点\n- \n\n## 他キャラとの関係\n- " },
     { name: "personality", label: "性格", hint: "価値観、癖、反応、怒り方・喜び方", placeholder: "- 基本性格\n- 嬉しい時\n- 嫌な時" },
     { name: "likes_text", label: "好きなもの", hint: "贈り物判定、会話評価、話題作りに使う好み・物品・モチーフ・行動", placeholder: "- ぬいぐるみ\n- 甘いもの\n- 夜景\n- 丁寧に褒められる\n- 共通の趣味を見つける" },
     { name: "dislikes_text", label: "嫌いなもの", hint: "評価を下げやすい話題や態度", placeholder: "- 命令口調\n- 雑に扱われること" },
@@ -212,6 +217,15 @@
       : '<i class="bi bi-stars"></i><span>全身像を生成</span>';
   }
 
+  function setPortraitGenerating(active) {
+    if (!generatePortraitButton) return;
+    generatePortraitButton.disabled = active;
+    generatePortraitButton.setAttribute("aria-busy", active ? "true" : "false");
+    generatePortraitButton.innerHTML = active
+      ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>顔写真を生成中...'
+      : generatePortraitButtonDefaultHtml;
+  }
+
   async function generateBaseImage() {
     setGenerating(true);
     try {
@@ -230,6 +244,32 @@
       NovelUI.toast(error.message || "全身像の生成に失敗しました。", "danger");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function generatePortraitImage() {
+    if (portraitGenerationInProgress) return;
+    portraitGenerationInProgress = true;
+    setPortraitGenerating(true);
+    try {
+      const character = await saveCharacter({ silent: true });
+      const generated = await NovelUI.api(`/api/v1/characters/${character.id}/portrait/generate`, {
+        method: "POST",
+        body: { size: "1024x1024", quality: "medium" },
+      });
+      NovelUI.fillForm(form, generated);
+      renderBaseAsset(generated.base_asset);
+      renderThumbnailAsset(generated.thumbnail_asset);
+      markdownEditor.renderCards();
+      NovelUI.toast("キャラクター設定から顔写真を生成しました。");
+      if (!initialCharacterId) {
+        history.replaceState(null, "", `/projects/${projectId}/characters/${generated.id}/edit`);
+      }
+    } catch (error) {
+      NovelUI.toast(error.message || "顔写真の生成に失敗しました。", "danger");
+    } finally {
+      portraitGenerationInProgress = false;
+      requestAnimationFrame(() => setPortraitGenerating(false));
     }
   }
 
@@ -364,6 +404,11 @@
     thumbnailAssetUploadForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       await uploadThumbnailAsset(thumbnailAssetFileInput?.files?.[0]);
+    });
+
+    portraitGenerateForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await generatePortraitImage();
     });
 
     document.getElementById("characterAiAssist").addEventListener("click", () => {

@@ -28,6 +28,7 @@ from .blueprints.world_maps import world_maps_bp
 from .blueprints.outings import outings_bp
 from .blueprints.world_news import world_news_bp
 from .blueprints.closet import closet_bp
+from .blueprints.cinema_novels import cinema_novels_bp
 
 
 def _ensure_runtime_directories(app: Flask):
@@ -103,6 +104,7 @@ def create_app(config_object=Config):
     app.register_blueprint(outings_bp, url_prefix="/api/v1")
     app.register_blueprint(world_news_bp, url_prefix="/api/v1")
     app.register_blueprint(closet_bp, url_prefix="/api/v1")
+    app.register_blueprint(cinema_novels_bp, url_prefix="/api/v1")
 
     @app.before_request
     def enforce_csrf_protection():

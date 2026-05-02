@@ -228,7 +228,7 @@ class SessionObjectiveNoteService:
                 "Existing active objective notes:",
                 *(f"- id={note['id']} scope={note.get('character_name') or 'session'} priority={note['priority']}: {note['title']} - {note['note']}" for note in existing_notes),
                 "Active characters:",
-                *(f"- {character.get('name')}: personality={character.get('personality') or ''}" for character in characters),
+                *(f"- {character.get('name')}: character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}" for character in characters),
                 "Recent conversation:",
                 *recent_lines,
             ]

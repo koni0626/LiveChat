@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="cinema-list-shell" data-project-id="{{ project_id }}">
+  <div class="cinema-list-head">
+    <div>
+      <div class="eyebrow">Novel</div>
+      <h2>ノベル</h2>
+      <p>生成済みの映画ノベルを、待ち時間なしで再生します。</p>
+    </div>
+    {% if can_manage_project %}
+    <button class="btn btn-dark" type="button" id="cinemaImportAkaganeButton">
+      <i class="bi bi-folder-plus"></i>
+      赤金の観測者を取り込む
+    </button>
+    {% endif %}
+  </div>
+  {% if can_manage_project %}
+  <section class="cinema-production-panel">
+    <div>
+      <h3>制作モード</h3>
+      <p>時間をかけて、章立て・各章の深掘り・事前生成画像を作るための設計を生成します。</p>
+    </div>
+    <form class="cinema-production-form" id="cinemaProductionOutlineForm">
+      <input class="form-control" name="title" placeholder="作品タイトル。空欄ならAIが提案します">
+      <select class="form-select" name="main_character_id" id="cinemaMainCharacterSelect">
+        <option value="">主役はAIが選定</option>
+      </select>
+      <select class="form-select" name="genre" id="cinemaGenreSelect">
+        <option value="">ジャンルをAIが提案</option>
+        <option value="面白いコメディ">面白い</option>
+        <option value="恋愛">恋愛</option>
+        <option value="サスペンス">サスペンス</option>
+        <option value="SF">SF</option>
+        <option value="ホラー">ホラー</option>
+        <option value="切ないドラマ">切ない</option>
+        <option value="バトル">バトル</option>
+        <option value="日常">日常</option>
+        <option value="風刺">風刺</option>
+      </select>
+      <input class="form-control" name="chapter_count" type="number" min="3" max="12" value="5">
+      <input type="hidden" name="chapter_target_chars" value="3500">
+      <textarea class="form-control" name="theme" rows="2" placeholder="テーマ。空欄なら世界観とDBキャラからAIが提案します"></textarea>
+      <button class="btn btn-outline-dark" type="button" id="cinemaSuggestPremiseButton">
+        <i class="bi bi-stars"></i>
+        企画を自動提案
+      </button>
+    </form>
+    <div class="cinema-production-result" id="cinemaProductionResult" hidden></div>
+  </section>
+  {% endif %}
+  {% if can_manage_project %}
+  <section class="cinema-production-panel" id="cinemaChapterProductionPanel" hidden>
+    <div class="cinema-production-panel-head">
+      <div>
+        <h3 id="cinemaChapterProductionTitle">章制作</h3>
+        <p>既存章を選んで、専用モデルで深掘り生成します。反映するまで読者側には変わりません。</p>
+      </div>
+      <button class="btn btn-sm btn-outline-dark" type="button" id="cinemaChapterProductionClose">閉じる</button>
+    </div>
+    <div class="cinema-chapter-production-grid">
+      <div>
+        <label class="form-label" for="cinemaProductionChapterSelect">章</label>
+        <select class="form-select" id="cinemaProductionChapterSelect"></select>
+      </div>
+      <div class="cinema-chapter-production-actions">
+        <button class="btn btn-outline-dark" type="button" id="cinemaGenerateChapterDraftButton">
+          <i class="bi bi-pencil-square"></i>
+          本文と画像を自動生成
+        </button>
+        <button class="btn btn-outline-dark" type="button" id="cinemaGenerateImagePlanButton">
+          <i class="bi bi-images"></i>
+          画像案
+        </button>
+        <button class="btn btn-outline-dark" type="button" id="cinemaGenerateChapterImagesButton">
+          <i class="bi bi-card-image"></i>
+          画像を生成して紐づけ
+        </button>
+        <label class="cinema-overwrite-images-check">
+          <input class="form-check-input" type="checkbox" id="cinemaOverwriteImagesCheck">
+          既存画像を上書き
+        </label>
+        <button class="btn btn-dark" type="button" id="cinemaApplyChapterDraftButton" disabled>
+          <i class="bi bi-check2-circle"></i>
+          章へ反映
+        </button>
+      </div>
+    </div>
+    <div class="cinema-production-result-meta" id="cinemaChapterProductionMeta"></div>
+    <div class="cinema-chapter-production-workspace">
+      <section class="cinema-chapter-work-panel">
+        <div class="cinema-chapter-work-head">
+          <h4>章本文ドラフト</h4>
+          <span>章へ反映の対象</span>
+        </div>
+        <textarea class="form-control cinema-chapter-draft-textarea" id="cinemaChapterDraftTextarea" placeholder="深掘り生成した章本文がここに表示されます。"></textarea>
+      </section>
+      <section class="cinema-chapter-work-panel">
+        <div class="cinema-chapter-work-head">
+          <h4>画像案</h4>
+          <span>本文とは別に保持</span>
+        </div>
+        <textarea class="form-control cinema-image-plan-textarea" id="cinemaImagePlanTextarea" readonly placeholder="画像案や生成済み画像の一覧がここに表示されます。"></textarea>
+        <div class="cinema-generated-image-grid" id="cinemaGeneratedImageGrid"></div>
+      </section>
+    </div>
+  </section>
+  {% endif %}
+  <div class="cinema-list-grid" id="cinemaNovelList"></div>
+  <div class="empty-panel" id="cinemaNovelEmpty" hidden>上映作品がまだありません。</div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/cinema_novels_page.js') }}"></script>
+{% endblock %}
