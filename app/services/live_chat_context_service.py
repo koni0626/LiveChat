@@ -16,6 +16,9 @@ from .world_map_service import WorldMapService
 from .character_user_memory_service import CharacterUserMemoryService
 from .character_memory_note_service import CharacterMemoryNoteService
 from .session_objective_note_service import SessionObjectiveNoteService
+from .world_news_service import WorldNewsService
+from ..repositories.feed_repository import FeedRepository
+from ..repositories.outing_session_repository import OutingSessionRepository
 
 
 class LiveChatContextService:
@@ -41,6 +44,9 @@ class LiveChatContextService:
         character_user_memory_service: CharacterUserMemoryService | None = None,
         character_memory_note_service: CharacterMemoryNoteService | None = None,
         session_objective_note_service: SessionObjectiveNoteService | None = None,
+        world_news_service: WorldNewsService | None = None,
+        feed_repository: FeedRepository | None = None,
+        outing_repository: OutingSessionRepository | None = None,
     ):
         self._chat_session_service = chat_session_service
         self._chat_message_service = chat_message_service
@@ -59,19 +65,24 @@ class LiveChatContextService:
         self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
         self._character_memory_note_service = character_memory_note_service or CharacterMemoryNoteService()
         self._session_objective_note_service = session_objective_note_service or SessionObjectiveNoteService()
+        self._world_news_service = world_news_service or WorldNewsService()
+        self._feed_repository = feed_repository or FeedRepository()
+        self._outing_repository = outing_repository or OutingSessionRepository()
 
-    def _attach_character_growth_notes(self, characters: list[dict]) -> list[dict]:
+    def _attach_character_growth_notes(self, user_id: int, characters: list[dict]) -> list[dict]:
         enriched = []
         for character in characters or []:
             item = dict(character)
             character_id = int(item.get("id") or 0)
             if character_id:
                 item["ai_memory_notes"] = self._character_memory_note_service.list_serialized_notes(
+                    user_id,
                     character_id,
                     include_disabled=False,
                     limit=12,
                 )
                 item["ai_memory_prompt_block"] = self._character_memory_note_service.build_prompt_block(
+                    user_id,
                     character_id,
                     limit=8,
                 )
@@ -155,7 +166,7 @@ class LiveChatContextService:
         selected_image = next((item for item in scene_images if item.is_selected), None)
         if not selected_image and scene_images:
             selected_image = scene_images[0]
-        characters = self._attach_character_growth_notes(self._select_characters(session_id))
+        characters = self._attach_character_growth_notes(session.owner_user_id, self._select_characters(session_id))
         session_objective_notes = self._session_objective_note_service.list_serialized_notes(
             session_id,
             characters=characters,
@@ -174,6 +185,7 @@ class LiveChatContextService:
             character_user_memories[str(character_id)] = self._character_user_memory_service.serialize_memory(row)
         world = self._world_service.get_world(session.project_id)
         world_map_context = self._world_map_context(session.project_id)
+        world_activity_context = self._world_activity_context(session.project_id, session.owner_user_id, characters)
         if not messages and characters:
             opening_context = {
                 "project": {
@@ -188,6 +200,7 @@ class LiveChatContextService:
                     "tone": getattr(world, "tone", None) if world else None,
                 },
                 "world_map": world_map_context,
+                "world_activity": world_activity_context,
                 "session": self._serializer.serialize_session(session),
                 "character_user_memories": character_user_memories,
                 "session_objective_notes": session_objective_notes,
@@ -212,6 +225,7 @@ class LiveChatContextService:
                 "tone": getattr(world, "tone", None) if world else None,
             },
             "world_map": world_map_context,
+            "world_activity": world_activity_context,
             "session": self._serializer.serialize_session(session),
             "character_user_memories": character_user_memories,
             "session_objective_notes": session_objective_notes,
@@ -236,3 +250,116 @@ class LiveChatContextService:
             }
         except Exception:
             return {"locations": [], "prompt_context": ""}
+
+    def _world_activity_context(self, project_id: int, user_id: int, characters: list[dict] | None = None):
+        character_names = {
+            int(character.get("id")): character.get("name")
+            for character in characters or []
+            if character.get("id")
+        }
+        location_names = {}
+        try:
+            location_names = {
+                int(location.get("id")): location.get("name")
+                for location in self._world_map_service.list_locations(project_id)
+                if location.get("id")
+            }
+        except Exception:
+            location_names = {}
+        news_items = []
+        feed_posts = []
+        outings = []
+        try:
+            for item in self._world_news_service.list_news(project_id, limit=8):
+                if not item:
+                    continue
+                news_items.append(
+                    {
+                        "title": item.get("title"),
+                        "summary": item.get("summary") or item.get("body"),
+                        "news_type": item.get("news_type_label") or item.get("news_type"),
+                        "character": (item.get("related_character") or {}).get("name"),
+                        "location": (item.get("related_location") or {}).get("name"),
+                    }
+                )
+        except Exception:
+            news_items = []
+        try:
+            for post in self._feed_repository.list_posts(
+                project_id=project_id,
+                statuses=["published"],
+                limit=10,
+            ):
+                feed_posts.append(
+                    {
+                        "character_id": post.character_id,
+                        "character": character_names.get(post.character_id),
+                        "body": str(post.body or "")[:220],
+                        "like_count": post.like_count or 0,
+                    }
+                )
+        except Exception:
+            feed_posts = []
+        try:
+            for row in self._outing_repository.list_by_project_user(project_id, user_id, limit=8):
+                if getattr(row, "status", None) != "completed":
+                    continue
+                summary = str(getattr(row, "memory_summary", None) or getattr(row, "summary", None) or "").strip()
+                if not summary:
+                    continue
+                outings.append(
+                    {
+                        "id": row.id,
+                        "character_id": row.character_id,
+                        "character": character_names.get(row.character_id),
+                        "location_id": row.location_id,
+                        "location": location_names.get(row.location_id),
+                        "title": getattr(row, "memory_title", None) or getattr(row, "title", None),
+                        "summary": summary[:260],
+                        "mood": getattr(row, "mood", None),
+                        "completed_at": row.completed_at.isoformat() if getattr(row, "completed_at", None) else None,
+                    }
+                )
+        except Exception:
+            outings = []
+        lines = []
+        if outings:
+            lines.append("Recent completed outings with this player:")
+            for item in outings[:8]:
+                parts = [f"- {item.get('title') or 'outing memory'}"]
+                if item.get("character"):
+                    parts.append(f"character: {item['character']}")
+                if item.get("location"):
+                    parts.append(f"location: {item['location']}")
+                if item.get("mood"):
+                    parts.append(f"mood: {item['mood']}")
+                if item.get("summary"):
+                    parts.append(f"summary: {item['summary']}")
+                lines.append(" / ".join(parts))
+        if news_items:
+            lines.append("Recent world news / rumors:")
+            for item in news_items[:8]:
+                parts = [f"- {item.get('title') or ''}"]
+                if item.get("news_type"):
+                    parts.append(f"type: {item['news_type']}")
+                if item.get("character"):
+                    parts.append(f"character: {item['character']}")
+                if item.get("location"):
+                    parts.append(f"location: {item['location']}")
+                if item.get("summary"):
+                    parts.append(f"summary: {str(item['summary'])[:220]}")
+                lines.append(" / ".join(parts))
+        if feed_posts:
+            lines.append("Recent Feed posts:")
+            for item in feed_posts[:10]:
+                parts = [f"- {item.get('character') or 'unknown character'}"]
+                if item.get("body"):
+                    parts.append(f"post: {item['body']}")
+                parts.append(f"likes: {item.get('like_count') or 0}")
+                lines.append(" / ".join(parts))
+        return {
+            "news": news_items,
+            "feed_posts": feed_posts,
+            "outings": outings,
+            "prompt_context": "\n".join(lines),
+        }

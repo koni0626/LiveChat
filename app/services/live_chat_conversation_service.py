@@ -589,6 +589,40 @@ class LiveChatConversationService:
             "player_name": session.player_name or "プレイヤー",
         }
 
+    def post_idle_character_message(self, session_id: int):
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return None
+        context = self._context_provider(session_id)
+        reply = text_support.generate_idle_character_message(self._text_ai_client, context)
+        assistant_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "character",
+                "speaker_name": reply["speaker_name"],
+                "message_text": reply["message_text"],
+                "message_role": "assistant",
+                "state_snapshot_json": {"idle_generated": True},
+            },
+        )
+        created = [self._serialize_message(assistant_message)]
+        updated_context = self._context_provider(session_id)
+        self.update_line_visual_note(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        self.update_session_memory(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        self.update_conversation_evaluation(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        self.update_scene_choices(session_id, updated_context, assistant_message)
+        updated_context = self._context_provider(session_id)
+        return {
+            "messages": created,
+            "state": self._extract_state_payload(session, updated_context),
+            "session": updated_context["session"],
+            "context": updated_context,
+            "idle_generated": True,
+        }
+
     def execute_scene_choice(self, session_id: int, choice_id: str, payload: dict | None = None):
         payload = dict(payload or {})
         session = self._chat_session_service.get_session(session_id)

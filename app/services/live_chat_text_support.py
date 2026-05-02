@@ -92,6 +92,33 @@ def generate_player_proxy_message(text_ai_client, context: dict) -> str:
         return prompt_support.fallback_player_proxy_message(context)
 
 
+def generate_idle_character_message(text_ai_client, context: dict) -> dict:
+    try:
+        prompt = prompt_support.build_idle_character_message_prompt(context)
+        result = text_ai_client.generate_text(
+            prompt,
+            temperature=0.85,
+            response_format={"type": "json_object"},
+        )
+        parsed = text_ai_client._try_parse_json(result.get("text"))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("idle character message response is invalid")
+        speaker_name = str(parsed.get("speaker_name") or "").strip()
+        message_text = str(parsed.get("message_text") or "").strip()
+        allowed_names = {character["name"] for character in context["characters"]}
+        if not speaker_name or speaker_name not in allowed_names:
+            raise RuntimeError("idle character speaker is invalid")
+        if not message_text:
+            raise RuntimeError("idle character message is empty")
+        forbidden = ("何か話して", "話題を選んで", "続けましょう")
+        if any(token in message_text for token in forbidden):
+            raise RuntimeError("idle character message is too generic")
+        message_text = enforce_character_voice(context, speaker_name, message_text)
+        return {"speaker_name": speaker_name, "message_text": message_text[:240]}
+    except Exception:
+        return prompt_support.fallback_idle_character_message(context)
+
+
 def classify_user_input(text_ai_client, context: dict, user_message_text: str) -> dict:
     try:
         prompt = prompt_support.build_input_intent_prompt(context, user_message_text)

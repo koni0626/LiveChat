@@ -410,6 +410,176 @@ def _append_session_objective_notes(lines: list[str], context: dict):
     lines.append(block)
 
 
+def _append_world_activity_context(lines: list[str], context: dict):
+    block = str((context.get("world_activity") or {}).get("prompt_context") or "").strip()
+    if not block:
+        return
+    lines.append(
+        "Recent world activity and player-shared outing memories. Use this as concrete material for fresh hooks, callbacks, rumors, invitations, and character-specific topics:"
+    )
+    lines.append(block)
+
+
+def _active_character_names(context: dict) -> list[str]:
+    return [
+        str(character.get("name") or "").strip()
+        for character in context.get("characters") or []
+        if str(character.get("name") or "").strip()
+    ]
+
+
+def _world_activity_emotional_triggers(context: dict) -> list[str]:
+    activity = context.get("world_activity") or {}
+    if not isinstance(activity, dict):
+        return []
+    active_names = _active_character_names(context)
+    active_set = set(active_names)
+    triggers = []
+    for outing in activity.get("outings") or []:
+        if not isinstance(outing, dict):
+            continue
+        character = str(outing.get("character") or "").strip()
+        title = str(outing.get("title") or "").strip()
+        summary = str(outing.get("summary") or "").strip()
+        location = str(outing.get("location") or "").strip()
+        if character and active_set and character not in active_set:
+            triggers.append(
+                f"The player recently went out with {character}"
+                f"{f' at {location}' if location else ''}. Active characters may feel jealous, lonely, curious, competitive, or try to hide that they care. Memory: {title or summary[:80]}"
+            )
+        elif character in active_set and summary:
+            triggers.append(
+                f"{character} shares a recent outing memory with the player. They may feel fond, bashful, proud, or wistful when it comes up. Memory: {title or summary[:80]}"
+            )
+    for item in activity.get("news") or []:
+        if not isinstance(item, dict):
+            continue
+        character = str(item.get("character") or "").strip()
+        title = str(item.get("title") or "").strip()
+        if character and active_set and character not in active_set:
+            triggers.append(
+                f"World news mentions {character}, not the active character. Active characters may react with rivalry, curiosity, jealousy, or a need to prove themselves. News: {title}"
+            )
+        elif character in active_set and title:
+            triggers.append(
+                f"World news mentions active character {character}. They may feel proud, embarrassed, defensive, or flustered depending on personality. News: {title}"
+            )
+    for post in activity.get("feed_posts") or []:
+        if not isinstance(post, dict):
+            continue
+        character = str(post.get("character") or "").strip()
+        body = str(post.get("body") or "").strip()
+        if character and active_set and character not in active_set:
+            triggers.append(
+                f"Recent Feed activity is about {character}, not the active character. Active characters may feel competitive, ignored, jealous, or pretend not to care. Post: {body[:100]}"
+            )
+        elif character in active_set and body:
+            triggers.append(
+                f"Recent Feed activity is about active character {character}. They may feel pleased, embarrassed, shy, or defensive. Post: {body[:100]}"
+            )
+    return triggers[:8]
+
+
+def _append_emotional_performance_rules(lines: list[str], context: dict):
+    triggers = _world_activity_emotional_triggers(context)
+    lines.append("Emotional acting rules:")
+    lines.append(
+        "- Every character reply should contain a visible emotional stance, not just information. "
+        "Use joy, anger/irritation, sadness/loneliness, fear/anxiety, surprise, affection, embarrassment, shyness, jealousy, pride, or relief when appropriate."
+    )
+    lines.append(
+        "- Especially for romance or closeness, prefer small embodied tells: trailing off, correcting themselves, looking away, teasing to hide embarrassment, becoming possessive, or getting unusually quiet."
+    )
+    lines.append(
+        "- Jealousy/loneliness must be subtle and character-specific, not repetitive. The character can deny it, tease, sulk, compete, or ask for reassurance instead of plainly saying they are jealous."
+    )
+    lines.append(
+        "- Do not overdo the same emotion every turn. If a sweet/blushing loop is detected, pivot into a new hook while leaving a small emotional residue."
+    )
+    if triggers:
+        lines.append("Possible emotional triggers from world activity:")
+        lines.extend(f"- {trigger}" for trigger in triggers)
+
+
+def _append_adult_romance_tone_rules(lines: list[str]):
+    lines.append("Adult romance tone rules:")
+    lines.append(
+        "- For clearly adult characters, mild sensuality is allowed and should not be flattened into sterile friendliness. "
+        "Use teasing, charged pauses, close distance, possessive warmth, bashful desire, suggestive double meanings, and elegant romantic tension when it fits the character."
+    )
+    lines.append(
+        "- Keep it non-explicit: no graphic sexual acts, no nudity descriptions, no genital/breast-touch detail, no coercion, and no childlike or underage framing."
+    )
+    lines.append(
+        "- Prefer implication over explanation. Good output feels like adult visual-novel flirting: dangerous eye contact, a hand lingering near the sleeve or cheek, a whispered challenge, jealousy hidden as teasing, or embarrassment that makes the character more charming."
+    )
+    lines.append(
+        "- If the player pushes explicit wording, convert the intent into safe adult romance: temptation, intimacy, trust, nervousness, flirtation, and emotional heat without explicit body detail."
+    )
+
+
+def _recently_addressed_player_visible_reaction(context: dict) -> bool:
+    markers = (
+        "大丈夫",
+        "元気",
+        "疲れ",
+        "しんど",
+        "無理",
+        "顔",
+        "表情",
+        "楽しそう",
+        "嬉しそう",
+        "うれしそう",
+        "笑って",
+        "不安",
+        "困って",
+        "眠そう",
+    )
+    for message in reversed((context.get("messages") or [])[-8:]):
+        if message.get("sender_type") != "character":
+            continue
+        text = str(message.get("message_text") or "")
+        if any(marker in text for marker in markers):
+            return True
+    return False
+
+
+def _append_player_visible_reaction(lines: list[str], context: dict):
+    state_json = (context.get("state") or {}).get("state_json") or {}
+    reaction = state_json.get("player_visible_reaction") if isinstance(state_json, dict) else None
+    if not isinstance(reaction, dict):
+        return
+    note = str(reaction.get("short_note") or "").strip()
+    mood = str(reaction.get("mood") or "unknown").strip()
+    engagement = str(reaction.get("engagement") or "unknown").strip()
+    try:
+        confidence = float(reaction.get("confidence") or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    recently_addressed = _recently_addressed_player_visible_reaction(context)
+    can_address = confidence >= 0.55 and mood not in {"unknown", "neutral"} and not recently_addressed
+    lines.append("Latest visible player reaction:")
+    lines.append(
+        f"- mood={mood}, engagement={engagement}, confidence={confidence:.2f}, "
+        f"note={note}, can_address_directly={str(can_address).lower()}"
+    )
+    lines.append(
+        "Use this only as weak feedback from the player's apparent face/expression. "
+        "Do not mention the camera, webcam, analysis, or claim certainty."
+    )
+    if can_address:
+        lines.append(
+            "The character may naturally weave one fresh, character-specific line that reacts to the apparent expression, "
+            "for example noticing low energy, amusement, confusion, or excitement. "
+            "Do not use a fixed phrase; invent wording that fits the character and current topic."
+        )
+    else:
+        lines.append(
+            "Do not directly comment on the player's face or mood in this reply. "
+            "At most, adjust tone subtly. Avoid repeating care-check phrases such as 大丈夫？ or 元気なさそう."
+        )
+
+
 def build_opening_prompt(context: dict) -> str:
     session_objective = get_session_objective(context)
     state_json = (context.get("state") or {}).get("state_json") or {}
@@ -430,6 +600,7 @@ def build_opening_prompt(context: dict) -> str:
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
     _append_session_objective_notes(lines, context)
+    _append_player_visible_reaction(lines, context)
     if context["world"].get("overview"):
         lines.append(f"World overview: {context['world']['overview']}")
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
@@ -583,6 +754,110 @@ def fallback_player_proxy_message(context: dict) -> str:
     return "まずは、あなたのことをもう少し知りたい。"
 
 
+def build_idle_character_message_prompt(context: dict) -> str:
+    session_objective = get_session_objective(context)
+    state_json = context["state"].get("state_json") or {}
+    scene_progression = state_json.get("scene_progression") or {}
+    conversation_director = state_json.get("conversation_director") or {}
+    conversation_evaluation = state_json.get("conversation_evaluation") or {}
+    relationship_state = state_json.get("relationship_state") or {}
+    session_memory = state_json.get("session_memory") or {}
+    displayed_image = state_json.get("displayed_image_observation") or {}
+    player_name = context["session"].get("player_name") or "プレイヤー"
+    lines = [
+        "You write a spontaneous idle line for a live visual novel chat.",
+        "The real player has not typed for a short while, so one character may speak first.",
+        "Return only a JSON object.",
+        "Required keys: speaker_name, message_text.",
+        "speaker_name must be one of the active characters.",
+        "message_text must be one natural Japanese spoken line from that character, not narration.",
+        "Do not invent a player line. Do not pretend the player said anything.",
+        "Keep it short: 12 to 120 Japanese characters.",
+        "The line should make it easier for the player to answer by offering one concrete hook, question, tease, invitation, confession, observation, or emotional callback.",
+        "Avoid generic assistant-like phrases such as '何か話して', '話題を選んで', or '続けましょう'.",
+        "If the latest character line already asked a question, do not repeat the same question; add a softer hint, a playful nudge, or a small new detail.",
+        "If the player may be stuck, the character should gently move the scene forward without pressure.",
+        f"Player name: {player_name}",
+        f"Player display name: {player_name}",
+        "Characters should address the player using this name when natural.",
+        f"Project: {context['project'].get('title') or 'Untitled'}",
+    ]
+    if session_objective:
+        lines.append(f"Session objective: {session_objective}")
+    _append_session_objective_notes(lines, context)
+    _append_world_activity_context(lines, context)
+    _append_player_visible_reaction(lines, context)
+    _append_emotional_performance_rules(lines, context)
+    _append_adult_romance_tone_rules(lines)
+    if context["world"].get("overview"):
+        lines.append(f"World overview: {context['world']['overview']}")
+    world_map_context = (context.get("world_map") or {}).get("prompt_context")
+    if world_map_context:
+        lines.append("Known world map locations and facilities:")
+        lines.append(world_map_context)
+    if scene_progression:
+        lines.append(f"Current scene phase: {scene_progression.get('scene_phase') or ''}")
+        lines.append(f"Current location: {scene_progression.get('location') or ''}")
+        lines.append(f"Scene focus: {scene_progression.get('focus_summary') or ''}")
+        lines.append(f"Next topic: {scene_progression.get('next_topic') or ''}")
+    if conversation_director:
+        lines.append(f"Turn intent: {conversation_director.get('turn_intent') or ''}")
+        lines.append(f"Emotional tone: {conversation_director.get('emotional_tone') or ''}")
+        lines.append(f"Relationship goal: {conversation_director.get('relationship_goal') or ''}")
+        lines.append(f"Scene goal: {conversation_director.get('scene_goal') or ''}")
+    if displayed_image:
+        lines.append("Actual displayed image observation:")
+        lines.append(f"- location: {displayed_image.get('location') or ''}")
+        lines.append(f"- background: {displayed_image.get('background') or ''}")
+        lines.append(f"- visible characters: {displayed_image.get('visible_characters') or []}")
+        lines.append(f"- expressions: {displayed_image.get('character_expressions') or ''}")
+        lines.append(f"- mood: {displayed_image.get('mood') or ''}")
+        lines.append(f"- summary: {displayed_image.get('short_summary') or ''}")
+    if conversation_evaluation:
+        lines.append(f"Conversation progress score: {conversation_evaluation.get('score')}")
+        lines.append(f"Conversation progress reason: {conversation_evaluation.get('reason') or ''}")
+    if relationship_state:
+        lines.append("Relationship state:")
+        for name, metrics in relationship_state.items():
+            if isinstance(metrics, dict):
+                lines.append(
+                    f"- {name}: affection={metrics.get('affection', 0)}, interest={metrics.get('interest', 0)}, trust={metrics.get('trust', 0)}, tension={metrics.get('tension', 0)}"
+                )
+    if session_memory.get("recent_topics"):
+        lines.append(f"Recent topics: {session_memory['recent_topics']}")
+    lines.append("Characters:")
+    character_memories = session_memory.get("character_memories") or {}
+    for character in context["characters"]:
+        lines.append(
+            f"- {character['name']}: nickname={character.get('nickname') or ''}, gender={character.get('gender') or ''}, first_person={character.get('first_person') or ''}, second_person={character.get('second_person') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, speech_sample={character.get('speech_sample') or ''}, ng_rules={character.get('ng_rules') or ''}"
+        )
+        summary = _build_character_memory_summary(_flatten_character_memory(character, character_memories))
+        if summary:
+            lines.append(f"  memory={summary}")
+        if character.get("feed_profile_text"):
+            lines.append(f"  public_feed_tendency={character.get('feed_profile_text')}")
+        _append_character_growth_notes(lines, character)
+    memory_blocks = _character_user_memory_blocks(context)
+    if memory_blocks:
+        lines.append("Character memory about this player:")
+        lines.extend(memory_blocks)
+        lines.append("Use this memory subtly. Do not mention it unnaturally.")
+    lines.append("Recent conversation:")
+    for message in context["messages"][-10:]:
+        lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
+    lines.append("Write the character's spontaneous idle line now.")
+    return "\n".join(lines)
+
+
+def fallback_idle_character_message(context: dict) -> dict:
+    speaker = context["characters"][0]["name"] if context["characters"] else "Character"
+    player_name = context["session"].get("player_name") or "あなた"
+    return {
+        "speaker_name": speaker,
+        "message_text": f"{player_name}、少し迷ってる？じゃあ、私からひとつだけ聞いてもいい？",
+    }
+
+
 def normalize_compare_text(text: str) -> str:
     value = str(text or "").strip()
     for token in ("…", "...", "・・", "・", " ", "\n", "\r", "　"):
@@ -634,6 +909,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         "speaker_name must be one of the active characters.",
         "message_text must be a single natural spoken line, not narration.",
         "Keep the reply proactive, emotionally colored, and character-specific.",
+        "The line must sound like the character has feelings in the moment, not like a neutral assistant.",
         "Do not answer like a generic guide unless the character truly would.",
         f"Player name: {context['session'].get('player_name') or '主人公'}",
         f"Player display name: {context['session'].get('player_name') or '主人公'}",
@@ -642,6 +918,8 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
     _append_session_objective_notes(lines, context)
+    _append_player_visible_reaction(lines, context)
+    _append_adult_romance_tone_rules(lines)
     if context["world"].get("overview"):
         lines.append(f"World overview: {context['world']['overview']}")
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
@@ -663,6 +941,12 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         lines.append(f"Emotional tone: {conversation_director.get('emotional_tone') or ''}")
         lines.append(f"Relationship goal: {conversation_director.get('relationship_goal') or ''}")
         lines.append(f"Scene goal: {conversation_director.get('scene_goal') or ''}")
+        if conversation_director.get("must_include"):
+            lines.append(f"Must include: {conversation_director.get('must_include')}")
+        if conversation_director.get("avoid"):
+            lines.append(f"Avoid: {conversation_director.get('avoid')}")
+    _append_emotional_performance_rules(lines, context)
+    _append_adult_romance_tone_rules(lines)
     if sweet_loop["detected"]:
         lines.append(
             "Recent sweet-loop warning: the last character replies are overusing romantic approval/blushing/praise. "
@@ -774,6 +1058,8 @@ def fallback_reply(context: dict, user_message_text: str) -> dict:
         message = f"{shortened}……その話は、あまり気分がよくないかも。"
     elif memory_match["bonus"] > 0:
         message = f"{shortened}……覚えていてくれたんだね。少し嬉しい。"
+    elif _world_activity_emotional_triggers(context) and is_romance:
+        message = f"{shortened}……ふうん。わたし以外とも、ずいぶん楽しそうにしてるんだね。別に、気にしてないけど。"
     elif score is not None and score <= 35 and is_romance:
         message = f"{shortened}……ねえ、少しだけあなたのことを知りたくなった。今の気持ち、わたしに聞かせて。"
     elif score is not None and score <= 35:
@@ -1435,6 +1721,8 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
         "Return only a JSON object.",
         "Required keys: turn_intent, emotional_tone, relationship_goal, scene_goal, must_include, avoid.",
         "turn_intent must be one of: invite, tease, reveal, test, comfort, escalate, explain, guide.",
+        "emotional_tone must name a concrete feeling, not just a plot function. Good feelings include joy, irritation, loneliness, jealousy, embarrassment, shyness, pride, anxiety, relief, affection, and surprise.",
+        "When world activity shows the player enjoyed outings with another character, or other characters are getting attention in news/Feed, the director may choose subtle jealousy, loneliness, rivalry, or possessiveness if it fits the active character.",
         f"Project: {context['project'].get('title') or 'Untitled'}",
         f"World: {context['world'].get('overview') or context['world'].get('name') or ''}",
         f"Current phase: {scene_progression.get('scene_phase') or ''}",
@@ -1445,9 +1733,13 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
     if world_map_context:
         lines.append("Known world map locations. The director may use them for concrete location moves, incidents, secrets, or invitations:")
         lines.append(world_map_context)
+    _append_world_activity_context(lines, context)
+    _append_emotional_performance_rules(lines, context)
+    _append_adult_romance_tone_rules(lines)
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
     _append_session_objective_notes(lines, context)
+    _append_player_visible_reaction(lines, context)
     if relationship_state:
         lines.append("Relationship state:")
         for name, metrics in relationship_state.items():
@@ -1539,6 +1831,16 @@ def fallback_conversation_director(context: dict, user_message_text: str) -> dic
             "must_include": ["one concrete mystery/incident/location/wager/secret hook", "a short romantic callback"],
             "avoid": ["more generic blushing", "asking for more praise", "repeating cute/ずるい/見つめる reactions"],
         }
+    emotional_triggers = _world_activity_emotional_triggers(context)
+    if emotional_triggers and is_romance:
+        return {
+            "turn_intent": "tease",
+            "emotional_tone": "subtle jealousy mixed with bashful adult tension",
+            "relationship_goal": "make the player feel personally wanted through teasing possessiveness and restrained heat",
+            "scene_goal": scene_progression.get("next_topic") or "turn a world activity callback into a tempting intimate conversation hook",
+            "must_include": ["one indirect jealous or lonely tell", "one playful, slightly suggestive invitation for reassurance"],
+            "avoid": ["flat information delivery", "plainly saying I am jealous", "explicit sexual wording", "repeating the same blushing line"],
+        }
     if memory_match["penalty"] > 0:
         return {
             "turn_intent": "test",
@@ -1561,11 +1863,11 @@ def fallback_conversation_director(context: dict, user_message_text: str) -> dic
         if is_romance:
             return {
                 "turn_intent": "tease",
-                "emotional_tone": "softly proactive and inviting",
-                "relationship_goal": "recover low romantic progress by making the player feel personally noticed",
-                "scene_goal": scene_progression.get("next_topic") or "create a warmer emotional opening",
-                "must_include": ["one small personal disclosure", "one easy affectionate question or invitation"],
-                "avoid": ["passive waiting", "guide-like explanations", "generic acknowledgement"],
+                "emotional_tone": "softly proactive, inviting, and mildly sensual",
+                "relationship_goal": "recover low romantic progress by making the player feel personally noticed and tempted to answer",
+                "scene_goal": scene_progression.get("next_topic") or "create a warmer, more charged emotional opening",
+                "must_include": ["one small personal disclosure", "one easy affectionate or teasing invitation", "one restrained adult-romance tell"],
+                "avoid": ["passive waiting", "guide-like explanations", "generic acknowledgement", "explicit sexual wording"],
             }
         return {
             "turn_intent": "invite",

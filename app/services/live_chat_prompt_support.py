@@ -36,6 +36,14 @@ def fallback_player_proxy_message(context: dict) -> str:
     return text_prompt_support.fallback_player_proxy_message(context)
 
 
+def build_idle_character_message_prompt(context: dict) -> str:
+    return text_prompt_support.build_idle_character_message_prompt(context)
+
+
+def fallback_idle_character_message(context: dict) -> dict:
+    return text_prompt_support.fallback_idle_character_message(context)
+
+
 def normalize_compare_text(text: str) -> str:
     return text_prompt_support.normalize_compare_text(text)
 

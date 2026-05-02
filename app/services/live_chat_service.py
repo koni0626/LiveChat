@@ -18,6 +18,7 @@ from .project_service import ProjectService
 from .session_gift_event_service import SessionGiftEventService
 from .session_image_service import SessionImageService
 from .session_state_service import SessionStateService
+from .player_reaction_service import PlayerReactionService
 from .world_service import WorldService
 from .world_map_service import WorldMapService
 from .character_user_memory_service import CharacterUserMemoryService
@@ -45,6 +46,7 @@ class LiveChatService:
         character_user_memory_service: CharacterUserMemoryService | None = None,
         character_memory_note_service: CharacterMemoryNoteService | None = None,
         session_objective_note_service: SessionObjectiveNoteService | None = None,
+        player_reaction_service: PlayerReactionService | None = None,
     ):
         self._chat_session_service = chat_session_service or ChatSessionService()
         self._chat_message_service = chat_message_service or ChatMessageService()
@@ -63,6 +65,10 @@ class LiveChatService:
         self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
         self._character_memory_note_service = character_memory_note_service or CharacterMemoryNoteService()
         self._session_objective_note_service = session_objective_note_service or SessionObjectiveNoteService()
+        self._player_reaction_service = player_reaction_service or PlayerReactionService(
+            text_ai_client=self._text_ai_client,
+            session_state_service=self._session_state_service,
+        )
         self._serializer = LiveChatSerializer(asset_service=self._asset_service)
         self._media_service = LiveChatMediaService(
             chat_session_service=self._chat_session_service,
@@ -223,6 +229,9 @@ class LiveChatService:
     def generate_player_proxy_message(self, session_id: int):
         return self._conversation_service.generate_player_proxy_message(session_id)
 
+    def post_idle_character_message(self, session_id: int):
+        return self._conversation_service.post_idle_character_message(session_id)
+
     def extract_state(self, session_id: int):
         return self._session_workflow_service.extract_state(session_id)
 
@@ -271,3 +280,6 @@ class LiveChatService:
 
     def upload_gift(self, session_id: int, asset_id: int, payload: dict | None = None):
         return self._gift_service.upload_gift(session_id, asset_id, payload)
+
+    def analyze_player_reaction(self, session_id: int, upload_file):
+        return self._player_reaction_service.analyze_frame(session_id, upload_file)

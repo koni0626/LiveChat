@@ -195,6 +195,8 @@ class SessionObjectiveNoteService:
         existing_notes = self.list_serialized_notes(session_id, characters=characters, include_archived=False, limit=12)
         director = ((context.get("state") or {}).get("state_json") or {}).get("conversation_director") or {}
         initial_objective = self._initial_objective(context)
+        world_map_context = (context.get("world_map") or {}).get("prompt_context")
+        world_activity_context = (context.get("world_activity") or {}).get("prompt_context")
         recent_lines = []
         for message in messages[-12:]:
             speaker = message.get("speaker_name") or message.get("sender_type") or ""
@@ -211,8 +213,18 @@ class SessionObjectiveNoteService:
                 "Return only JSON: {\"notes\":[{\"action\":\"add|update|archive\",\"id\":1,\"scope\":\"session|character\",\"character_name\":\"\",\"title\":\"short Japanese title\",\"note\":\"short Japanese note\",\"priority\":1,\"confidence\":0.0}]}",
                 "Use update when an existing note should be refined. Use archive when a note is no longer useful. Use add for a genuinely new strategy.",
                 "Do not add generic notes. Prefer concrete next moves: mystery, incident, location shift, emotional turn, role split, or topic expansion.",
+                "Include emotional strategy when useful: jealousy, loneliness, embarrassment, shyness, joy, irritation, pride, or relief. Especially consider subtle jealousy/loneliness when the player has outing memories, news, or Feed activity with another character.",
+                "Do not make characters emotionally flat. Add notes that help the next reply show feelings through wording, hesitation, teasing, possessiveness, sulking, or bashful reactions.",
+                "For clearly adult characters, mild sensual romance is allowed as strategy: charged pauses, close distance, possessive warmth, teasing double meanings, bashful desire, and elegant adult tension.",
+                "Keep strategy non-explicit: no graphic sexual acts, nudity, genital/breast-touch detail, coercion, or underage/childlike framing. Convert explicit user intent into safe adult romantic tension.",
+                "Prefer notes about what the character will do next, not generic advice. A good note creates a hook, pressure, secret, provocation, or tempting invitation.",
                 f"Initial session objective: {initial_objective or '(none)'}",
                 f"Current director output: {director}",
+                "Known facilities / world map:",
+                world_map_context or "(none)",
+                "Recent outings, world news, and Feed posts:",
+                world_activity_context or "(none)",
+                "Use the player's completed outings, facilities, news, and Feed posts as concrete raw material when they help the session become more fun. Do not invent facts that contradict them.",
                 "Existing active objective notes:",
                 *(f"- id={note['id']} scope={note.get('character_name') or 'session'} priority={note['priority']}: {note['title']} - {note['note']}" for note in existing_notes),
                 "Active characters:",

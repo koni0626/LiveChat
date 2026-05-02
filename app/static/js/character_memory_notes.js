@@ -15,8 +15,13 @@
     weakness: "弱点",
     relationship: "関係性",
     foreshadowing: "伏線",
-    fun_fact: "面白設定",
+    fun_fact: "面白い設定",
     other: "その他",
+  };
+
+  const sources = {
+    manual: "手動追加",
+    live_chat_ai: "チャットAI抽出",
   };
 
   function endpoint(noteId) {
@@ -28,6 +33,24 @@
     return Object.entries(categories)
       .map(([value, label]) => `<option value="${value}" ${value === selected ? "selected" : ""}>${label}</option>`)
       .join("");
+  }
+
+  function formatDate(value) {
+    if (!value) return "日時なし";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "日時なし";
+    return date.toLocaleString("ja-JP", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function confidenceLabel(value) {
+    const confidence = Number(value);
+    if (!Number.isFinite(confidence)) return "信頼度 -";
+    return `信頼度 ${Math.round(confidence * 100)}%`;
   }
 
   function renderEmpty(message) {
@@ -47,22 +70,31 @@
     }
     form.hidden = !canManageProject;
     if (!notes.length) {
-      renderEmpty("まだAIメモはありません。会話で増えた面白い設定をここに足せます。");
+      renderEmpty("まだAIメモはありません。会話で増えた面白い設定や、手動で残したい設定がここに表示されます。");
       return;
     }
     list.innerHTML = notes
       .map((note) => {
         const disabledClass = note.enabled ? "" : " is-disabled";
-        const sourceLabel = note.source_type === "manual" ? "手動" : "AI";
+        const sourceLabel = sources[note.source_type] || note.source_type || "出所不明";
+        const statusLabel = note.enabled ? "有効" : "無効";
+        const pinnedLabel = note.pinned ? "優先" : "通常";
         return `
           <article class="character-memory-note-item${disabledClass}" data-note-id="${note.id}">
             <div class="character-memory-note-item-head">
               <select class="form-select form-select-sm" data-field="category" ${canManageProject ? "" : "disabled"}>
                 ${optionList(note.category || "other")}
               </select>
-              <span class="character-memory-note-source">${sourceLabel}</span>
+              <span class="character-memory-note-source">${NovelUI.escape(sourceLabel)}</span>
+              <span class="character-memory-note-meta">${NovelUI.escape(confidenceLabel(note.confidence))}</span>
+              <span class="character-memory-note-meta">更新 ${NovelUI.escape(formatDate(note.updated_at || note.created_at))}</span>
             </div>
             <textarea class="form-control" rows="3" data-field="note" ${canManageProject ? "" : "disabled"}>${NovelUI.escape(note.note || "")}</textarea>
+            <div class="character-memory-note-summary" aria-label="メモ状態">
+              <span>${NovelUI.escape(statusLabel)}</span>
+              <span>${NovelUI.escape(pinnedLabel)}</span>
+              <span>${NovelUI.escape(categories[note.category] || "その他")}</span>
+            </div>
             <div class="character-memory-note-actions">
               <label class="form-check">
                 <input class="form-check-input" type="checkbox" data-field="enabled" ${note.enabled ? "checked" : ""} ${canManageProject ? "" : "disabled"}>

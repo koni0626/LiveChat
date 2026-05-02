@@ -27,7 +27,14 @@
     <div class="live-chat-stage-actions">
       <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatGenerateImageButton">画像を生成</button>
       <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleTextboxButton">テキストボックス非表示</button>
+      <button class="btn btn-sm btn-outline-dark live-chat-camera-toggle" type="button" id="liveChatCameraToggleButton" aria-pressed="false" hidden>カメラOFF</button>
     </div>
+    <div class="live-chat-camera-status" id="liveChatCameraStatus" hidden>
+      <span class="live-chat-camera-dot"></span>
+      <span id="liveChatCameraStatusText">カメラはOFFです</span>
+    </div>
+    <video id="liveChatCameraVideo" class="live-chat-camera-preview" playsinline muted hidden></video>
+    <canvas id="liveChatCameraCanvas" hidden></canvas>
 
     <div class="live-chat-choice-panel is-hidden" id="liveChatSceneChoicePanel"></div>
 

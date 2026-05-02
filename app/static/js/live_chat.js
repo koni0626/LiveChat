@@ -30,12 +30,27 @@
   const objectiveInitial = document.getElementById("liveChatObjectiveInitial");
   const objectiveList = document.getElementById("liveChatObjectiveList");
   const objectiveCount = document.getElementById("liveChatObjectiveDebugCount");
+  const cameraToggleButton = document.getElementById("liveChatCameraToggleButton");
+  const cameraStatus = document.getElementById("liveChatCameraStatus");
+  const cameraStatusText = document.getElementById("liveChatCameraStatusText");
+  const cameraVideo = document.getElementById("liveChatCameraVideo");
+  const cameraCanvas = document.getElementById("liveChatCameraCanvas");
+  const cameraFeatureEnabled = false;
 
   let currentContext = null;
   let giftController = null;
   let costumeRoomController = null;
   let composeVisible = true;
   let userDefaultImageSettings = {};
+  let cameraEnabled = false;
+  let cameraStream = null;
+  let cameraBusy = false;
+  let idleTalkTimer = null;
+  let idleTalkBusy = false;
+  let idleTalksSincePlayerInput = 0;
+  const idleTalkEnabled = false;
+  const idleTalkMinMs = 10000;
+  const idleTalkMaxMs = 30000;
 
   function getMessageListElement() {
     return document.getElementById("liveChatMessageList");
@@ -90,6 +105,7 @@
     costumeRoomController?.render(context);
     renderSceneChoices(context);
     renderObjectiveNotes(context);
+    renderPlayerReaction(context);
   }
 
   function getInitialObjective(context) {
@@ -139,9 +155,175 @@
     }).join("");
   }
 
+  function reactionLabel(reaction) {
+    const moodLabels = {
+      amused: "楽しそう",
+      engaged: "興味あり",
+      neutral: "普通",
+      confused: "迷っていそう",
+      uncomfortable: "困っていそう",
+      unknown: "不明",
+    };
+    const mood = moodLabels[reaction?.mood] || "不明";
+    const note = reaction?.short_note ? `: ${reaction.short_note}` : "";
+    return `${mood}${note}`;
+  }
+
+  function renderPlayerReaction(context) {
+    if (!cameraFeatureEnabled) return;
+    if (!cameraStatusText || !cameraStatus) return;
+    const reaction = context?.state?.state_json?.player_visible_reaction;
+    if (cameraEnabled) {
+      cameraStatus.classList.add("is-on");
+      cameraStatusText.textContent = reaction ? `カメラON / 最後の反応 ${reactionLabel(reaction)}` : "カメラON / 次のキャラ発話後に反応を見ます";
+    } else {
+      cameraStatus.classList.remove("is-on");
+      cameraStatusText.textContent = reaction ? `カメラOFF / 最後の反応 ${reactionLabel(reaction)}` : "カメラはOFFです";
+    }
+  }
+
+  async function setCameraEnabled(enabled) {
+    if (!cameraFeatureEnabled) {
+      cameraEnabled = false;
+      return;
+    }
+    if (!enabled) {
+      cameraEnabled = false;
+      cameraToggleButton?.setAttribute("aria-pressed", "false");
+      if (cameraToggleButton) cameraToggleButton.textContent = "カメラOFF";
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+        cameraStream = null;
+      }
+      if (cameraVideo) {
+        cameraVideo.srcObject = null;
+        cameraVideo.hidden = true;
+      }
+      renderPlayerReaction(currentContext);
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      NovelUI.toast("このブラウザではカメラを使用できません。", "warning");
+      return;
+    }
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+      if (cameraVideo) {
+        cameraVideo.srcObject = cameraStream;
+        cameraVideo.hidden = false;
+        await cameraVideo.play();
+      }
+      cameraEnabled = true;
+      cameraToggleButton?.setAttribute("aria-pressed", "true");
+      if (cameraToggleButton) cameraToggleButton.textContent = "カメラON";
+      renderPlayerReaction(currentContext);
+    } catch (error) {
+      cameraEnabled = false;
+      NovelUI.toast(error.message || "カメラを開始できませんでした。", "danger");
+      await setCameraEnabled(false);
+    }
+  }
+
+  async function capturePlayerReactionIfEnabled() {
+    if (!cameraFeatureEnabled) return;
+    if (!cameraEnabled || cameraBusy || !cameraVideo || !cameraCanvas) return;
+    if (!cameraVideo.videoWidth || !cameraVideo.videoHeight) return;
+    cameraBusy = true;
+    try {
+      const maxWidth = 512;
+      const scale = Math.min(1, maxWidth / cameraVideo.videoWidth);
+      cameraCanvas.width = Math.max(1, Math.round(cameraVideo.videoWidth * scale));
+      cameraCanvas.height = Math.max(1, Math.round(cameraVideo.videoHeight * scale));
+      const context2d = cameraCanvas.getContext("2d");
+      context2d.drawImage(cameraVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
+      const blob = await new Promise((resolve) => cameraCanvas.toBlob(resolve, "image/jpeg", 0.72));
+      if (!blob) return;
+      const formData = new FormData();
+      formData.append("file", blob, "player-reaction.jpg");
+      const reaction = await LiveChatApi.analyzePlayerReaction(sessionId, formData);
+      currentContext = {
+        ...(currentContext || {}),
+        state: {
+          ...((currentContext || {}).state || {}),
+          state_json: {
+            ...(((currentContext || {}).state || {}).state_json || {}),
+            player_visible_reaction: reaction,
+          },
+        },
+      };
+      renderPlayerReaction(currentContext);
+    } catch (error) {
+      NovelUI.toast(error.message || "カメラ反応の判定に失敗しました。", "warning");
+    } finally {
+      cameraBusy = false;
+    }
+  }
+
   async function loadContext() {
     const context = await LiveChatApi.loadContext(sessionId);
     applyContext(context);
+    scheduleIdleTalk();
+  }
+
+  function randomIdleTalkDelay() {
+    return idleTalkMinMs + Math.floor(Math.random() * (idleTalkMaxMs - idleTalkMinMs + 1));
+  }
+
+  function clearIdleTalkTimer() {
+    if (idleTalkTimer) {
+      window.clearTimeout(idleTalkTimer);
+      idleTalkTimer = null;
+    }
+  }
+
+  function hasPendingPlayerText() {
+    return Boolean(composeForm?.message_text?.value?.trim());
+  }
+
+  function canRunIdleTalk() {
+    if (!idleTalkEnabled) return false;
+    if (!currentContext || !sessionId) return false;
+    if (idleTalkBusy || shell.getState().replyLoading) return false;
+    if (document.hidden || hasPendingPlayerText()) return false;
+    if (giftController?.hasSelectedGift()) return false;
+    if (idleTalksSincePlayerInput >= 1) return false;
+    return true;
+  }
+
+  function scheduleIdleTalk() {
+    clearIdleTalkTimer();
+    if (!idleTalkEnabled) return;
+    if (idleTalksSincePlayerInput >= 1) return;
+    idleTalkTimer = window.setTimeout(triggerIdleTalk, randomIdleTalkDelay());
+  }
+
+  async function triggerIdleTalk() {
+    if (!canRunIdleTalk()) {
+      scheduleIdleTalk();
+      return;
+    }
+    idleTalkBusy = true;
+    idleTalksSincePlayerInput += 1;
+    try {
+      shell.setReplyLoading(true, currentContext);
+      const result = await LiveChatApi.postIdleMessage(sessionId);
+      if (result?.context) {
+        applyContext(result.context);
+      } else {
+        await loadContext();
+      }
+      await capturePlayerReactionIfEnabled();
+    } catch (error) {
+      idleTalksSincePlayerInput = Math.max(0, idleTalksSincePlayerInput - 1);
+      NovelUI.toast(error.message || "自動発話に失敗しました。", "warning");
+      scheduleIdleTalk();
+    } finally {
+      idleTalkBusy = false;
+      shell.setReplyLoading(false, currentContext);
+    }
   }
 
   async function loadDefaultImageSettings() {
@@ -220,11 +402,13 @@
 
   composeForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    clearIdleTalkTimer();
     const rawMessage = composeForm.message_text.value.trim();
     try {
       if (!rawMessage && !giftController?.hasSelectedGift()) {
         NovelUI.toast("送信するメッセージを入力するか、メッセージを作成ボタンで代理文を作成してください。", "warning");
         composeForm.message_text.focus();
+        scheduleIdleTalk();
         return;
       }
       shell.setReplyLoading(true, currentContext);
@@ -247,6 +431,7 @@
         }
         shell.setReplyLoading(false, currentContext, { render: false });
         await loadContext();
+        await capturePlayerReactionIfEnabled();
         if (result?.deferred_processing) {
           window.setTimeout(() => {
             NovelUI.refreshLetterBadge?.();
@@ -254,12 +439,23 @@
         }
       }
       composeForm.message_text.value = "";
+      idleTalksSincePlayerInput = 0;
+      scheduleIdleTalk();
       NovelUI.toast("\u30e1\u30c3\u30bb\u30fc\u30b8\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f\u3002");
     } catch (error) {
       NovelUI.toast(error.message || "\u30e1\u30c3\u30bb\u30fc\u30b8\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
     } finally {
       shell.setReplyLoading(false, currentContext);
     }
+  });
+
+  composeInput?.addEventListener("input", () => {
+    idleTalksSincePlayerInput = 0;
+    scheduleIdleTalk();
+  });
+
+  composeInput?.addEventListener("focus", () => {
+    scheduleIdleTalk();
   });
 
   proxyMessageButton?.addEventListener("click", async () => {
@@ -269,6 +465,8 @@
       proxyMessageButton.textContent = "作成中...";
       const proxy = await LiveChatApi.generateProxyPlayerMessage(sessionId);
       composeForm.message_text.value = proxy?.message_text || "";
+      idleTalksSincePlayerInput = 0;
+      scheduleIdleTalk();
       composeForm.message_text.focus();
       NovelUI.toast("代理プレイヤーのメッセージを作成しました。内容を確認して送信してください。");
     } catch (error) {
@@ -330,6 +528,26 @@
     setComposeVisible(!composeVisible);
   });
 
+  cameraToggleButton?.addEventListener("click", () => {
+    if (!cameraFeatureEnabled) return;
+    setCameraEnabled(!cameraEnabled);
+  });
+
+  window.addEventListener("beforeunload", () => {
+    clearIdleTalkTimer();
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+    }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      clearIdleTalkTimer();
+    } else {
+      scheduleIdleTalk();
+    }
+  });
+
   document.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-scene-choice-id]");
     if (!button) return;
@@ -342,6 +560,9 @@
       } else {
         await loadContext();
       }
+      await capturePlayerReactionIfEnabled();
+      idleTalksSincePlayerInput = 0;
+      scheduleIdleTalk();
       NovelUI.toast("選択した場面を生成しました。");
     } catch (error) {
       NovelUI.toast(error.message || "選択肢の実行に失敗しました。", "danger");

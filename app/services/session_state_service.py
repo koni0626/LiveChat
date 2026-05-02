@@ -98,7 +98,7 @@ class SessionStateService:
                     parsed["active_character_ids"] = normalized_ids
             parsed.setdefault("active_character_ids", character_ids)
             if isinstance(existing_state_json, dict):
-                for key in ("scene_progression", "scene_choices", "session_memory", "conversation_director", "relationship_state", "line_visual_note", "visual_state", "displayed_image_observation", "conversation_evaluation"):
+                for key in ("scene_progression", "scene_choices", "session_memory", "conversation_director", "relationship_state", "line_visual_note", "visual_state", "displayed_image_observation", "conversation_evaluation", "player_visible_reaction"):
                     if key in existing_state_json and key not in parsed:
                         parsed[key] = existing_state_json[key]
             return self.upsert_state(
@@ -111,7 +111,7 @@ class SessionStateService:
         except Exception:
             fallback_state = self._build_fallback_state(messages, character_ids)
             if isinstance(existing_state_json, dict):
-                for key in ("scene_progression", "scene_choices", "session_memory", "conversation_director", "relationship_state", "line_visual_note", "visual_state", "displayed_image_observation", "conversation_evaluation"):
+                for key in ("scene_progression", "scene_choices", "session_memory", "conversation_director", "relationship_state", "line_visual_note", "visual_state", "displayed_image_observation", "conversation_evaluation", "player_visible_reaction"):
                     if key in existing_state_json:
                         fallback_state[key] = existing_state_json[key]
             return self.upsert_state(

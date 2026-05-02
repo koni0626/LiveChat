@@ -79,6 +79,26 @@
     });
   }
 
+  async function postIdleMessage(sessionId) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/idle-message`, {
+      method: "POST",
+      body: {},
+    });
+  }
+
+  async function analyzePlayerReaction(sessionId, formData) {
+    const response = await fetch(`/api/v1/chat/sessions/${sessionId}/player-reaction`, {
+      method: "POST",
+      credentials: "same-origin",
+      body: formData,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.data?.message || payload?.message || `HTTP ${response.status}`);
+    }
+    return payload?.data ?? payload;
+  }
+
   async function extractState(sessionId) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/state/extract`, {
       method: "POST",
@@ -139,7 +159,9 @@
     generateCostume,
     uploadCostume,
     postMessage,
+    analyzePlayerReaction,
     generateProxyPlayerMessage,
+    postIdleMessage,
     extractState,
     uploadImage,
     uploadGift,

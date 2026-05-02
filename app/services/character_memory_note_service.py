@@ -40,8 +40,15 @@ class CharacterMemoryNoteService:
     def get_note(self, note_id: int):
         return CharacterMemoryNote.query.get(note_id)
 
-    def list_notes(self, character_id: int, *, include_disabled: bool = True, limit: int | None = None):
-        query = CharacterMemoryNote.query.filter_by(character_id=character_id)
+    def list_notes(
+        self,
+        user_id: int,
+        character_id: int,
+        *,
+        include_disabled: bool = True,
+        limit: int | None = None,
+    ):
+        query = CharacterMemoryNote.query.filter_by(user_id=user_id, character_id=character_id)
         if not include_disabled:
             query = query.filter_by(enabled=True)
         query = query.order_by(
@@ -58,6 +65,7 @@ class CharacterMemoryNoteService:
             return {}
         return {
             "id": row.id,
+            "user_id": row.user_id,
             "character_id": row.character_id,
             "category": row.category,
             "note": row.note,
@@ -70,17 +78,31 @@ class CharacterMemoryNoteService:
             "updated_at": row.updated_at.isoformat() if getattr(row, "updated_at", None) else None,
         }
 
-    def list_serialized_notes(self, character_id: int, *, include_disabled: bool = True, limit: int | None = None):
+    def list_serialized_notes(
+        self,
+        user_id: int,
+        character_id: int,
+        *,
+        include_disabled: bool = True,
+        limit: int | None = None,
+    ):
         return [
             self.serialize_note(row)
-            for row in self.list_notes(character_id, include_disabled=include_disabled, limit=limit)
+            for row in self.list_notes(user_id, character_id, include_disabled=include_disabled, limit=limit)
         ]
 
-    def has_duplicate(self, character_id: int, note: str, *, ignore_note_id: int | None = None) -> bool:
+    def has_duplicate(
+        self,
+        user_id: int,
+        character_id: int,
+        note: str,
+        *,
+        ignore_note_id: int | None = None,
+    ) -> bool:
         target = self._normalized_for_duplicate(note)
         if not target:
             return False
-        rows = CharacterMemoryNote.query.filter_by(character_id=character_id).all()
+        rows = CharacterMemoryNote.query.filter_by(user_id=user_id, character_id=character_id).all()
         for row in rows:
             if ignore_note_id and row.id == ignore_note_id:
                 continue
@@ -89,12 +111,20 @@ class CharacterMemoryNoteService:
                 return True
         return False
 
-    def create_note(self, character_id: int, payload: dict | None = None, *, source_type: str = "manual"):
+    def create_note(
+        self,
+        user_id: int,
+        character_id: int,
+        payload: dict | None = None,
+        *,
+        source_type: str = "manual",
+    ):
         payload = dict(payload or {})
         note = self._normalize_note(payload.get("note"))
         if not note:
             raise ValueError("note is required")
         row = CharacterMemoryNote(
+            user_id=user_id,
             character_id=character_id,
             category=self._normalize_category(payload.get("category")),
             note=note,
@@ -139,8 +169,8 @@ class CharacterMemoryNoteService:
         db.session.commit()
         return True
 
-    def build_prompt_block(self, character_id: int, *, limit: int = 8) -> str:
-        notes = self.list_notes(character_id, include_disabled=False, limit=limit)
+    def build_prompt_block(self, user_id: int, character_id: int, *, limit: int = 8) -> str:
+        notes = self.list_notes(user_id, character_id, include_disabled=False, limit=limit)
         if not notes:
             return ""
         lines = [
@@ -153,6 +183,10 @@ class CharacterMemoryNoteService:
     def extract_from_live_chat_context(self, text_ai_client, context: dict, *, source_ref: str | None = None) -> list[dict]:
         messages = context.get("messages") or []
         if len(messages) < 2:
+            return []
+        session = context.get("session") or {}
+        user_id = int(session.get("owner_user_id") or 0)
+        if not user_id:
             return []
         recent_lines = []
         for message in messages[-12:]:
@@ -168,7 +202,7 @@ class CharacterMemoryNoteService:
             character_id = int(character.get("id") or 0)
             if not character_id:
                 continue
-            existing = self.build_prompt_block(character_id, limit=12)
+            existing = self.build_prompt_block(user_id, character_id, limit=12)
             prompt = "\n".join(
                 [
                     "You are maintaining additive character growth notes for a visual novel character.",
@@ -204,9 +238,10 @@ class CharacterMemoryNoteService:
                     continue
                 note = self._normalize_note(item.get("note"))
                 confidence = self._normalize_confidence(item.get("confidence"))
-                if not note or confidence < 0.55 or self.has_duplicate(character_id, note):
+                if not note or confidence < 0.55 or self.has_duplicate(user_id, character_id, note):
                     continue
                 row = self.create_note(
+                    user_id,
                     character_id,
                     {
                         "category": item.get("category"),

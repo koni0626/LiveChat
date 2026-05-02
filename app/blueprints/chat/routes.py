@@ -274,6 +274,25 @@ def generate_proxy_player_message(session_id: int):
     return json_response(result, status=201)
 
 
+@chat_bp.route("/chat/sessions/<int:session_id>/idle-message", methods=["POST"])
+def post_idle_character_message(session_id: int):
+    _require_session(session_id, for_manage=True)
+    result = live_chat_service.post_idle_character_message(session_id)
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
+@chat_bp.route("/chat/sessions/<int:session_id>/player-reaction", methods=["POST"])
+def analyze_chat_player_reaction(session_id: int):
+    _require_session(session_id, for_manage=True)
+    upload_file = request.files.get("file")
+    if upload_file is None:
+        raise ValidationError("file is required")
+    result = live_chat_service.analyze_player_reaction(session_id, upload_file)
+    return json_response(result, status=201)
+
+
 @chat_bp.route("/chat/sessions/<int:session_id>/messages/<int:message_id>", methods=["DELETE"])
 def delete_chat_message(session_id: int, message_id: int):
     _require_session(session_id, for_manage=True)
