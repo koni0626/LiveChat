@@ -331,10 +331,7 @@ class LetterService:
         messages = context.get("messages") or []
         if len(messages) < 12:
             return {"should_send_letter": False}
-        state_json = ((context.get("state") or {}).get("state_json") or {})
-        evaluation = state_json.get("conversation_evaluation") or {}
-        score = int(evaluation.get("score") or 0)
-        if trigger_type == "scene_transition" or score >= 45:
+        if trigger_type == "scene_transition":
             return {
                 "should_send_letter": True,
                 "reason": "会話が一定以上続き、関係の変化や余韻をメールで返せる節目になっているため。",
@@ -372,9 +369,8 @@ class LetterService:
         return "\n".join(lines)
 
     def _decide_should_send_letter(self, context: dict, character: dict, trigger_type: str):
-        state_json = ((context.get("state") or {}).get("state_json") or {})
-        evaluation = state_json.get("conversation_evaluation") or {}
         room = context.get("room") or {}
+        memory = (context.get("character_user_memories") or {}).get(str(character.get("id") or "")) or {}
         prompt = f"""
 あなたは恋愛ノベル系ライブチャットの演出AIです。
 会話ログを読み、今このユーザーにキャラクターから「メール」を届けるべきか判定してください。
@@ -393,7 +389,7 @@ class LetterService:
 キャラクターの性格: {character.get("personality") or ""}
 話し方: {character.get("speech_style") or ""}
 ルームの目的: {room.get("conversation_objective") or ""}
-現在の評価: {json_util.dumps(evaluation)}
+現在のキャラ別好感度: {json_util.dumps(memory)}
 トリガー種別: {trigger_type}
 
 会話ログ:

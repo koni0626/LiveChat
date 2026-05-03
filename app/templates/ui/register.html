@@ -11,7 +11,7 @@
         </div>
       </div>
       <p class="text-secondary mb-4">制作を始めるためのアカウントを作成します。登録後はそのままダッシュボードへ進みます。</p>
-      <form id="registerForm" class="vstack gap-3">
+      <form id="registerForm" class="vstack gap-3" data-auth-form data-auth-endpoint="/api/v1/auth/register" data-error-target="registerError" data-user-redirect="{{ url_for('ui.project_list_page') }}" data-admin-redirect="{{ url_for('ui.dashboard_page') }}" data-default-error="Registration failed.">
         <div>
           <label class="form-label">表示名</label>
           <input class="form-control form-control-lg" type="text" name="display_name" placeholder="クリエイター名" required>
@@ -43,27 +43,5 @@
 </section>
 {% endblock %}
 {% block scripts %}
-<script>
-(() => {
-  const form = document.getElementById("registerForm");
-  const errorBox = document.getElementById("registerError");
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    errorBox.classList.add("d-none");
-    const formData = new FormData(form);
-    try {
-      const result = await NovelUI.api("/api/v1/auth/register", {
-        method: "POST",
-        body: Object.fromEntries(formData.entries()),
-      });
-      location.href = result?.user?.role === "user"
-        ? "{{ url_for('ui.project_list_page') }}"
-        : "{{ url_for('ui.dashboard_page') }}";
-    } catch (error) {
-      errorBox.textContent = error.message || "ユーザー登録に失敗しました。";
-      errorBox.classList.remove("d-none");
-    }
-  });
-})();
-</script>
+<script src="{{ url_for('static', filename='js/auth_form.js') }}"></script>
 {% endblock %}

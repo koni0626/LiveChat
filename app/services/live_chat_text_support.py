@@ -505,6 +505,53 @@ def generate_conversation_evaluation(text_ai_client, context: dict) -> dict | No
         return prompt_support.fallback_conversation_evaluation(context)
 
 
+def generate_character_affinity_evaluation(text_ai_client, context: dict) -> list[dict]:
+    prompt = prompt_support.build_character_affinity_evaluation_prompt(context)
+    try:
+        result = text_ai_client.generate_text(
+            prompt,
+            temperature=0.2,
+            response_format={"type": "json_object"},
+            max_tokens=900,
+        )
+        parsed = text_ai_client._try_parse_json(result.get("text"))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("character affinity evaluation response is invalid")
+        items = parsed.get("items")
+        if not isinstance(items, list):
+            raise RuntimeError("character affinity evaluation items are invalid")
+        normalized = []
+        valid_ids = {int(character.get("id") or 0) for character in context.get("characters") or []}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                character_id = int(item.get("character_id") or 0)
+            except (TypeError, ValueError):
+                continue
+            if character_id not in valid_ids:
+                continue
+            try:
+                affinity_delta = int(item.get("affinity_delta") or 0)
+            except (TypeError, ValueError):
+                affinity_delta = 0
+            try:
+                closeness_delta = int(item.get("physical_closeness_delta") or 0)
+            except (TypeError, ValueError):
+                closeness_delta = 0
+            normalized.append(
+                {
+                    "character_id": character_id,
+                    "affinity_delta": max(-12, min(12, affinity_delta)),
+                    "physical_closeness_delta": max(-2, min(2, closeness_delta)),
+                    "reason": str(item.get("reason") or "").strip()[:300],
+                }
+            )
+        return normalized
+    except Exception:
+        return prompt_support.fallback_character_affinity_evaluation(context)
+
+
 def generate_conversation_director(text_ai_client, context: dict, user_message_text: str) -> dict:
     prompt = prompt_support.build_conversation_director_prompt(context, user_message_text)
     try:

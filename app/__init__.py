@@ -1,7 +1,8 @@
 import os
+from pathlib import Path
 
 import click
-from flask import Flask, jsonify, redirect, send_from_directory, session as flask_session, url_for
+from flask import Flask, jsonify, redirect, send_from_directory, session as flask_session, url_for, request
 from sqlalchemy import text
 
 from .api import ApiError, error_response
@@ -120,6 +121,22 @@ def create_app(config_object=Config):
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
+        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        if app.config.get("SECURITY_CSP_ENABLED", True):
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+                "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com data:; "
+                "img-src 'self' data: blob:; "
+                "connect-src 'self'; "
+                "frame-ancestors 'self'; "
+                "base-uri 'self'; "
+                "form-action 'self'",
+            )
+        if app.config.get("SECURITY_HSTS_ENABLED") and request.is_secure:
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         return response
 
     @app.route("/", methods=["GET"])
@@ -134,7 +151,18 @@ def create_app(config_object=Config):
 
     @app.route("/media/<path:relative_path>", methods=["GET"])
     def media_file(relative_path: str):
-        parts = [part for part in relative_path.replace("\\", "/").split("/") if part]
+        normalized_relative = relative_path.replace("\\", "/")
+        parts = [part for part in normalized_relative.split("/") if part]
+        if not parts or any(part in {".", ".."} for part in parts) or Path(normalized_relative).is_absolute():
+            return error_response("not_found", status=404, code="not_found")
+        storage_root = Path(app.config["STORAGE_ROOT"]).resolve()
+        requested_path = (storage_root / normalized_relative).resolve()
+        try:
+            requested_path.relative_to(storage_root)
+        except ValueError:
+            return error_response("not_found", status=404, code="not_found")
+        if not requested_path.is_file():
+            return error_response("not_found", status=404, code="not_found")
         if parts[:1] == ["projects"] and len(parts) >= 2:
             try:
                 project_id = int(parts[1])
@@ -150,8 +178,9 @@ def create_app(config_object=Config):
             user = User.query.get(user_id) if user_id else None
             if not user or not user.is_active_user:
                 return error_response("unauthorized", status=401, code="unauthorized")
-        response = send_from_directory(app.config["STORAGE_ROOT"], relative_path)
+        response = send_from_directory(str(storage_root), normalized_relative)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Cache-Control", "private, max-age=3600")
         return response
 
     @app.route("/health", methods=["GET"])

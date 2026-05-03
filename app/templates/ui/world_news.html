@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="page-grid world-news-page">
+<section class="page-grid world-news-page" data-can-manage-project="{{ 'true' if can_manage_project else 'false' }}">
   <section class="panel-card world-news-hero">
     <div>
       <div class="eyebrow">World News</div>
@@ -32,117 +32,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-(() => {
-  const projectId = document.body.dataset.projectId;
-  const canManage = {{ "true" if can_manage_project else "false" }};
-  const listHost = document.getElementById("worldNewsList");
-  const countLabel = document.getElementById("worldNewsCount");
-  const reloadButton = document.getElementById("worldNewsReloadButton");
-  const generateButton = document.getElementById("worldNewsGenerateButton");
-
-  function renderLoading(message = "街の噂を集めています。") {
-    listHost.innerHTML = `
-      <div class="empty-panel world-news-loading">
-        <div class="spinner-border spinner-border-sm" aria-hidden="true"></div>
-        <div>
-          <strong>読み込み中</strong>
-          <p>${NovelUI.escape(message)}</p>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderNews(items) {
-    const list = Array.isArray(items) ? items : [];
-    countLabel.textContent = `${list.length} items`;
-    if (!list.length) {
-      listHost.innerHTML = `
-        <div class="empty-panel">
-          <i class="bi bi-newspaper"></i>
-          <div>
-            <strong>まだニュースはありません。</strong>
-            <p>おでかけを完了するか、噂を生成するとここに流れます。</p>
-          </div>
-        </div>
-      `;
-      return;
-    }
-    listHost.innerHTML = list.map((item) => {
-      const newsTypeLabel = item.news_type_label || item.news_type || "噂";
-      const imageUrl = item.image_asset?.media_url || "";
-      return `
-        <article class="world-news-card" data-news-id="${NovelUI.escape(item.id)}">
-          ${imageUrl ? `
-            <figure class="world-news-image">
-              <img src="${NovelUI.escape(imageUrl)}" alt="">
-              <figcaption>
-                <span>LAPLACE NEWS</span>
-                <span>${NovelUI.escape(newsTypeLabel)}</span>
-              </figcaption>
-            </figure>
-          ` : ""}
-          <div class="world-news-card-head">
-            <span class="world-news-type">${NovelUI.escape(newsTypeLabel)}</span>
-            <span class="soft-code">${NovelUI.escape(NovelUI.formatDateTime(item.created_at) || "")}</span>
-          </div>
-          <h4>${NovelUI.escape(item.title || "街の噂")}</h4>
-          <p>${NovelUI.escape(item.body || "")}</p>
-          <div class="world-news-meta">
-            ${item.related_character ? `<span><i class="bi bi-person-heart"></i>${NovelUI.escape(item.related_character.name)}</span>` : ""}
-            ${item.related_location ? `<span><i class="bi bi-geo-alt"></i>${NovelUI.escape(item.related_location.name)}</span>` : ""}
-            <span><i class="bi bi-signal"></i>${NovelUI.escape(String(item.importance || 3))}</span>
-          </div>
-          <div class="world-news-card-actions">
-            ${item.return_url ? `<a class="btn btn-outline-light btn-sm" href="${NovelUI.escape(item.return_url)}">関連を見る <i class="bi bi-arrow-right"></i></a>` : ""}
-            ${canManage ? `<button class="btn btn-outline-danger btn-sm world-news-delete-button" type="button" data-news-id="${NovelUI.escape(item.id)}"><i class="bi bi-trash"></i>削除</button>` : ""}
-          </div>
-        </article>
-      `;
-    }).join("");
-  }
-
-  async function loadNews() {
-    renderLoading();
-    const items = await NovelUI.api(`/api/v1/projects/${projectId}/world-news`);
-    renderNews(items);
-  }
-
-  reloadButton.addEventListener("click", () => {
-    loadNews().catch((error) => NovelUI.toast(error.message || "ニュースを読み込めませんでした。", "danger"));
-  });
-
-  listHost.addEventListener("click", async (event) => {
-    const button = event.target.closest(".world-news-delete-button");
-    if (!button) return;
-    const newsId = button.dataset.newsId;
-    if (!newsId || !window.confirm("このニュースを削除しますか？")) return;
-    button.disabled = true;
-    try {
-      await NovelUI.api(`/api/v1/projects/${projectId}/world-news/${newsId}`, { method: "DELETE" });
-      NovelUI.toast("ニュースを削除しました。");
-      await loadNews();
-    } catch (error) {
-      button.disabled = false;
-      NovelUI.toast(error.message || "ニュースを削除できませんでした。", "danger");
-    }
-  });
-
-  generateButton?.addEventListener("click", async () => {
-    generateButton.disabled = true;
-    renderLoading("キャラクター、施設、最近の出来事から画像付きの噂を作っています。");
-    try {
-      await NovelUI.api(`/api/v1/projects/${projectId}/world-news/generate`, { method: "POST", body: { count: 3 } });
-      await loadNews();
-      NovelUI.toast("噂を生成しました。");
-    } catch (error) {
-      NovelUI.toast(error.message || "噂を生成できませんでした。", "danger");
-    } finally {
-      generateButton.disabled = false;
-    }
-  });
-
-  loadNews().catch((error) => NovelUI.toast(error.message || "ニュースを読み込めませんでした。", "danger"));
-})();
-</script>
+<script src="{{ url_for('static', filename='js/world_news_page.js') }}"></script>
 {% endblock %}

@@ -43,6 +43,8 @@
   const objectiveInitial = document.getElementById("liveChatObjectiveInitial");
   const objectiveList = document.getElementById("liveChatObjectiveList");
   const objectiveCount = document.getElementById("liveChatObjectiveDebugCount");
+  const affinityCard = document.getElementById("liveChatAffinityCard");
+  const affinityList = document.getElementById("liveChatAffinityList");
   const cameraToggleButton = document.getElementById("liveChatCameraToggleButton");
   const cameraStatus = document.getElementById("liveChatCameraStatus");
   const cameraStatusText = document.getElementById("liveChatCameraStatusText");
@@ -292,8 +294,58 @@
     renderLocationServicePanel(context);
     renderLccdPanel();
     renderObjectiveNotes(context);
+    renderCharacterAffinity(context);
     renderPlayerReaction(context);
     renderSavedShortStories(context);
+  }
+
+  function renderCharacterAffinity(context) {
+    if (!affinityCard || !affinityList) return;
+    const characters = Array.isArray(context?.characters) ? context.characters : [];
+    const memoryMap = context?.character_user_memories || {};
+    const rows = characters
+      .map((character) => {
+        const memory = memoryMap[String(character.id)] || {};
+        const score = Math.max(0, Math.min(100, Number(memory.affinity_score || 0)));
+        const label = memory.affinity_label || "警戒";
+        const closenessLevel = Math.max(0, Math.min(5, Number(memory.physical_closeness_level || 0)));
+        const closenessLabel = memory.physical_closeness_label || "距離を保つ";
+        const note = memory.affinity_notes || "";
+        const toneClass = score >= 70 ? "is-high" : score >= 40 ? "is-mid" : "is-low";
+        return {
+          name: character.name || character.nickname || "Character",
+          score,
+          label,
+          closenessLevel,
+          closenessLabel,
+          note,
+          toneClass,
+        };
+    });
+    affinityCard.hidden = rows.length === 0;
+    if (!rows.length) {
+      affinityList.innerHTML = "";
+      return;
+    }
+    affinityList.innerHTML = rows.map((row) => `
+      <article class="live-chat-affinity-item ${row.toneClass}">
+        <div class="live-chat-affinity-item-head">
+          <div>
+            <h4>${NovelUI.escape(row.name)}からあなたへ</h4>
+            <span>${NovelUI.escape(row.label)}</span>
+          </div>
+          <strong><span>${row.score}</span><small>/100</small></strong>
+        </div>
+        <div class="live-chat-affinity-meter" aria-label="${NovelUI.escape(row.name)} 好感度 ${row.score}">
+          <span style="width: ${row.score}%"></span>
+        </div>
+        <div class="live-chat-affinity-foot">
+          <span>距離感 Lv.${row.closenessLevel}</span>
+          <span>${NovelUI.escape(row.closenessLabel)}</span>
+        </div>
+        ${row.note ? `<p>${NovelUI.escape(row.note)}</p>` : ""}
+      </article>
+    `).join("");
   }
 
   function getInitialObjective(context) {
@@ -1246,6 +1298,7 @@
   });
 
   locationMovePanel?.addEventListener("click", async (event) => {
+    event.stopPropagation();
     const closeButton = event.target.closest("[data-location-move-close]");
     if (closeButton) {
       locationMoveVisible = false;
@@ -1274,6 +1327,7 @@
   });
 
   locationServicePanel?.addEventListener("click", async (event) => {
+    event.stopPropagation();
     const button = event.target.closest("[data-location-service-id]");
     if (!button) return;
     await selectLocationService(Number(button.dataset.locationServiceId || 0), button);

@@ -1,0 +1,35 @@
+<section class="points-purchase-page">
+  <div class="points-purchase-panel">
+    <div class="points-purchase-summary">
+      <div>
+        <p class="section-kicker">POINTS</p>
+        <h2>ポイント購入</h2>
+      </div>
+      <div class="points-purchase-balance">
+        <span>現在の残高</span>
+        <strong><span data-points-balance>{{ current_user_points_balance if current_user_points_balance is not none else "—" }}</span> pt</strong>
+      </div>
+    </div>
+
+    <form id="pointsPurchaseForm" class="points-purchase-form">
+      <label class="form-label" for="pointsPurchaseAmount">追加するポイント</label>
+      <div class="points-purchase-input-row">
+        <input class="form-control form-control-lg" id="pointsPurchaseAmount" name="amount" type="number" min="1" max="100000" step="1" value="3000" required>
+        <button class="btn btn-primary btn-lg" type="submit">
+          <i class="bi bi-gem"></i>
+          <span>購入</span>
+        </button>
+      </div>
+      <div class="points-purchase-presets" aria-label="購入プリセット">
+        <button type="button" data-points-preset="1000">1,000 pt</button>
+        <button type="button" data-points-preset="3000">3,000 pt</button>
+        <button type="button" data-points-preset="10000">10,000 pt</button>
+      </div>
+      <p class="points-purchase-note">テスト用の入金です。外部の課金APIは呼びません。</p>
+    </form>
+  </div>
+</section>
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/points_page.js') }}"></script>
+{% endblock %}

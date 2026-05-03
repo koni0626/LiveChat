@@ -19,6 +19,8 @@ from .session_state_service import SessionStateService
 from .user_setting_service import UserSettingService
 from .character_user_memory_service import CharacterUserMemoryService
 from .character_memory_note_service import CharacterMemoryNoteService
+from .character_intel_hint_service import CharacterIntelHintService
+from .live_chat_character_intel_tracker import LiveChatCharacterIntelTracker
 from .session_objective_note_service import SessionObjectiveNoteService
 from ..repositories.world_location_repository import WorldLocationRepository
 from ..repositories.world_location_service_repository import WorldLocationServiceRepository
@@ -41,6 +43,7 @@ class LiveChatConversationService:
         serialize_state=None,
         character_user_memory_service: CharacterUserMemoryService | None = None,
         character_memory_note_service: CharacterMemoryNoteService | None = None,
+        character_intel_hint_service: CharacterIntelHintService | None = None,
         session_objective_note_service: SessionObjectiveNoteService | None = None,
         world_location_repository: WorldLocationRepository | None = None,
         world_location_service_repository: WorldLocationServiceRepository | None = None,
@@ -56,6 +59,7 @@ class LiveChatConversationService:
         self._serialize_state = serialize_state
         self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
         self._character_memory_note_service = character_memory_note_service or CharacterMemoryNoteService()
+        self._character_intel_tracker = LiveChatCharacterIntelTracker(character_intel_hint_service)
         self._session_objective_note_service = session_objective_note_service or SessionObjectiveNoteService()
         self._world_location_repository = world_location_repository or WorldLocationRepository()
         self._world_location_service_repository = world_location_service_repository or WorldLocationServiceRepository()
@@ -82,6 +86,8 @@ class LiveChatConversationService:
                 relationship_summary=summary,
                 memory_notes=notes,
             )
+        self._character_intel_tracker.record_reveals(session, context, character_text)
+        self._character_intel_tracker.mark_used(context, user_text)
 
     def _load_json(self, value):
         if value is None:
@@ -131,12 +137,35 @@ class LiveChatConversationService:
         return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
 
     def update_conversation_evaluation(self, session_id: int, context: dict):
-        evaluation = text_support.generate_conversation_evaluation(self._text_ai_client, context)
-        if evaluation is None:
+        session = self._chat_session_service.get_session(session_id) if self._chat_session_service else None
+        if not session:
             return None
+        evaluations = text_support.generate_character_affinity_evaluation(self._text_ai_client, context)
+        for item in evaluations or []:
+            try:
+                character_id = int(item.get("character_id") or 0)
+            except (TypeError, ValueError):
+                character_id = 0
+            if not character_id:
+                continue
+            try:
+                affinity_delta = int(item.get("affinity_delta") or 0)
+            except (TypeError, ValueError):
+                affinity_delta = 0
+            try:
+                closeness_delta = int(item.get("physical_closeness_delta") or 0)
+            except (TypeError, ValueError):
+                closeness_delta = 0
+            self._character_user_memory_service.update_affinity_from_ai_evaluation(
+                user_id=int(session.owner_user_id),
+                character_id=character_id,
+                affinity_delta=affinity_delta,
+                reason=str(item.get("reason") or "").strip(),
+                physical_closeness_delta=closeness_delta,
+            )
         state_row = self._session_state_service.get_state(session_id)
         state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
-        state_json["conversation_evaluation"] = evaluation
+        state_json.pop("conversation_evaluation", None)
         return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
 
     def _conversation_director_enabled(self) -> bool:

@@ -3,12 +3,18 @@ from typing import Any, Optional
 
 from ..extensions import db
 from ..models import User
+from .point_service import PointService
 from .usage_log_service import UsageLogService
 
 
 class AuthService:
-    def __init__(self, usage_log_service: Optional[UsageLogService] = None) -> None:
+    def __init__(
+        self,
+        usage_log_service: Optional[UsageLogService] = None,
+        point_service: Optional[PointService] = None,
+    ) -> None:
         self._usage_log_service = usage_log_service or UsageLogService()
+        self._point_service = point_service or PointService()
 
     def _normalize_email(self, email: Optional[str]) -> str:
         if email is None:
@@ -44,6 +50,7 @@ class AuthService:
             "role": getattr(user, "role", "user") or "user",
             "status": user.status,
             "auth_provider": user.auth_provider,
+            "points_balance": int(getattr(user, "points_balance", 0) or 0),
         }
 
     def _generate_token(self, user: User) -> str:
@@ -113,6 +120,7 @@ class AuthService:
         db.session.add(user)
         db.session.commit()
 
+        self._point_service.grant_initial_points(user)
         self._log_auth_event(user.id, "auth_register")
         return {
             "token": self._generate_token(user),

@@ -9,6 +9,7 @@ from ...services.authorization_service import AuthorizationService
 from ...services.chat_session_service import ChatSessionService
 from ...services.live_chat_room_service import LiveChatRoomService
 from ...services.live_chat_service import LiveChatService
+from ...services.point_billing_service import PointBillingService
 from ...services.project_service import ProjectService
 from ...services.session_state_service import SessionStateService
 from ...services.user_setting_service import UserSettingService
@@ -23,6 +24,7 @@ live_chat_room_service = LiveChatRoomService()
 session_state_service = SessionStateService()
 authorization_service = AuthorizationService()
 user_setting_service = UserSettingService()
+point_billing_service = PointBillingService()
 
 
 def _current_user():
@@ -186,8 +188,7 @@ def list_my_room_sessions(room_id: int):
 
 @chat_bp.route("/chat/rooms/<int:room_id>/sessions", methods=["POST"])
 def create_room_chat_session(room_id: int):
-    _require_room(room_id, published_only=True)
-    user = _current_user()
+    room, project, user = _require_room(room_id, published_only=True)
     payload = request.get_json(silent=True) or {}
     try:
         created = live_chat_service.create_session_from_room(room_id, payload, owner_user_id=user.id)
@@ -201,9 +202,18 @@ def create_room_chat_session(room_id: int):
         image_payload = {"quality": "low"}
         if requested_size in valid_sizes:
             image_payload["size"] = requested_size
+        point_billing_service.ensure_image_generation_balance(user)
         initial_image = live_chat_service.generate_image(
             created["session"]["id"],
             user_setting_service.apply_global_image_generation_settings(image_payload),
+        )
+        initial_image = point_billing_service.charge_image_generation(
+            user,
+            project_id=project.id,
+            session_id=created["session"]["id"],
+            result=initial_image,
+            action_type="image_generation_initial",
+            detail={"source": "room_session_create", "room_id": room.id, **image_payload},
         )
         created["initial_image"] = initial_image
     except Exception as exc:  # Keep the session usable even when the image API is temporarily unavailable.
@@ -281,11 +291,19 @@ def list_chat_messages(session_id: int):
 
 @chat_bp.route("/chat/sessions/<int:session_id>/messages", methods=["POST"])
 def post_chat_message(session_id: int):
-    _require_session(session_id, for_manage=True)
+    _chat_session, project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
+    point_billing_service.ensure_chat_message_balance(user)
     result = live_chat_service.post_message(session_id, payload)
     if not result:
         raise NotFoundError()
+    result = point_billing_service.charge_chat_message(
+        user,
+        project_id=project.id,
+        session_id=session_id,
+        result=result,
+        detail={"source": "live_chat", "has_message_text": bool(str(payload.get("message_text") or "").strip())},
+    )
     return json_response(result, status=201)
 
 
@@ -358,9 +376,19 @@ def execute_chat_scene_choice(session_id: int, choice_id: str):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
     payload = user_setting_service.apply_global_image_generation_settings(payload)
+    point_billing_service.ensure_image_generation_balance(user)
     result = live_chat_service.execute_scene_choice(session_id, choice_id, payload)
     if not result:
         raise NotFoundError()
+    if point_billing_service.result_image_id(result):
+        result = point_billing_service.charge_image_generation(
+            user,
+            project_id=_project.id,
+            session_id=session_id,
+            result=result,
+            action_type="image_generation_scene_choice",
+            detail={"choice_id": choice_id, "size": payload.get("size"), "quality": payload.get("quality")},
+        )
     return json_response(result, status=201)
 
 
@@ -369,12 +397,22 @@ def move_chat_session_location(session_id: int, location_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
     payload = user_setting_service.apply_global_image_generation_settings(payload)
+    point_billing_service.ensure_image_generation_balance(user)
     try:
         result = live_chat_service.move_to_location(session_id, location_id, payload)
     except ValueError as exc:
         raise ValidationError(str(exc))
     if not result:
         raise NotFoundError()
+    if point_billing_service.result_image_id(result):
+        result = point_billing_service.charge_image_generation(
+            user,
+            project_id=_project.id,
+            session_id=session_id,
+            result=result,
+            action_type="image_generation_location_move",
+            detail={"location_id": location_id, "size": payload.get("size"), "quality": payload.get("quality")},
+        )
     return json_response(result, status=201)
 
 
@@ -383,12 +421,22 @@ def select_chat_location_service(session_id: int, service_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
     payload = user_setting_service.apply_global_image_generation_settings(payload)
+    point_billing_service.ensure_image_generation_balance(user)
     try:
         result = live_chat_service.select_location_service(session_id, service_id, payload)
     except ValueError as exc:
         raise ValidationError(str(exc))
     if not result:
         raise NotFoundError()
+    if point_billing_service.result_image_id(result):
+        result = point_billing_service.charge_image_generation(
+            user,
+            project_id=_project.id,
+            session_id=session_id,
+            result=result,
+            action_type="image_generation_location_service",
+            detail={"service_id": service_id, "size": payload.get("size"), "quality": payload.get("quality")},
+        )
     return json_response(result, status=201)
 
 
@@ -397,12 +445,21 @@ def generate_chat_lccd_photo_shoot(session_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
     payload = user_setting_service.apply_image_generation_settings(user.id, payload)
+    point_billing_service.ensure_image_generation_balance(user)
     try:
         result = live_chat_service.generate_lccd_photo_shoot(session_id, payload)
     except ValueError as exc:
         raise ValidationError(str(exc))
     if not result:
         raise NotFoundError()
+    result = point_billing_service.charge_image_generation(
+        user,
+        project_id=_project.id,
+        session_id=session_id,
+        result=result,
+        action_type="image_generation_lccd_photo",
+        detail={"size": payload.get("size"), "quality": payload.get("quality")},
+    )
     return json_response(result, status=201)
 
 
@@ -411,12 +468,22 @@ def enter_chat_lccd_room(session_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
     payload = user_setting_service.apply_global_image_generation_settings(payload)
+    point_billing_service.ensure_image_generation_balance(user)
     try:
         result = live_chat_service.enter_lccd_room(session_id, payload)
     except ValueError as exc:
         raise ValidationError(str(exc))
     if not result:
         raise NotFoundError()
+    if point_billing_service.result_image_id(result):
+        result = point_billing_service.charge_image_generation(
+            user,
+            project_id=_project.id,
+            session_id=session_id,
+            result=result,
+            action_type="image_generation_lccd_enter",
+            detail={"size": payload.get("size"), "quality": payload.get("quality")},
+        )
     return json_response(result, status=201)
 
 
@@ -462,9 +529,18 @@ def generate_chat_costume(session_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
     payload = user_setting_service.apply_image_generation_settings(user.id, payload)
+    point_billing_service.ensure_image_generation_balance(user)
     result = live_chat_service.generate_costume(session_id, payload)
     if not result:
         raise NotFoundError()
+    result = point_billing_service.charge_image_generation(
+        user,
+        project_id=_project.id,
+        session_id=session_id,
+        result=result,
+        action_type="image_generation_costume",
+        detail={"size": payload.get("size"), "quality": payload.get("quality")},
+    )
     return json_response(result, status=201)
 
 
@@ -518,12 +594,21 @@ def generate_chat_image(session_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
     payload = user_setting_service.apply_global_image_generation_settings(payload)
+    point_billing_service.ensure_image_generation_balance(user)
     try:
         result = live_chat_service.generate_image(session_id, payload)
     except ValueError as exc:
         return json_response({"message": str(exc)}, status=400)
     if not result:
         raise NotFoundError()
+    result = point_billing_service.charge_image_generation(
+        user,
+        project_id=_project.id,
+        session_id=session_id,
+        result=result,
+        action_type="image_generation",
+        detail={"size": payload.get("size"), "quality": payload.get("quality"), "image_type": payload.get("image_type")},
+    )
     return json_response(result, status=201)
 
 

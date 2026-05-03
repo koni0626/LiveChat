@@ -3,10 +3,18 @@ from ...extensions import db
 from ...models import User
 from ...api import json_response
 from app.services.auth_service import AuthService
-from ...security import check_login_rate_limit, clear_login_failures, login_rate_limit_key, record_login_failure
+from app.services.point_service import PointService
+from ...security import (
+    check_login_rate_limit,
+    clear_login_failures,
+    login_rate_limit_key,
+    record_login_failure,
+    test_point_purchase_enabled,
+)
 
 auth_bp = Blueprint("auth", __name__)
 auth_service = AuthService()
+point_service = PointService()
 def _set_session_user(user_id: int | None):
     session.clear()
     if user_id:
@@ -91,3 +99,40 @@ def update_player_name():
     db.session.add(row)
     db.session.commit()
     return json_response({"user": auth_service.get_current_user(row.id)})
+
+
+@auth_bp.route("/points/test-purchase", methods=["POST"])
+def test_purchase_points():
+    if not test_point_purchase_enabled():
+        return json_response({"message": "test point purchase is disabled"}, status=403)
+    user_id = _get_session_user_id()
+    if not user_id:
+        return json_response({"message": "unauthorized"}, status=401)
+    row = User.query.get(user_id)
+    if not row or not row.is_active_user:
+        _set_session_user(None)
+        return json_response({"message": "unauthorized"}, status=401)
+    payload = request.get_json(silent=True) or {}
+    try:
+        amount = int(payload.get("amount"))
+    except (TypeError, ValueError):
+        return json_response({"message": "amount must be an integer"}, status=400)
+    try:
+        transaction = point_service.test_purchase(
+            row,
+            amount=amount,
+            detail={"note": str(payload.get("note") or "").strip()[:255] or None},
+        )
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    return json_response(
+        {
+            "points": {
+                "delta": transaction.points_delta,
+                "balance": transaction.balance_after,
+                "action_type": transaction.action_type,
+            },
+            "user": auth_service.get_current_user(row.id),
+        },
+        status=201,
+    )

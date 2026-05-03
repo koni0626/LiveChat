@@ -87,6 +87,7 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
         current_user_display_name=(getattr(current_user, "display_name", None) if current_user else None),
         current_user_email=(getattr(current_user, "email", None) if current_user else None),
         current_user_role=(getattr(current_user, "role", "user") if current_user else None),
+        current_user_points_balance=(getattr(current_user, "points_balance", None) if current_user else None),
         can_manage_project=can_manage_project,
         project_nav_links=_project_nav(project_id, current_user),
         global_nav_links=global_nav_links,
@@ -124,6 +125,11 @@ def feed_page():
     return _render("ui/feed.html", title="Feed", screen_id="feed")
 
 
+@ui_bp.route("/points", methods=["GET"])
+def points_page():
+    return _render("ui/points.html", title="ポイント購入", screen_id="points")
+
+
 @ui_bp.route("/projects/new", methods=["GET"])
 def project_create_page():
     return _render("ui/project_new.html", title="新規ワールド", screen_id="project-create")
@@ -156,6 +162,17 @@ def character_edit_page(project_id: int, character_id: int):
         "ui/character_edit.html",
         title="キャラクター編集",
         screen_id="character-edit",
+        project_id=project_id,
+        character_id=character_id,
+    )
+
+
+@ui_bp.route("/projects/<int:project_id>/characters/<int:character_id>/home", methods=["GET"])
+def character_home_page(project_id: int, character_id: int):
+    return _render(
+        "ui/character_home.html",
+        title="キャラクターホーム",
+        screen_id="character-home",
         project_id=project_id,
         character_id=character_id,
     )

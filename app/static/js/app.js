@@ -44,6 +44,32 @@ window.NovelUI = (() => {
     return payload;
   }
 
+  function formatPoints(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    return Math.max(0, Math.trunc(number)).toLocaleString("ja-JP");
+  }
+
+  function setPointsBalance(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return;
+    document.querySelectorAll("[data-points-balance]").forEach((element) => {
+      element.textContent = formatPoints(number);
+    });
+    window.dispatchEvent(new CustomEvent("novel:points-updated", { detail: { balance: Math.trunc(number) } }));
+  }
+
+  function updatePointsFromData(data) {
+    if (!data || typeof data !== "object") return;
+    if (data.points && typeof data.points === "object" && data.points.balance !== undefined) {
+      setPointsBalance(data.points.balance);
+      return;
+    }
+    if (data.user && typeof data.user === "object" && data.user.points_balance !== undefined) {
+      setPointsBalance(data.user.points_balance);
+    }
+  }
+
   async function api(url, options = {}) {
     const config = {
       method: options.method || "GET",
@@ -56,12 +82,14 @@ window.NovelUI = (() => {
     const payload = await response.json().catch(() => ({}));
     const data = normalizeResponse(payload);
     if (!response.ok) {
+      if (payload?.meta?.points_balance !== undefined) setPointsBalance(payload.meta.points_balance);
       const message = data?.message || payload?.message || `HTTP ${response.status}`;
       if (response.status === 401 && !options.allowUnauthorized && window.location.pathname !== "/login") {
         window.location.href = "/login";
       }
       throw new Error(message);
     }
+    updatePointsFromData(data);
     return data;
   }
 
@@ -240,6 +268,7 @@ window.NovelUI = (() => {
     toast,
     fillForm,
     escape: escapeHtml,
+    setPointsBalance,
     logout,
     refreshLetterBadge,
     truncateText,

@@ -379,7 +379,17 @@ def _character_user_memory_blocks(context: dict) -> list[str]:
         memory = memory_map.get(character_id) or {}
         if not isinstance(memory, dict) or memory.get("memory_enabled") is False:
             continue
-        if not any(str(memory.get(key) or "").strip() for key in ("relationship_summary", "memory_notes", "preference_notes", "unresolved_threads", "important_events")):
+        if not any(
+            str(memory.get(key) or "").strip()
+            for key in (
+                "relationship_summary",
+                "memory_notes",
+                "preference_notes",
+                "unresolved_threads",
+                "important_events",
+                "affinity_notes",
+            )
+        ) and int(memory.get("affinity_score") or 0) <= 0:
             continue
         blocks.append(
             "\n".join(
@@ -390,6 +400,11 @@ def _character_user_memory_blocks(context: dict) -> list[str]:
                     f"  player_preferences={memory.get('preference_notes') or ''}",
                     f"  open_threads={memory.get('unresolved_threads') or ''}",
                     f"  important_events={memory.get('important_events') or ''}",
+                    f"  affinity_toward_player={memory.get('affinity_score', 0)}/100 ({memory.get('affinity_label') or ''})",
+                    f"  physical_closeness=level {memory.get('physical_closeness_level', 0)}/5 ({memory.get('physical_closeness_label') or ''})",
+                    f"  affinity_notes={memory.get('affinity_notes') or ''}",
+                    "  affinity_rule=Higher affinity should make this character warmer, more emotionally open, more proactive, and more physically close in natural body language.",
+                    "  touch_rule=At high affinity, light voluntary touch such as hand, arm, shoulder, sleeve, or leaning closer is allowed when it fits the character and the player has not refused. Avoid forced or graphically sexual contact.",
                 ]
             )
         )
@@ -401,6 +416,36 @@ def _append_character_growth_notes(lines: list[str], character: dict):
     if not block:
         return
     lines.append("  " + block.replace("\n", "\n  "))
+
+
+def _append_character_intel_context(lines: list[str], context: dict):
+    intel = context.get("character_intel") or {}
+    available = intel.get("available_hints") or []
+    learned = intel.get("learned_hints_for_active_targets") or []
+    if available:
+        lines.append("別キャラクターについて開示してよいヒント候補:")
+        lines.append(
+            "現在話しているキャラクターの好感度が十分ある場合だけ使える情報です。"
+            "プレイヤーが相手について尋ねた時、会話が自然にその相手へ向いた時、または話題が詰まった時だけ、1件まで自然に話してください。"
+            "秘密を暴露するように断定せず、噂・観察・助言として扱ってください。"
+        )
+        for hint in available[:8]:
+            lines.append(
+                f"- {hint.get('source_character_name')} can tell the player about {hint.get('target_character_name')}: "
+                f"topic={hint.get('topic')}, hint={hint.get('hint_text')}"
+            )
+    if learned:
+        lines.append("プレイヤーが他キャラクターから得ているこのキャラクター向けヒント:")
+        for hint in learned[:8]:
+            status = "used" if hint.get("status") == "used" else "unused"
+            lines.append(
+                f"- from={hint.get('source_character_name')}, target={hint.get('target_character_name')}, "
+                f"topic={hint.get('topic')}, hint={hint.get('hint_text')}, status={status}"
+            )
+        lines.append(
+            "プレイヤーが未使用ヒントを自然に話題にしたら、キャラクターは『覚えていてくれた/自分に関心を持ってくれた』方向で反応して構いません。"
+            "ただし言い当てられて不快な秘密なら、照れ・戸惑い・警戒として返してください。"
+        )
 
 
 def _append_session_objective_notes(lines: list[str], context: dict):
@@ -646,6 +691,7 @@ def build_opening_prompt(context: dict) -> str:
         lines.append("このプレイヤーについてのキャラクター記憶:")
         lines.extend(memory_blocks)
         lines.append("この記憶はさりげなく使ってください。不自然に言及しないでください。")
+    _append_character_intel_context(lines, context)
     return "\n".join(lines)
 
 
@@ -850,6 +896,7 @@ def build_idle_character_message_prompt(context: dict) -> str:
         lines.append("Character memory about this player:")
         lines.extend(memory_blocks)
         lines.append("この記憶はさりげなく使ってください。不自然に言及しないでください。")
+    _append_character_intel_context(lines, context)
     lines.append("直近の会話:")
     for message in context["messages"][-10:]:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
@@ -1062,6 +1109,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         lines.append("Character memory about this player:")
         lines.extend(memory_blocks)
         lines.append("この記憶はさりげなく使ってください。不自然に言及しないでください。")
+    _append_character_intel_context(lines, context)
     return "\n".join(lines)
 
 
@@ -1747,6 +1795,59 @@ def build_conversation_evaluation_prompt(context: dict) -> str:
     lines.append("プレイヤーの発言が好み、趣味、恋愛上の好みに合っている場合はスコアを上げてください。")
     lines.append("プレイヤーの発言が苦手なもの、タブー、境界線に触れている場合はスコアを下げてください。")
     return "\n".join(lines)
+
+
+def build_character_affinity_evaluation_prompt(context: dict) -> str:
+    memory_map = context.get("character_user_memories") or {}
+    lines = [
+        "あなたはライブチャットのキャラ別好感度判定AIです。",
+        "会話全体の進行度ではなく、各キャラクターがプレイヤーをどう受け取った状態にするべきかだけを判定してください。",
+        "AIキャラクターの発言を本心として読むのではなく、プレイヤーの行動、キャラクター設定、既存の好感度、記憶、NG、境界線からゲーム状態として判定してください。",
+        "JSONオブジェクトのみを返してください。",
+        "必須キー: items。",
+        "items は character_id, affinity_delta, physical_closeness_delta, reason を持つ配列にしてください。",
+        "affinity_delta は -12 から 12 の整数。通常は -3 から 3 に抑え、重要な出来事だけ大きく動かしてください。",
+        "physical_closeness_delta は -2 から 2 の整数。拒否や強引さがあれば下げ、相互に自然な親密さがあれば上げてください。",
+        "単語の有無だけで判定しないでください。否定文、冗談、照れ隠し、拒否、文脈を必ず見てください。",
+        "プレイヤーがキャラの好み、記憶、約束、境界線を尊重した場合は上げてください。",
+        "プレイヤーが強引、雑、拒否を無視、NGに触れた場合は下げてください。",
+        "理由は短い日本語で1文にしてください。",
+        f"プレイヤー名: {context.get('session', {}).get('player_name') or 'プレイヤー'}",
+        "キャラクター:",
+    ]
+    for character in context.get("characters") or []:
+        character_id = str(character.get("id") or "")
+        memory = memory_map.get(character_id) if isinstance(memory_map, dict) else {}
+        if not isinstance(memory, dict):
+            memory = {}
+        lines.append(
+            f"- id={character.get('id')}, name={character.get('name')}, personality={character.get('personality') or ''}, "
+            f"speech_style={character.get('speech_style') or ''}, ng_rules={character.get('ng_rules') or ''}, "
+            f"current_affinity={memory.get('affinity_score', 0)}/100 ({memory.get('affinity_label') or ''}), "
+            f"physical_closeness={memory.get('physical_closeness_level', 0)}/5, "
+            f"memory={memory.get('memory_notes') or ''}, preferences={memory.get('preference_notes') or ''}"
+        )
+    learned = ((context.get("character_intel") or {}).get("learned_hints_for_active_targets") or [])
+    if learned:
+        lines.append("プレイヤーが他キャラクターから得たヒント:")
+        for hint in learned[:10]:
+            lines.append(
+                f"- hint_id={hint.get('id')}, target_id={hint.get('target_character_id')}, "
+                f"source={hint.get('source_character_name')}, topic={hint.get('topic')}, "
+                f"hint={hint.get('hint_text')}, status={hint.get('status')}"
+            )
+        lines.append("未使用ヒントをプレイヤーが自然に使った場合は、target_id のキャラクター好感度を上げる理由にできます。")
+    lines.append("直近の会話:")
+    for message in context.get("messages", [])[-10:]:
+        speaker = message.get("speaker_name") or message.get("sender_type")
+        text = str(message.get("message_text") or "").strip()
+        if text:
+            lines.append(f"- {speaker}: {text}")
+    return "\n".join(lines)
+
+
+def fallback_character_affinity_evaluation(context: dict) -> list[dict]:
+    return []
 
 
 def fallback_conversation_evaluation(context: dict) -> dict:

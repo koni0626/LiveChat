@@ -1,0 +1,97 @@
+.points-purchase-page {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.points-purchase-panel {
+  display: grid;
+  gap: 1.4rem;
+  padding: 1.35rem;
+  border: 1px solid rgba(84, 177, 255, 0.24);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at top right, rgba(0, 245, 212, 0.12), transparent 38%),
+    linear-gradient(180deg, rgba(8, 17, 31, 0.96), rgba(8, 18, 35, 0.9));
+  color: #f4fbff;
+  box-shadow: 0 18px 48px rgba(1, 6, 18, 0.28);
+}
+
+.points-purchase-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.points-purchase-summary h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+
+.points-purchase-balance {
+  display: grid;
+  justify-items: end;
+  gap: 0.25rem;
+  min-width: 10rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(103, 235, 255, 0.28);
+  border-radius: 0.85rem;
+  background: rgba(0, 245, 212, 0.08);
+}
+
+.points-purchase-balance span {
+  color: rgba(190, 232, 255, 0.76);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.points-purchase-balance strong {
+  color: #ffffff;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.points-purchase-form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.points-purchase-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.7rem;
+}
+
+.points-purchase-input-row .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.points-purchase-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.points-purchase-presets button {
+  border: 1px solid rgba(103, 235, 255, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #dffbff;
+  padding: 0.45rem 0.75rem;
+  font-weight: 800;
+}
+
+.points-purchase-presets button:hover {
+  border-color: rgba(103, 235, 255, 0.52);
+  background: rgba(0, 245, 212, 0.1);
+}
+
+.points-purchase-note {
+  margin: 0;
+  color: rgba(190, 232, 255, 0.68);
+  font-size: 0.85rem;
+}

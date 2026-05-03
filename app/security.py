@@ -47,9 +47,19 @@ def validate_secret_key(app) -> None:
 
 
 def login_rate_limit_key(email: str | None) -> str:
-    remote_addr = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",", 1)[0].strip()
+    remote_addr = request.remote_addr or ""
+    if current_app.config.get("TRUST_PROXY_HEADERS", False):
+        remote_addr = request.headers.get("X-Forwarded-For", remote_addr).split(",", 1)[0].strip()
     normalized_email = str(email or "").strip().lower()
     return f"{remote_addr}:{normalized_email}"
+
+
+def test_point_purchase_enabled() -> bool:
+    return bool(
+        current_app.config.get("TEST_POINT_PURCHASE_ENABLED")
+        or current_app.debug
+        or current_app.testing
+    )
 
 
 def check_login_rate_limit(key: str) -> None:

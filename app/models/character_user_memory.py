@@ -13,6 +13,10 @@ class CharacterUserMemory(db.Model, TimestampMixin):
     preference_notes = db.Column(db.Text)
     unresolved_threads = db.Column(db.Text)
     important_events = db.Column(db.Text)
+    affinity_score = db.Column(db.Integer, nullable=False, default=0)
+    affinity_label = db.Column(db.String(80))
+    affinity_notes = db.Column(db.Text)
+    physical_closeness_level = db.Column(db.Integer, nullable=False, default=0)
     last_interaction_at = db.Column(db.DateTime)
     memory_enabled = db.Column(db.Boolean, nullable=False, default=True)
 

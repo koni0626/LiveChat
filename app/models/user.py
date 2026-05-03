@@ -15,6 +15,7 @@ class User(db.Model, TimestampMixin, SoftDeleteMixin):
     auth_provider = db.Column(db.String(50), default="local", nullable=False)
     role = db.Column(db.String(50), default="user", nullable=False)
     status = db.Column(db.String(50), default="active", nullable=False)
+    points_balance = db.Column(db.Integer, default=3000, nullable=False)
 
     def set_password(self, password: str):
         if password is None or str(password) == "":

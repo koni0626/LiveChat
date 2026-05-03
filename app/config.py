@@ -89,6 +89,31 @@ class Config:
     }
     AUTH_RATE_LIMIT_ATTEMPTS = int(os.getenv("AUTH_RATE_LIMIT_ATTEMPTS", "10"))
     AUTH_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "900"))
+    TRUST_PROXY_HEADERS = os.getenv("TRUST_PROXY_HEADERS", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    TEST_POINT_PURCHASE_ENABLED = os.getenv("TEST_POINT_PURCHASE_ENABLED", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    ASSET_MAX_IMAGE_PIXELS = int(os.getenv("ASSET_MAX_IMAGE_PIXELS", str(24_000_000)))
+    SECURITY_HSTS_ENABLED = os.getenv("SECURITY_HSTS_ENABLED", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    SECURITY_CSP_ENABLED = os.getenv("SECURITY_CSP_ENABLED", "true").lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
     LIVE_CHAT_DEFER_POST_PROCESSING = os.getenv("LIVE_CHAT_DEFER_POST_PROCESSING", "false").lower() not in {
         "0",
         "false",

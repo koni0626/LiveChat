@@ -144,6 +144,14 @@ def fallback_conversation_evaluation(context: dict) -> dict:
     return text_prompt_support.fallback_conversation_evaluation(context)
 
 
+def build_character_affinity_evaluation_prompt(context: dict) -> str:
+    return text_prompt_support.build_character_affinity_evaluation_prompt(context)
+
+
+def fallback_character_affinity_evaluation(context: dict) -> list[dict]:
+    return text_prompt_support.fallback_character_affinity_evaluation(context)
+
+
 def build_conversation_director_prompt(context: dict, user_message_text: str) -> str:
     return text_prompt_support.build_conversation_director_prompt(context, user_message_text)
 

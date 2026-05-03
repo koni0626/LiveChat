@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="character-home-page" data-character-home data-project-id="{{ project_id }}" data-character-id="{{ character_id }}" data-can-manage-project="{{ 'true' if can_manage_project else 'false' }}">
+  <header class="character-home-hero" id="characterHomeHero">
+    <div class="character-home-hero-copy">
+      <p class="section-kicker">CHARACTER HOME</p>
+      <h2 id="characterHomeName">Loading...</h2>
+      <p id="characterHomeIntro"></p>
+      <div class="character-home-actions">
+        {% if can_manage_project %}
+        <a class="btn btn-outline-light" href="/projects/{{ project_id }}/characters/{{ character_id }}/edit">
+          <i class="bi bi-pencil-square"></i>
+          <span>設定編集</span>
+        </a>
+        <button class="btn btn-primary" type="button" id="characterHomeEditToggle">
+          <i class="bi bi-markdown"></i>
+          <span>ホーム編集</span>
+        </button>
+        {% endif %}
+      </div>
+    </div>
+    <div class="character-home-portrait" id="characterHomePortrait"></div>
+  </header>
+
+  {% if can_manage_project %}
+  <section class="character-home-editor is-hidden" id="characterHomeEditor">
+    <div class="character-home-editor-toolbar">
+      <div>
+        <h3>ホーム本文</h3>
+        <p>Markdownで自由に編集できます。画像はアップロードすると本文に差し込まれます。</p>
+      </div>
+      <div class="character-home-editor-actions">
+        <label class="btn btn-outline-light mb-0">
+          <i class="bi bi-image"></i>
+          <span>画像追加</span>
+          <input class="d-none" id="characterHomeImageInput" type="file" accept="image/*">
+        </label>
+        <button class="btn btn-sunrise" type="button" id="characterHomeSaveButton">
+          <i class="bi bi-save"></i>
+          <span>保存</span>
+        </button>
+      </div>
+    </div>
+    <textarea class="form-control character-home-markdown-input" id="characterHomeMarkdown" rows="14" placeholder="# キャラクター紹介&#10;&#10;ここにプロフィール、近況、ギャラリーなどを書けます。"></textarea>
+  </section>
+  {% endif %}
+
+  <article class="character-home-markdown markdown-preview" id="characterHomePreview"></article>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/markdown_editor.js') }}"></script>
+<script src="{{ url_for('static', filename='js/character_home.js') }}"></script>
+{% endblock %}

@@ -1,56 +1,4 @@
 (function () {
-  function localizeEvaluationLabel(label, isRomance) {
-    const text = String(label || "").trim();
-    if (!text) {
-      return isRomance ? "恋愛度" : "進行度";
-    }
-    const lowered = text.toLowerCase();
-    if (lowered === "love progress") return "恋愛度";
-    if (lowered === "good progress") return "良好";
-    if (lowered === "interest progress") return "関心度";
-    if (lowered === "progress") return "進行度";
-    return text;
-  }
-
-  function localizeEvaluationReason(reason, isRomance) {
-    const text = String(reason || "").trim();
-    if (!text) return "";
-    if (!/[A-Za-z]/.test(text)) {
-      return text;
-    }
-    let localized = text;
-    localized = localized.replace(/however/gi, "ただし");
-    localized = localized.replace(/but/gi, "ただし");
-    localized = localized.replace(/ and /gi, "、");
-    localized = localized.replace(/The player /gi, "プレイヤーは");
-    localized = localized.replace(/This /gi, "これにより");
-    localized = localized.replace(/the exchange/gi, "会話");
-    localized = localized.replace(/is becoming/gi, "は");
-    localized = localized.replace(/is still/gi, "はまだ");
-    localized = localized.replace(/mostly about/gi, "主に");
-    localized = localized.replace(/more personal and attentive/gi, "より個人的で丁寧なものになっている");
-    localized = localized.replace(/not yet strongly romantic/gi, "まだ強い恋愛段階ではない");
-    localized = localized.replace(/progressing well/gi, "順調に進んでいる");
-    localized = localized.replace(/matched her preference/gi, "好みに合う反応ができている");
-    localized = localized.replace(/made her feel understood and delighted/gi, "理解されて嬉しいと感じさせている");
-    localized = localized.replace(/increases interest and trust/gi, "関心と信頼が高まっている");
-    localized = localized.replace(/responds well to/gi, "に好意的に反応している");
-    localized = localized.replace(/is attracted by/gi, "に惹かれている");
-    localized = localized.replace(/dislikes approach/gi, "の接し方は苦手");
-    localized = localized.replace(/has taboo topic/gi, "にとって地雷話題は");
-    localized = localized.replace(/feels boundary crossed by/gi, "は一線を越えたと感じやすい");
-    localized = localized.replace(/likes /gi, "が好き");
-    localized = localized.replace(/dislikes /gi, "が苦手");
-    localized = localized.replace(/is interested in hobby /gi, "の趣味に関心がある");
-    localized = localized.replace(/\s+/g, " ").trim();
-    if (/[A-Za-z]/.test(localized)) {
-      return isRomance
-        ? "直近の会話と反応から、恋愛度がどの程度進んだかを評価しています。"
-        : "直近の会話と反応から、進行度を評価しています。";
-    }
-    return localized;
-  }
-
   function resolveStageDimensions(selectedImage) {
     const asset = selectedImage?.asset || {};
     const width = Number(asset.width);
@@ -125,10 +73,6 @@
   function renderSelectedImage(selectedImage, options) {
     const {
       selectedImagePanel,
-      evaluation,
-      isRomance,
-      score,
-      progressDetailsVisible,
       textboxVisible,
       imageLoading,
       modeBadgeText,
@@ -137,23 +81,6 @@
     } = options;
     applyStageDimensions(selectedImage, selectedImagePanel);
     const mediaUrl = selectedImage?.asset?.media_url;
-    const evaluationMarkup = evaluation ? `
-      <div class="live-chat-eval-badge ${isRomance ? "is-romance" : ""}" id="liveChatEvalBadge">
-        <div class="live-chat-eval-head">
-          <div>
-            <div class="live-chat-eval-label">${NovelUI.escape(localizeEvaluationLabel(evaluation.label, isRomance))}</div>
-            <div class="live-chat-eval-score">${isRomance ? "恋愛度 " : ""}${score}</div>
-          </div>
-          <button class="live-chat-eval-toggle" id="liveChatEvalDetailButton" type="button">${progressDetailsVisible ? "詳細を閉じる" : "詳細"}</button>
-        </div>
-        <div class="live-chat-eval-bar">
-          <div class="live-chat-eval-fill ${isRomance ? "is-romance" : ""}" style="width:${score}%"></div>
-        </div>
-        ${evaluation.reason && progressDetailsVisible
-          ? `<div class="live-chat-eval-reason">${NovelUI.escape(localizeEvaluationReason(evaluation.reason, isRomance))}</div>`
-          : ""}
-      </div>
-    ` : "";
     const novelMarkup = `
       <div class="live-chat-novel-box ${textboxVisible ? "" : "is-hidden"}" id="liveChatNovelBox">
         <div class="live-chat-novel-speaker" id="liveChatNovelSpeaker">${NovelUI.escape(novelSpeakerText || "")}</div>
@@ -175,7 +102,6 @@
       ? `<div class="live-chat-mode-badge">${NovelUI.escape(modeBadgeText)}</div>`
       : "";
     selectedImagePanel.innerHTML = `
-      ${evaluationMarkup}
       <div class="live-chat-stage-frame ${imageLoading ? "is-loading" : ""}">
         ${modeBadgeMarkup}
         ${stageBody}

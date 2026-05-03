@@ -15,6 +15,7 @@ from .world_service import WorldService
 from .world_map_service import WorldMapService
 from .character_user_memory_service import CharacterUserMemoryService
 from .character_memory_note_service import CharacterMemoryNoteService
+from .character_intel_hint_service import CharacterIntelHintService
 from .session_objective_note_service import SessionObjectiveNoteService
 from .world_news_service import WorldNewsService
 from ..repositories.character_repository import CharacterRepository
@@ -44,6 +45,7 @@ class LiveChatContextService:
         text_ai_client: TextAIClient,
         character_user_memory_service: CharacterUserMemoryService | None = None,
         character_memory_note_service: CharacterMemoryNoteService | None = None,
+        character_intel_hint_service: CharacterIntelHintService | None = None,
         session_objective_note_service: SessionObjectiveNoteService | None = None,
         world_news_service: WorldNewsService | None = None,
         character_repository: CharacterRepository | None = None,
@@ -66,6 +68,7 @@ class LiveChatContextService:
         self._text_ai_client = text_ai_client
         self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
         self._character_memory_note_service = character_memory_note_service or CharacterMemoryNoteService()
+        self._character_intel_hint_service = character_intel_hint_service or CharacterIntelHintService()
         self._session_objective_note_service = session_objective_note_service or SessionObjectiveNoteService()
         self._world_news_service = world_news_service or WorldNewsService()
         self._character_repository = character_repository or CharacterRepository()
@@ -121,6 +124,89 @@ class LiveChatContextService:
                 "message_role": "assistant",
             },
         )
+
+    def _hint_topics_for_character(self, character: dict) -> list[dict]:
+        profile = character.get("memory_profile") or {}
+        if not isinstance(profile, dict):
+            profile = {}
+        romance = profile.get("romance_preferences") or {}
+        if not isinstance(romance, dict):
+            romance = {}
+        sources = [
+            ("likes", profile.get("likes") or character.get("favorite_items") or [], 40),
+            ("hobbies", profile.get("hobbies") or [], 40),
+            ("attraction", romance.get("attraction_points") or [], 55),
+            ("favorite_approach", romance.get("favorite_approach") or [], 55),
+            ("memory", profile.get("memorable_events") or [], 65),
+        ]
+        topics = []
+        seen = set()
+        for kind, values, threshold in sources:
+            for value in values or []:
+                topic = str(value or "").strip()
+                if not topic:
+                    continue
+                key = topic.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                topics.append({"kind": kind, "topic": topic[:120], "reveal_threshold": threshold})
+        return topics[:8]
+
+    def _build_character_intel_context(
+        self,
+        *,
+        user_id: int,
+        project_id: int,
+        active_characters: list[dict],
+        project_characters: list[dict],
+        character_user_memories: dict,
+    ) -> dict:
+        names = {int(character.get("id") or 0): character.get("name") for character in project_characters or []}
+        active_ids = [int(character.get("id") or 0) for character in active_characters or [] if character.get("id")]
+        learned_rows = self._character_intel_hint_service.list_revealed_for_targets(user_id, active_ids)
+        learned = [
+            self._character_intel_hint_service.serialize_hint(
+                row,
+                target_name=names.get(row.target_character_id),
+                source_name=names.get(row.source_character_id),
+            )
+            for row in learned_rows
+        ]
+        available = []
+        for source in active_characters or []:
+            source_id = int(source.get("id") or 0)
+            if not source_id:
+                continue
+            source_memory = character_user_memories.get(str(source_id)) or {}
+            try:
+                source_score = int(source_memory.get("affinity_score") or 0)
+            except (TypeError, ValueError):
+                source_score = 0
+            existing = self._character_intel_hint_service.existing_topics_for_source(user_id, source_id)
+            for target in project_characters or []:
+                target_id = int(target.get("id") or 0)
+                if not target_id or target_id == source_id:
+                    continue
+                for item in self._hint_topics_for_character(target):
+                    topic_key = str(item["topic"]).strip().lower()
+                    if (target_id, topic_key) in existing:
+                        continue
+                    if source_score < int(item["reveal_threshold"]):
+                        continue
+                    available.append(
+                        {
+                            "source_character_id": source_id,
+                            "source_character_name": source.get("name"),
+                            "target_character_id": target_id,
+                            "target_character_name": target.get("name"),
+                            "topic": item["topic"],
+                            "hint_text": f"{target.get('name') or '相手'}は「{item['topic']}」に反応しやすい。",
+                            "reveal_threshold": item["reveal_threshold"],
+                            "source_affinity_score": source_score,
+                        }
+                    )
+        return {"available_hints": available[:12], "learned_hints_for_active_targets": learned[:20]}
 
     def list_sessions(
         self,
@@ -201,6 +287,17 @@ class LiveChatContextService:
                 continue
             row = self._character_user_memory_service.get_memory(session.owner_user_id, character_id)
             character_user_memories[str(character_id)] = self._character_user_memory_service.serialize_memory(row)
+        project_characters = [
+            self._serializer.serialize_character(row)
+            for row in self._character_repository.list_by_project(session.project_id)
+        ]
+        character_intel = self._build_character_intel_context(
+            user_id=session.owner_user_id,
+            project_id=session.project_id,
+            active_characters=characters,
+            project_characters=project_characters,
+            character_user_memories=character_user_memories,
+        )
         world = self._world_service.get_world(session.project_id)
         world_map_context = self._world_map_context(session.project_id)
         world_activity_context = self._world_activity_context(session.project_id, session.owner_user_id, characters)
@@ -221,6 +318,8 @@ class LiveChatContextService:
                 "world_activity": world_activity_context,
                 "session": self._serializer.serialize_session(session),
                 "character_user_memories": character_user_memories,
+                "character_intel": character_intel,
+                "project_characters": project_characters,
                 "session_objective_notes": session_objective_notes,
                 "session_objective_prompt_block": session_objective_prompt_block,
                 "messages": [],
@@ -246,6 +345,8 @@ class LiveChatContextService:
             "world_activity": world_activity_context,
             "session": self._serializer.serialize_session(session),
             "character_user_memories": character_user_memories,
+            "character_intel": character_intel,
+            "project_characters": project_characters,
             "session_objective_notes": session_objective_notes,
             "session_objective_prompt_block": session_objective_prompt_block,
             "room": self._live_chat_room_service.serialize_room(room) if room else None,

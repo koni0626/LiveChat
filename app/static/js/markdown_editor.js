@@ -7,6 +7,14 @@
     return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   }
 
+  function renderMarkdownImage(trimmed) {
+    const match = trimmed.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+    if (!match) return null;
+    const alt = escapeHtml(match[1] || "");
+    const src = escapeHtml(match[2] || "");
+    return `<figure class="markdown-image"><img src="${src}" alt="${alt}">${alt ? `<figcaption>${alt}</figcaption>` : ""}</figure>`;
+  }
+
   function markdownToHtml(markdown) {
     const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
     const html = [];
@@ -25,7 +33,11 @@
         closeList();
         continue;
       }
-      if (trimmed.startsWith("## ")) {
+      const imageHtml = renderMarkdownImage(trimmed);
+      if (imageHtml) {
+        closeList();
+        html.push(imageHtml);
+      } else if (trimmed.startsWith("## ")) {
         closeList();
         html.push(`<h5>${renderInlineMarkdown(trimmed.slice(3))}</h5>`);
       } else if (trimmed.startsWith("# ")) {

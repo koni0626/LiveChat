@@ -141,6 +141,7 @@ body::before {
   grid-template-columns: auto 1fr auto;
   grid-template-areas:
     "icon copy logout"
+    "points points points"
     "profile profile profile";
   align-items: center;
   gap: 0.6rem 0.7rem;
@@ -195,6 +196,50 @@ body::before {
   color: #ffd4df;
   transform: translateY(-1px);
 }
+
+.login-user-points {
+  grid-area: points;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.42rem 0.62rem;
+  border-radius: 0.72rem;
+  border: 1px solid rgba(103, 235, 255, 0.28);
+  background: rgba(0, 245, 212, 0.08);
+  color: #dffbff;
+  font-size: 0.78rem;
+  line-height: 1;
+  text-decoration: none;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.login-user-points:hover {
+  border-color: rgba(103, 235, 255, 0.58);
+  background: rgba(0, 245, 212, 0.14);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.login-user-points i {
+  color: #7feaff;
+  flex: 0 0 auto;
+}
+
+.login-user-points-value {
+  margin-left: auto;
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.login-user-points-unit {
+  color: rgba(190, 232, 255, 0.74);
+  font-weight: 700;
+}
+
 
 .profile-quick-button {
   grid-area: profile;

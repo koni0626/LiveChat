@@ -11,7 +11,7 @@
         </div>
       </div>
       <p class="text-secondary mb-4">ノベルゲーム制作の管理画面へログインします。初回利用なら新規登録から始められます。</p>
-      <form id="loginForm" class="vstack gap-3">
+      <form id="loginForm" class="vstack gap-3" data-auth-form data-auth-endpoint="/api/v1/auth/login" data-error-target="loginError" data-user-redirect="{{ url_for('ui.project_list_page') }}" data-admin-redirect="{{ url_for('ui.dashboard_page') }}" data-default-error="Login failed.">
         <div>
           <label class="form-label">メールアドレス</label>
           <input class="form-control form-control-lg" type="email" name="email" placeholder="creator@example.com" required>
@@ -39,27 +39,5 @@
 </section>
 {% endblock %}
 {% block scripts %}
-<script>
-(() => {
-  const form = document.getElementById("loginForm");
-  const errorBox = document.getElementById("loginError");
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    errorBox.classList.add("d-none");
-    const formData = new FormData(form);
-    try {
-      const result = await NovelUI.api("/api/v1/auth/login", {
-        method: "POST",
-        body: Object.fromEntries(formData.entries()),
-      });
-      location.href = result?.user?.role === "user"
-        ? "{{ url_for('ui.project_list_page') }}"
-        : "{{ url_for('ui.dashboard_page') }}";
-    } catch (error) {
-      errorBox.textContent = error.message || "ログインに失敗しました。";
-      errorBox.classList.remove("d-none");
-    }
-  });
-})();
-</script>
+<script src="{{ url_for('static', filename='js/auth_form.js') }}"></script>
 {% endblock %}

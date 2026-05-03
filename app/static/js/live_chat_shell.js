@@ -22,7 +22,6 @@
       messagesVisible: false,
       messageSortOrder: "desc",
       messageSearchQuery: "",
-      progressDetailsVisible: false,
       textboxVisible: true,
       imageLoading: false,
       replyLoading: false,
@@ -111,14 +110,6 @@
       }
     }
 
-    function setProgressDetailsVisible(visible) {
-      state.progressDetailsVisible = visible;
-      if (state.currentContext) {
-        renderSelectedImage(state.selectedImage, state.currentContext);
-        renderMessages(state.currentContext.messages || [], state.currentContext);
-      }
-    }
-
     function setTextboxVisible(visible) {
       state.textboxVisible = visible;
       const box = document.getElementById("liveChatNovelBox");
@@ -140,19 +131,11 @@
     function renderSelectedImage(selectedImage, currentContext) {
       state.selectedImage = selectedImage;
       state.currentContext = currentContext;
-      const evaluation = currentContext?.state?.state_json?.conversation_evaluation || null;
       const currentLocation = currentContext?.state?.state_json?.current_location || {};
       const isDressUpMode = String(currentLocation?.id || "") === "lccd";
       const modeBadgeText = state.modeBadgeText || (isDressUpMode ? "お着替えモード" : "");
-      const isRomance = (evaluation?.theme || "general") === "romance";
-      const score = Math.max(0, Math.min(100, Number(evaluation?.score || 0)));
-      const novelElements = getNovelElements();
       view.renderSelectedImage(selectedImage, {
         selectedImagePanel,
-        evaluation,
-        isRomance,
-        score,
-        progressDetailsVisible: state.progressDetailsVisible,
         textboxVisible: state.textboxVisible,
         imageLoading: state.imageLoading,
         replyLoading: state.replyLoading,
@@ -297,15 +280,10 @@
       toggleTextboxButton?.addEventListener("click", () => {
         setTextboxVisible(!state.textboxVisible);
       });
-      document.addEventListener("click", (event) => {
-        if (!event.target.closest("#liveChatEvalDetailButton")) return;
-        setProgressDetailsVisible(!state.progressDetailsVisible);
-      });
     }
 
     function initialize() {
       setMessagesVisible(false);
-      setProgressDetailsVisible(false);
       setTextboxVisible(true);
       bindToggleButtons();
       bindNovelAdvanceEvents();
@@ -323,7 +301,6 @@
       setImageLoading,
       setModeBadgeText,
       setMessagesVisible,
-      setProgressDetailsVisible,
       setTextboxVisible,
     };
   }

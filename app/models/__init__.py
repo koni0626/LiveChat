@@ -7,6 +7,7 @@ from .chat_session import ChatSession
 from .character import Character
 from .character_memory_note import CharacterMemoryNote
 from .character_memory_summary import CharacterMemorySummary
+from .character_intel_hint import CharacterIntelHint
 from .character_user_memory import CharacterUserMemory
 from .character_feed_profile import CharacterFeedProfile
 from .character_outfit import CharacterOutfit
@@ -21,6 +22,7 @@ from .feed_post import FeedPost
 from .live_chat_room import LiveChatRoom
 from .letter import Letter
 from .project import Project
+from .point_transaction import PointTransaction
 from .outing_session import OutingSession
 from .session_image import SessionImage
 from .session_gift_event import SessionGiftEvent
@@ -49,6 +51,7 @@ __all__ = [
     "Character",
     "CharacterMemoryNote",
     "CharacterMemorySummary",
+    "CharacterIntelHint",
     "CharacterUserMemory",
     "CharacterFeedProfile",
     "CharacterOutfit",
@@ -64,6 +67,7 @@ __all__ = [
     "Letter",
     "OutingSession",
     "Project",
+    "PointTransaction",
     "SessionImage",
     "SessionGiftEvent",
     "SessionState",

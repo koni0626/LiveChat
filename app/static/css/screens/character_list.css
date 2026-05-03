@@ -183,6 +183,13 @@ body[data-screen="character-list"] .character-card-introduction {
   overflow-wrap: anywhere;
 }
 
+body[data-screen="character-list"] .character-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: auto;
+}
+
 body[data-screen="character-list"] .character-delete-button {
   justify-self: start;
   align-self: end;

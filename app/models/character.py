@@ -21,6 +21,7 @@ class Character(db.Model, TimestampMixin, SoftDeleteMixin):
     appearance_summary = db.Column(db.Text)
     art_style = db.Column(db.Text)
     introduction_text = db.Column(db.Text)
+    home_markdown = db.Column(db.Text)
     memory_notes = db.Column(db.Text)
     favorite_items_json = db.Column(db.Text)
     memory_profile_json = db.Column(db.Text)
