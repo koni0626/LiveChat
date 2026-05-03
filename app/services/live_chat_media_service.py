@@ -409,6 +409,8 @@ class LiveChatMediaService:
                         "size": payload.get("size") or "1536x1024",
                         "aspect_ratio": result.get("aspect_ratio"),
                         "revised_prompt": result.get("revised_prompt"),
+                        "prompt_after_safety_retry": result.get("prompt_after_safety_retry"),
+                        "prompt_before_safety_retry": result.get("prompt_before_safety_retry"),
                         "reference_asset_ids": reference_asset_ids,
                         "input_fidelity": (payload.get("input_fidelity") or "high") if reference_paths else None,
                     }

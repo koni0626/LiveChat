@@ -95,3 +95,9 @@ class Config:
         "no",
         "off",
     }
+    LIVE_CHAT_CONVERSATION_DIRECTOR_ENABLED = os.getenv("LIVE_CHAT_CONVERSATION_DIRECTOR_ENABLED", "true").lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }

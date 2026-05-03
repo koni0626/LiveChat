@@ -139,9 +139,20 @@ class LiveChatConversationService:
         state_json["conversation_evaluation"] = evaluation
         return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
 
+    def _conversation_director_enabled(self) -> bool:
+        try:
+            return bool(current_app.config.get("LIVE_CHAT_CONVERSATION_DIRECTOR_ENABLED", True))
+        except RuntimeError:
+            return True
+
     def update_conversation_director(self, session_id: int, context: dict, user_message_text: str):
         state_row = self._session_state_service.get_state(session_id)
         state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        if not self._conversation_director_enabled():
+            if "conversation_director" not in state_json:
+                return None
+            state_json.pop("conversation_director", None)
+            return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
         director = text_support.generate_conversation_director(self._text_ai_client, context, user_message_text)
         relationship_state = dict(state_json.get("relationship_state") or {})
         relationship_state = prompt_support.apply_director_relationship_update(relationship_state, context, director)
@@ -628,67 +639,6 @@ class LiveChatConversationService:
         prompt = prompt_support.apply_visual_style(prompt, context)
         return prompt_support.forbid_text_in_image(prompt)
 
-    def _build_location_scene_final_prompt(self, context: dict, location) -> str:
-        character_names = "、".join(character.get("name") or "" for character in context.get("characters") or [])
-        prompt = "\n".join(
-            [
-                "提供された中間画像をベースに、ライブチャットのノベルゲーム用ワンシーン画像へ仕上げる。",
-                "同じキャラクター、同じ衣装、同じ移動先背景を維持する。",
-                "ただし中間画像の立ち姿やポーズは固定しない。参照画像は人物・衣装・背景の資料であり、ポーズ資料ではない。",
-                "変更するのは主にポーズ、表情、カメラ角度、構図、ライティング、空気感。",
-                "キャラクターが移動先で会話を始める直前の、魅力的なイベントCGにする。",
-                "キャラクターは棒立ち禁止。場所に反応している演技を必ず入れる。",
-                "例: 半身で振り返る、歩きながらこちらを見る、片手で案内する、展示物や手すりに軽く触れる、景色を見上げる、少し身を乗り出す、椅子やカウンターに自然にもたれる。",
-                "全身カタログ構図、正面直立、左右対称の棒立ち、無表情、証明写真風は禁止。",
-                "構図はノベルゲームの会話イベントCGらしく、バストアップから膝上程度でもよい。必ずしも全身を入れない。",
-                "背景をグレーや単色に戻さない。必ず移動先施設の背景を残す。",
-                "衣装カタログ画像ではなく、ノベルゲームの会話シーンとして自然に見せる。",
-                "背景とキャラクターが同じ空間にいるように、床、奥行き、照明、影、反射を合わせる。",
-                "画像内に文字、ロゴ、字幕、吹き出し、UI、看板の可読文字を入れない。",
-                f"移動先施設: {location.name or ''}",
-                f"施設説明: {location.description or ''}",
-                f"登場キャラクター: {character_names}",
-            ]
-        )
-        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
-        prompt = prompt_support.apply_visual_style(prompt, context)
-        return prompt_support.forbid_text_in_image(prompt)
-
-    def _refine_location_scene_pose(
-        self,
-        session_id: int,
-        context: dict,
-        location,
-        generated_image: dict | None,
-        payload: dict,
-        *,
-        image_type: str,
-    ):
-        if not generated_image:
-            return generated_image
-        asset_id = generated_image.get("asset_id") or ((generated_image.get("asset") or {}).get("id"))
-        if not asset_id:
-            return generated_image
-        prompt = self._build_location_scene_final_prompt(context, location)
-        try:
-            return self._media_service.generate_image(
-                session_id,
-                {
-                    "image_type": image_type,
-                    "prompt_text": prompt,
-                    "use_existing_prompt": True,
-                    "reference_asset_ids": [asset_id],
-                    "skip_character_references": True,
-                    "skip_outfit_prompt": True,
-                    "input_fidelity": "low",
-                    "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
-                    "quality": payload.get("quality") or "low",
-                },
-            )
-        except Exception:
-            current_app.logger.exception("location scene pose refinement failed")
-            return generated_image
-
     def move_to_location(self, session_id: int, location_id: int, payload: dict | None = None):
         payload = dict(payload or {})
         session = self._chat_session_service.get_session(session_id)
@@ -783,14 +733,6 @@ class LiveChatConversationService:
                         "quality": payload.get("quality") or "low",
                     },
                 )
-            generated_image = self._refine_location_scene_pose(
-                session_id,
-                context,
-                location,
-                generated_image,
-                payload,
-                image_type="location_move_event_cg",
-            )
         except Exception as exc:
             current_app.logger.exception("location move image generation failed")
             image_generation_error = str(exc)
@@ -956,14 +898,6 @@ class LiveChatConversationService:
                         "quality": payload.get("quality") or "low",
                     },
                 )
-            generated_image = self._refine_location_scene_pose(
-                session_id,
-                context,
-                prompt_location,
-                generated_image,
-                payload,
-                image_type="location_service_event_cg",
-            )
         except Exception as exc:
             current_app.logger.exception("location service image generation failed")
             image_generation_error = str(exc)

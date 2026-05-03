@@ -64,6 +64,8 @@ class LiveChatSerializer:
 
     def serialize_character(self, character):
         base_asset = self._asset_service.get_asset(character.base_asset_id) if getattr(character, "base_asset_id", None) else None
+        thumbnail_asset = self._asset_service.get_asset(character.thumbnail_asset_id) if getattr(character, "thumbnail_asset_id", None) else None
+        bromide_asset = self._asset_service.get_asset(character.bromide_asset_id) if getattr(character, "bromide_asset_id", None) else None
         memory_profile = self.load_json(getattr(character, "memory_profile_json", None)) or {}
         if not isinstance(memory_profile, dict):
             memory_profile = {}
@@ -82,11 +84,14 @@ class LiveChatSerializer:
             "ng_rules": character.ng_rules,
             "appearance_summary": character.appearance_summary,
             "art_style": getattr(character, "art_style", None),
+            "introduction_text": getattr(character, "introduction_text", None),
             "memory_notes": getattr(character, "memory_notes", None),
             "favorite_items": self.load_json(getattr(character, "favorite_items_json", None)) or [],
             "memory_profile": memory_profile,
             "feed_profile_text": getattr(feed_profile, "profile_text", None) if feed_profile else None,
             "base_asset": self.serialize_asset(base_asset),
+            "thumbnail_asset": self.serialize_asset(thumbnail_asset),
+            "bromide_asset": self.serialize_asset(bromide_asset),
         }
 
     def serialize_session(self, row):

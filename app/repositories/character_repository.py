@@ -159,11 +159,13 @@ class CharacterRepository:
             ng_rules=payload.get("ng_rules"),
             appearance_summary=payload.get("appearance_summary"),
             art_style=payload.get("art_style"),
+            introduction_text=payload.get("introduction_text"),
             memory_notes=payload.get("memory_notes"),
             favorite_items_json=_normalize_favorite_items(payload),
             memory_profile_json=_memory_profile_from_payload(payload, DEFAULT_MEMORY_PROFILE),
             base_asset_id=payload.get("base_asset_id"),
             thumbnail_asset_id=payload.get("thumbnail_asset_id"),
+            bromide_asset_id=payload.get("bromide_asset_id"),
         )
         db.session.add(character)
         db.session.commit()
@@ -187,9 +189,11 @@ class CharacterRepository:
             "ng_rules",
             "appearance_summary",
             "art_style",
+            "introduction_text",
             "memory_notes",
             "base_asset_id",
             "thumbnail_asset_id",
+            "bromide_asset_id",
         ):
             if field in payload:
                 setattr(character, field, payload[field])

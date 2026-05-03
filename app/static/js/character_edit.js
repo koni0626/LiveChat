@@ -22,7 +22,16 @@
   const portraitGenerateForm = document.getElementById("portraitGenerateForm");
   const generatePortraitButton = document.getElementById("generatePortraitButton");
   const generatePortraitButtonDefaultHtml = generatePortraitButton?.innerHTML || '<i class="bi bi-camera-fill"></i><span>顔写真をAI生成</span>';
+  const introductionTextarea = document.getElementById("characterIntroductionText");
+  const generateIntroductionButton = document.getElementById("characterIntroductionGenerateButton");
+  const generateIntroductionButtonDefaultHtml = generateIntroductionButton?.innerHTML || '<i class="bi bi-stars"></i><span>自動生成</span>';
+  const bromideGenerateForm = document.getElementById("bromideGenerateForm");
+  const generateBromideButton = document.getElementById("generateBromideButton");
+  const generateBromideButtonDefaultHtml = generateBromideButton?.innerHTML || '<i class="bi bi-image-fill"></i><span>プロマイドをAI生成</span>';
+  const bromideAssetPreview = document.getElementById("bromideAssetPreview");
   let portraitGenerationInProgress = false;
+  let introductionGenerationInProgress = false;
+  let bromideGenerationInProgress = false;
   const markdownGrid = document.getElementById("characterMarkdownGrid");
   const modalElement = document.getElementById("markdownEditorModal");
   document.body.appendChild(modalElement);
@@ -65,8 +74,10 @@
 
   function characterPayload() {
     const body = Object.fromEntries(new FormData(form).entries());
+    if (introductionTextarea) body.introduction_text = introductionTextarea.value;
     body.base_asset_id = body.base_asset_id ? Number(body.base_asset_id) : null;
     body.thumbnail_asset_id = body.thumbnail_asset_id ? Number(body.thumbnail_asset_id) : null;
+    body.bromide_asset_id = body.bromide_asset_id ? Number(body.bromide_asset_id) : null;
     return body;
   }
 
@@ -116,6 +127,33 @@
     `;
   }
 
+  function renderBromideAsset(asset) {
+    if (!bromideAssetPreview) return;
+    if (!asset?.media_url) {
+      bromideAssetPreview.innerHTML = `
+        <div class="base-asset-empty">
+          <div class="base-asset-empty-icon"><i class="bi bi-image-fill"></i></div>
+          <div>
+            <div class="base-asset-empty-title">プロマイド画像はまだ生成されていません</div>
+            <div class="base-asset-empty-text">基準画像とキャラクター設定をもとに、3:4の縦長画像を生成します。</div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    bromideAssetPreview.innerHTML = `
+      <div class="character-bromide-preview">
+        <img src="${asset.media_url}" alt="${NovelUI.escape(asset.file_name || "character bromide")}">
+        <div class="small text-secondary">${NovelUI.escape(asset.file_name || "")}</div>
+      </div>
+    `;
+  }
+
+  function syncCharacterExtras(character) {
+    if (introductionTextarea) introductionTextarea.value = character?.introduction_text || "";
+    renderBromideAsset(character?.bromide_asset || null);
+  }
+
   async function saveCharacter({ silent = false } = {}) {
     const body = characterPayload();
     let character;
@@ -128,6 +166,7 @@
     NovelUI.fillForm(form, character);
     renderBaseAsset(character.base_asset);
     renderThumbnailAsset(character.thumbnail_asset);
+    syncCharacterExtras(character);
     markdownEditor.renderCards();
     if (!silent) NovelUI.toast("キャラクターを保存しました。");
     return character;
@@ -198,6 +237,7 @@
       NovelUI.fillForm(form, updated);
       renderThumbnailAsset(updated.thumbnail_asset || asset);
       renderBaseAsset(updated.base_asset);
+      syncCharacterExtras(updated);
       if (thumbnailAssetFileInput) thumbnailAssetFileInput.value = "";
       NovelUI.toast("顔アイコンをアップロードしました。");
       if (!initialCharacterId && currentCharacterId) {
@@ -226,6 +266,24 @@
       : generatePortraitButtonDefaultHtml;
   }
 
+  function setIntroductionGenerating(active) {
+    if (!generateIntroductionButton) return;
+    generateIntroductionButton.disabled = active;
+    generateIntroductionButton.setAttribute("aria-busy", active ? "true" : "false");
+    generateIntroductionButton.innerHTML = active
+      ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>生成中...'
+      : generateIntroductionButtonDefaultHtml;
+  }
+
+  function setBromideGenerating(active) {
+    if (!generateBromideButton) return;
+    generateBromideButton.disabled = active;
+    generateBromideButton.setAttribute("aria-busy", active ? "true" : "false");
+    generateBromideButton.innerHTML = active
+      ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>生成中...'
+      : generateBromideButtonDefaultHtml;
+  }
+
   async function generateBaseImage() {
     setGenerating(true);
     try {
@@ -235,6 +293,7 @@
       NovelUI.fillForm(form, generated);
       renderBaseAsset(generated.base_asset);
       renderThumbnailAsset(generated.thumbnail_asset);
+      syncCharacterExtras(generated);
       markdownEditor.renderCards();
       NovelUI.toast("基本情報から全身像を生成し、基準画像に設定しました。");
       if (!initialCharacterId) {
@@ -260,6 +319,7 @@
       NovelUI.fillForm(form, generated);
       renderBaseAsset(generated.base_asset);
       renderThumbnailAsset(generated.thumbnail_asset);
+      syncCharacterExtras(generated);
       markdownEditor.renderCards();
       NovelUI.toast("キャラクター設定から顔写真を生成しました。");
       if (!initialCharacterId) {
@@ -270,6 +330,58 @@
     } finally {
       portraitGenerationInProgress = false;
       requestAnimationFrame(() => setPortraitGenerating(false));
+    }
+  }
+
+  async function generateIntroductionText() {
+    if (introductionGenerationInProgress) return;
+    introductionGenerationInProgress = true;
+    setIntroductionGenerating(true);
+    try {
+      const character = await saveCharacter({ silent: true });
+      const generated = await NovelUI.api(`/api/v1/characters/${character.id}/introduction/generate`, {
+        method: "POST",
+        body: { current_character: characterPayload() },
+      });
+      NovelUI.fillForm(form, generated);
+      syncCharacterExtras(generated);
+      markdownEditor.renderCards();
+      NovelUI.toast("自己紹介文を生成しました。");
+      if (!initialCharacterId) {
+        history.replaceState(null, "", `/projects/${projectId}/characters/${generated.id}/edit`);
+      }
+    } catch (error) {
+      NovelUI.toast(error.message || "自己紹介文の生成に失敗しました。", "danger");
+    } finally {
+      introductionGenerationInProgress = false;
+      requestAnimationFrame(() => setIntroductionGenerating(false));
+    }
+  }
+
+  async function generateBromideImage() {
+    if (bromideGenerationInProgress) return;
+    bromideGenerationInProgress = true;
+    setBromideGenerating(true);
+    try {
+      const character = await saveCharacter({ silent: true });
+      const generated = await NovelUI.api(`/api/v1/characters/${character.id}/bromide/generate`, {
+        method: "POST",
+        body: { size: "1024x1536", quality: "medium" },
+      });
+      NovelUI.fillForm(form, generated);
+      renderBaseAsset(generated.base_asset);
+      renderThumbnailAsset(generated.thumbnail_asset);
+      syncCharacterExtras(generated);
+      markdownEditor.renderCards();
+      NovelUI.toast("プロマイド画像を生成しました。");
+      if (!initialCharacterId) {
+        history.replaceState(null, "", `/projects/${projectId}/characters/${generated.id}/edit`);
+      }
+    } catch (error) {
+      NovelUI.toast(error.message || "プロマイド画像の生成に失敗しました。", "danger");
+    } finally {
+      bromideGenerationInProgress = false;
+      requestAnimationFrame(() => setBromideGenerating(false));
     }
   }
 
@@ -300,12 +412,14 @@
     if (!currentCharacterId) {
       renderBaseAsset(null);
       renderThumbnailAsset(null);
+      syncCharacterExtras(null);
       return;
     }
     const character = await NovelUI.api(`/api/v1/characters/${currentCharacterId}`);
     NovelUI.fillForm(form, character);
     renderBaseAsset(character.base_asset);
     renderThumbnailAsset(character.thumbnail_asset);
+    syncCharacterExtras(character);
     markdownEditor.renderCards();
   }
 
@@ -409,6 +523,15 @@
     portraitGenerateForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       await generatePortraitImage();
+    });
+
+    generateIntroductionButton?.addEventListener("click", async () => {
+      await generateIntroductionText();
+    });
+
+    bromideGenerateForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await generateBromideImage();
     });
 
     document.getElementById("characterAiAssist").addEventListener("click", () => {

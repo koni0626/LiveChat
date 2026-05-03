@@ -217,7 +217,38 @@ class ImageAIClient:
         )
 
     def _rewrite_prompt_for_safety_retry(self, prompt: str) -> str:
-        return self._rewrite_prompt_for_image_safety(prompt, force=True)
+        text = str(prompt or "")
+        replacements = (
+            ("touching her breast", "hand near her shoulder or hair"),
+            ("touch her breast", "hand near her shoulder or hair"),
+            ("hands on breasts", "hands near shoulders"),
+            ("hands on genitals", "hands away from intimate areas"),
+            ("sexual act", "romantic tension"),
+            ("explicit sexual contact", "romantic closeness"),
+            ("topless", "wearing a glamorous neckline outfit"),
+            ("nipple", "glamorous neckline"),
+            ("areola", "glamorous neckline"),
+            ("genitals", "covered outfit silhouette"),
+            ("undress", "adjusting her outfit slightly"),
+            ("nude", "fully clothed"),
+            ("naked", "fully clothed"),
+        )
+        replacement_lookup = {source: target for source, target in replacements}
+        replacement_lookup.update({source.lower(): target for source, target in replacements})
+        pattern = re.compile(
+            "|".join(re.escape(source) for source, _target in sorted(replacements, key=lambda item: len(item[0]), reverse=True)),
+            flags=re.IGNORECASE,
+        )
+        rewritten = pattern.sub(
+            lambda match: replacement_lookup.get(
+                match.group(0),
+                replacement_lookup.get(match.group(0).lower(), match.group(0)),
+            ),
+            text,
+        )
+        if rewritten == text:
+            return text
+        return rewritten
 
     def _safety_mode(self) -> str:
         mode = str(os.getenv("IMAGE_PROMPT_SAFETY_MODE") or "both").strip().lower()
@@ -640,6 +671,7 @@ class ImageAIClient:
         result["fallback_from_provider"] = original_provider
         result["fallback_from_model"] = original_model
         result["prompt_before_safety_retry"] = prompt_before_retry
+        result["prompt_after_safety_retry"] = prompt
         return result
 
     def generate_image(
@@ -712,6 +744,7 @@ class ImageAIClient:
             result["safety_retry"] = safety_retry
             if safety_retry:
                 result["prompt_before_safety_retry"] = prompt_before_retry
+                result["prompt_after_safety_retry"] = normalized_prompt
             return result
 
         if normalized_input_paths:
@@ -775,6 +808,7 @@ class ImageAIClient:
                 result["original_prompt_before_safety_preflight"] = original_prompt
             if safety_retry:
                 result["prompt_before_safety_retry"] = prompt_before_retry
+                result["prompt_after_safety_retry"] = normalized_prompt
             return result
 
         payload = self._build_request_payload(
@@ -837,4 +871,5 @@ class ImageAIClient:
             result["original_prompt_before_safety_preflight"] = original_prompt
         if safety_retry:
             result["prompt_before_safety_retry"] = prompt_before_retry
+            result["prompt_after_safety_retry"] = normalized_prompt
         return result

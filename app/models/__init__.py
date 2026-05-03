@@ -12,7 +12,10 @@ from .character_feed_profile import CharacterFeedProfile
 from .character_outfit import CharacterOutfit
 from .cinema_novel import CinemaNovel
 from .cinema_novel_chapter import CinemaNovelChapter
+from .cinema_novel_character_impression import CinemaNovelCharacterImpression
+from .cinema_novel_lore_entry import CinemaNovelLoreEntry
 from .cinema_novel_progress import CinemaNovelProgress
+from .cinema_novel_review import CinemaNovelReview
 from .feed_like import FeedLike
 from .feed_post import FeedPost
 from .live_chat_room import LiveChatRoom
@@ -51,7 +54,10 @@ __all__ = [
     "CharacterOutfit",
     "CinemaNovel",
     "CinemaNovelChapter",
+    "CinemaNovelCharacterImpression",
+    "CinemaNovelLoreEntry",
     "CinemaNovelProgress",
+    "CinemaNovelReview",
     "FeedLike",
     "FeedPost",
     "LiveChatRoom",

@@ -17,6 +17,7 @@ from .character_user_memory_service import CharacterUserMemoryService
 from .character_memory_note_service import CharacterMemoryNoteService
 from .session_objective_note_service import SessionObjectiveNoteService
 from .world_news_service import WorldNewsService
+from ..repositories.character_repository import CharacterRepository
 from ..repositories.feed_repository import FeedRepository
 from ..repositories.outing_session_repository import OutingSessionRepository
 
@@ -45,6 +46,7 @@ class LiveChatContextService:
         character_memory_note_service: CharacterMemoryNoteService | None = None,
         session_objective_note_service: SessionObjectiveNoteService | None = None,
         world_news_service: WorldNewsService | None = None,
+        character_repository: CharacterRepository | None = None,
         feed_repository: FeedRepository | None = None,
         outing_repository: OutingSessionRepository | None = None,
     ):
@@ -66,6 +68,7 @@ class LiveChatContextService:
         self._character_memory_note_service = character_memory_note_service or CharacterMemoryNoteService()
         self._session_objective_note_service = session_objective_note_service or SessionObjectiveNoteService()
         self._world_news_service = world_news_service or WorldNewsService()
+        self._character_repository = character_repository or CharacterRepository()
         self._feed_repository = feed_repository or FeedRepository()
         self._outing_repository = outing_repository or OutingSessionRepository()
 
@@ -81,11 +84,26 @@ class LiveChatContextService:
                     include_disabled=False,
                     limit=12,
                 )
-                item["ai_memory_prompt_block"] = self._character_memory_note_service.build_prompt_block(
+                prompt_block = self._character_memory_note_service.build_prompt_block(
                     user_id,
                     character_id,
                     limit=8,
                 )
+                cinema_notes = [
+                    note
+                    for note in item["ai_memory_notes"]
+                    if str(note.get("source_type") or "").startswith("cinema_novel")
+                ][:4]
+                if cinema_notes:
+                    cinema_block = "\n".join(
+                        [
+                            "Recent cinema viewing memories:",
+                            *[f"- {note.get('note') or ''}" for note in cinema_notes if note.get("note")],
+                            "Use these when the player mentions the reviewed work, its characters, or related topics.",
+                        ]
+                    )
+                    prompt_block = "\n".join(part for part in [prompt_block, cinema_block] if part)
+                item["ai_memory_prompt_block"] = prompt_block
             else:
                 item["ai_memory_notes"] = []
                 item["ai_memory_prompt_block"] = ""
@@ -257,6 +275,12 @@ class LiveChatContextService:
             for character in characters or []
             if character.get("id")
         }
+        try:
+            for character in self._character_repository.list_by_project(project_id):
+                if getattr(character, "id", None):
+                    character_names[int(character.id)] = character.name
+        except Exception:
+            pass
         location_names = {}
         try:
             location_names = {

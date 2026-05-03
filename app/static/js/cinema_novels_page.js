@@ -23,7 +23,14 @@
   const generateChapterImagesButton = document.getElementById("cinemaGenerateChapterImagesButton");
   const overwriteImagesCheck = document.getElementById("cinemaOverwriteImagesCheck");
   const closeChapterProductionButton = document.getElementById("cinemaChapterProductionClose");
+  const reviewPanel = document.getElementById("cinemaReviewPanel");
+  const reviewTitle = document.getElementById("cinemaReviewTitle");
+  const reviewCharacterSelect = document.getElementById("cinemaReviewCharacterSelect");
+  const createReviewButton = document.getElementById("cinemaCreateReviewButton");
+  const reviewCloseButton = document.getElementById("cinemaReviewCloseButton");
+  const reviewResult = document.getElementById("cinemaReviewResult");
   let activeNovel = null;
+  let activeReviewNovel = null;
   let latestProductionOutline = null;
   let latestProductionInput = null;
   let productionCharacters = [];
@@ -102,6 +109,12 @@
       const label = [character.name || `#${character.id}`, character.nickname ? `(${character.nickname})` : ""].filter(Boolean).join(" ");
       return `<option value="${escape(character.id)}">${escape(label)}</option>`;
     }).join("");
+    if (reviewCharacterSelect) {
+      reviewCharacterSelect.innerHTML = '<option value="">レビューするキャラクターを選択</option>' + (productionCharacters || []).map((character) => {
+        const label = [character.name || `#${character.id}`, character.nickname ? `(${character.nickname})` : ""].filter(Boolean).join(" ");
+        return `<option value="${escape(character.id)}">${escape(label)}</option>`;
+      }).join("");
+    }
   }
 
   async function waitProductionOutlineJob(job) {
@@ -186,6 +199,18 @@
     const href = `/projects/${projectId}/cinema-novels/${novel.id}`;
     const progressCopy = novel.progress ? "続きあり" : "未読";
     const posterUrl = novel.poster_asset?.media_url || novel.cover_asset?.media_url || "";
+    const reviews = Array.isArray(novel.reviews) ? novel.reviews : [];
+    const reviewersHtml = reviews.length ? `
+      <div class="cinema-reviewers" title="レビュー済み">
+        ${reviews.slice(0, 8).map((review) => {
+          const character = review.character || {};
+          const imageUrl = character.thumbnail_asset?.media_url || "";
+          return imageUrl
+            ? `<img src="${escape(imageUrl)}" alt="${escape(character.name || "")}" title="${escape(character.name || "")}">`
+            : `<span title="${escape(character.name || "")}">${escape(String(character.name || "?").slice(0, 1))}</span>`;
+        }).join("")}
+      </div>
+    ` : "";
     return `
       <article class="cinema-novel-card">
         <a class="cinema-novel-card-link" href="${href}">
@@ -212,8 +237,150 @@
 
   async function loadNovels() {
     const novels = await api(`/api/v1/projects/${projectId}/cinema-novels`);
+    window.__cinemaNovels = novels;
     list.innerHTML = novels.map(renderNovel).join("");
+    decorateReviewControls(novels);
     empty.hidden = novels.length > 0;
+  }
+
+  function decorateReviewControls(novels) {
+    const novelById = new Map((novels || []).map((novel) => [Number(novel.id), novel]));
+    list.querySelectorAll(".cinema-novel-card").forEach((card) => {
+      const productionButton = card.querySelector("[data-production-novel-id]");
+      const novelId = Number(productionButton?.dataset.productionNovelId || 0);
+      const novel = novelById.get(novelId);
+      if (!novel || !productionButton) return;
+      const body = card.querySelector(".cinema-novel-card-body");
+      const actions = card.querySelector(".cinema-novel-card-actions");
+      const reviews = Array.isArray(novel.reviews) ? novel.reviews : [];
+      if (body && reviews.length) {
+        const reviewers = document.createElement("div");
+        reviewers.className = "cinema-reviewers";
+        reviewers.title = "レビュー済み";
+        reviewers.innerHTML = reviews.slice(0, 8).map((review) => {
+          const character = review.character || {};
+          const imageUrl = character.thumbnail_asset?.media_url || "";
+          return imageUrl
+            ? `<img src="${escape(imageUrl)}" alt="${escape(character.name || "")}" title="${escape(character.name || "")}">`
+            : `<span title="${escape(character.name || "")}">${escape(String(character.name || "?").slice(0, 1))}</span>`;
+        }).join("");
+        body.appendChild(reviewers);
+      }
+      if (actions) {
+        const reviewButton = document.createElement("button");
+        reviewButton.className = "btn btn-sm btn-outline-dark";
+        reviewButton.type = "button";
+        reviewButton.dataset.reviewNovelId = String(novel.id);
+        reviewButton.innerHTML = `<i class="bi bi-chat-square-quote"></i> 映画レビュー`;
+        actions.insertBefore(reviewButton, productionButton);
+        const deleteButton = document.createElement("button");
+        deleteButton.className = "btn btn-sm btn-outline-danger cinema-novel-delete-button";
+        deleteButton.type = "button";
+        deleteButton.dataset.deleteNovelId = String(novel.id);
+        deleteButton.innerHTML = `<i class="bi bi-trash"></i> 削除`;
+        actions.appendChild(deleteButton);
+      }
+    });
+  }
+
+  function renderReviewResult(review) {
+    if (!reviewResult) return;
+    const character = review?.character || {};
+    const imageUrl = character.thumbnail_asset?.media_url || "";
+    const impressions = Array.isArray(review?.impressions) ? review.impressions : [];
+    const impressionHtml = impressions.length ? `
+      <div class="cinema-review-impressions">
+        <strong>作品内キャラへの印象</strong>
+        ${impressions.map((item) => `
+          <div class="cinema-review-impression-item">
+            <span>${escape(item.target_name || "")}</span>
+            <p>${escape(item.impression_text || "")}</p>
+            ${item.talk_hint ? `<small>${escape(item.talk_hint)}</small>` : ""}
+          </div>
+        `).join("")}
+      </div>
+    ` : "";
+    reviewResult.innerHTML = `
+      <article class="cinema-review-result-card">
+        <div class="cinema-review-result-character">
+          ${imageUrl ? `<img src="${escape(imageUrl)}" alt="">` : `<span>${escape(String(character.name || "?").slice(0, 1))}</span>`}
+          <div>
+            <strong>${escape(character.name || "")}</strong>
+            <small>${escape(review?.rating_label || "レビュー済み")}</small>
+          </div>
+        </div>
+        <p>${escape(review?.review_text || "")}</p>
+        <div class="cinema-review-memory">AIメモ: ${escape(review?.memory_note || "")}</div>
+        ${impressionHtml}
+      </article>
+    `;
+  }
+
+  function openReviewPanel(novelId) {
+    const novels = window.__cinemaNovels || [];
+    const novel = novels.find((item) => Number(item.id) === Number(novelId));
+    if (!reviewPanel || !novel) return;
+    activeReviewNovel = novel;
+    reviewPanel.hidden = false;
+    if (reviewTitle) reviewTitle.textContent = `映画レビュー / ${novel.title || ""}`;
+    if (reviewResult) reviewResult.innerHTML = "";
+    reviewPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function createReview() {
+    if (!activeReviewNovel || !reviewCharacterSelect || !createReviewButton || !reviewResult) return;
+    const characterId = Number(reviewCharacterSelect.value || 0);
+    if (!characterId) {
+      reviewResult.innerHTML = `<div class="cinema-review-error">レビューするキャラクターを選択してください。</div>`;
+      return;
+    }
+    const originalHtml = createReviewButton.innerHTML;
+    createReviewButton.disabled = true;
+    createReviewButton.innerHTML = `<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> レビュー中...`;
+    try {
+      const review = await api(`/api/v1/cinema-novels/${activeReviewNovel.id}/reviews`, {
+        method: "POST",
+        body: JSON.stringify({ character_id: characterId }),
+      });
+      renderReviewResult(review);
+      await loadNovels();
+    } catch (error) {
+      reviewResult.innerHTML = `<div class="cinema-review-error">${escape(error.message || "レビューに失敗しました")}</div>`;
+    } finally {
+      createReviewButton.disabled = false;
+      createReviewButton.innerHTML = originalHtml;
+    }
+  }
+
+  async function deleteNovel(novelId) {
+    const novel = (window.__cinemaNovels || []).find((item) => Number(item.id) === Number(novelId));
+    const title = novel?.title || "このノベル";
+    const ok = window.confirm(`「${title}」を削除します。レビュー投稿と映画レビュー由来のAIメモも非表示/無効化します。よろしいですか？`);
+    if (!ok) return;
+    const button = list?.querySelector(`[data-delete-novel-id="${CSS.escape(String(novelId))}"]`);
+    const originalHtml = button?.innerHTML;
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = `<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> 削除中...`;
+    }
+    try {
+      await api(`/api/v1/cinema-novels/${novelId}`, { method: "DELETE" });
+      if (activeNovel && Number(activeNovel.id) === Number(novelId)) {
+        activeNovel = null;
+        if (chapterPanel) chapterPanel.hidden = true;
+      }
+      if (activeReviewNovel && Number(activeReviewNovel.id) === Number(novelId)) {
+        activeReviewNovel = null;
+        if (reviewPanel) reviewPanel.hidden = true;
+      }
+      await loadNovels();
+    } catch (error) {
+      window.alert(error.message || "削除に失敗しました");
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = originalHtml;
+      }
+    }
   }
 
   function activeChapter() {
@@ -534,6 +701,18 @@
   importButton?.addEventListener("click", importAkagane);
   suggestPremiseButton?.addEventListener("click", suggestProductionPremise);
   list.addEventListener("click", (event) => {
+    const reviewButton = event.target.closest("[data-review-novel-id]");
+    if (reviewButton) {
+      event.preventDefault();
+      openReviewPanel(Number(reviewButton.dataset.reviewNovelId));
+      return;
+    }
+    const deleteButton = event.target.closest("[data-delete-novel-id]");
+    if (deleteButton) {
+      event.preventDefault();
+      deleteNovel(Number(deleteButton.dataset.deleteNovelId));
+      return;
+    }
     const button = event.target.closest("[data-production-novel-id]");
     if (!button) return;
     event.preventDefault();
@@ -552,6 +731,10 @@
   closeChapterProductionButton?.addEventListener("click", () => {
     if (chapterPanel) chapterPanel.hidden = true;
   });
+  reviewCloseButton?.addEventListener("click", () => {
+    if (reviewPanel) reviewPanel.hidden = true;
+  });
+  createReviewButton?.addEventListener("click", createReview);
   outlineForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     suggestProductionPremise();

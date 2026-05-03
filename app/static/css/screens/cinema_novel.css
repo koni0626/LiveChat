@@ -235,7 +235,149 @@
 }
 
 .cinema-novel-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
   padding: 0 .85rem .85rem;
+}
+
+.cinema-reviewers {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  margin-top: .65rem;
+}
+
+.cinema-reviewers img,
+.cinema-reviewers span,
+.cinema-review-result-character img,
+.cinema-review-result-character span {
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(103, 232, 249, .5);
+  border-radius: 999px;
+  background: rgba(6, 18, 32, .9);
+  color: #e7f9ff;
+  object-fit: cover;
+}
+
+.cinema-reviewers span,
+.cinema-review-result-character span {
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+}
+
+.cinema-review-panel {
+  display: grid;
+  gap: .85rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(103, 232, 249, .26);
+  border-radius: 1rem;
+  background: rgba(5, 12, 24, .9);
+  color: #e7f9ff;
+}
+
+.cinema-review-panel-head,
+.cinema-review-controls,
+.cinema-review-result-character {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+
+.cinema-review-panel-head {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.cinema-review-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.cinema-review-panel p {
+  margin: .25rem 0 0;
+  color: rgba(220, 246, 255, .72);
+}
+
+.cinema-review-controls .form-select {
+  max-width: 360px;
+  border-color: rgba(84, 177, 255, .18);
+  background: rgba(4, 10, 20, .76);
+  color: #e7f9ff;
+}
+
+.cinema-review-result-card {
+  display: grid;
+  gap: .65rem;
+  padding: .85rem;
+  border: 1px solid rgba(84, 177, 255, .18);
+  border-radius: .8rem;
+  background: rgba(4, 10, 20, .76);
+}
+
+.cinema-review-result-character strong,
+.cinema-review-result-character small {
+  display: block;
+}
+
+.cinema-review-result-character small,
+.cinema-review-memory {
+  color: rgba(180, 221, 255, .72);
+  font-size: .82rem;
+}
+
+.cinema-review-result-card p {
+  margin: 0;
+  color: #f8fdff;
+  font-weight: 700;
+}
+
+.cinema-review-impressions {
+  display: grid;
+  gap: .5rem;
+  margin-top: .25rem;
+}
+
+.cinema-review-impressions > strong {
+  color: #67e8f9;
+  font-size: .86rem;
+}
+
+.cinema-review-impression-item {
+  padding: .6rem .7rem;
+  border: 1px solid rgba(84, 177, 255, .16);
+  border-radius: .55rem;
+  background: rgba(4, 10, 20, .48);
+}
+
+.cinema-review-impression-item span {
+  display: block;
+  color: #e7f9ff;
+  font-weight: 800;
+}
+
+.cinema-review-impression-item p {
+  margin: .25rem 0 0;
+  color: rgba(248, 253, 255, .9);
+  font-weight: 600;
+}
+
+.cinema-review-impression-item small {
+  display: block;
+  margin-top: .3rem;
+  color: rgba(180, 221, 255, .72);
+}
+
+.cinema-review-error {
+  padding: .75rem;
+  border: 1px solid rgba(248, 113, 113, .45);
+  border-radius: .75rem;
+  background: rgba(127, 29, 29, .28);
+  color: #fecaca;
 }
 
 .cinema-production-panel-head,

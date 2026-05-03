@@ -738,6 +738,14 @@
     locationServicePanel.innerHTML = "";
   }
 
+  function closeLocationMovePanel() {
+    if (!locationMoveVisible) return;
+    locationMoveVisible = false;
+    selectedLocationMoveId = null;
+    renderLocationMovePanel(currentContext);
+    renderLocationServicePanel(currentContext);
+  }
+
   function renderLocationMovePanel(context) {
     if (!locationMovePanel) return;
     const locations = Array.isArray(context?.world_map?.locations) ? context.world_map.locations : [];
@@ -1357,6 +1365,13 @@
       setSceneChoiceLoading(false);
       shell.setImageLoading(false, "auto");
     }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!locationMoveVisible) return;
+    const target = event.target;
+    if (locationMovePanel?.contains(target) || toggleLocationMoveButton?.contains(target)) return;
+    closeLocationMovePanel();
   });
 
   shell.initialize();

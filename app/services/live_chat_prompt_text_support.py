@@ -415,6 +415,13 @@ def _append_world_activity_context(lines: list[str], context: dict):
     if not block:
         return
     lines.append(
+        "Live chat premise: active characters have recently checked world news and Feed posts. "
+        "They may use them as casual conversation hooks when the player gives no strong topic, "
+        "or when another registered character, place, rumor, event, outing memory, or public post is relevant. "
+        "Do not dump all items. Mention only one natural item at a time, and react in the active character's own voice. "
+        "Treat the items below as factual recent public information, but do not claim private knowledge beyond them."
+    )
+    lines.append(
         "直近のワールド活動と、プレイヤーが共有した外出の記憶です。新鮮なフック、コールバック、噂、誘い、キャラクター固有の話題の具体的な材料として使ってください:"
     )
     lines.append(block)
@@ -600,6 +607,7 @@ def build_opening_prompt(context: dict) -> str:
     if session_objective:
         lines.append(f"セッション目的: {session_objective}")
     _append_session_objective_notes(lines, context)
+    _append_world_activity_context(lines, context)
     _append_player_visible_reaction(lines, context)
     if context["world"].get("overview"):
         lines.append(f"世界観概要: {context['world']['overview']}")
@@ -918,6 +926,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
     _append_session_objective_notes(lines, context)
+    _append_world_activity_context(lines, context)
     _append_player_visible_reaction(lines, context)
     _append_adult_romance_tone_rules(lines)
     if context["world"].get("overview"):

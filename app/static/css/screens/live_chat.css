@@ -820,12 +820,49 @@ body[data-screen="stories"] .live-chat-room-session-list {
 }
 
 .live-chat-room-card {
+  position: relative;
   display: grid;
-  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr) minmax(9rem, 38%);
+  gap: 1rem;
+  align-items: stretch;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 245, 212, 0.34);
+  background:
+    linear-gradient(135deg, rgba(5, 9, 24, 0.97), rgba(8, 20, 40, 0.94) 48%, rgba(28, 8, 44, 0.92)),
+    linear-gradient(90deg, rgba(0, 245, 212, 0.12), transparent 45%),
+    linear-gradient(270deg, rgba(255, 62, 214, 0.15), transparent 42%);
+  box-shadow:
+    0 18px 42px rgba(1, 6, 18, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.035) inset,
+    0 0 28px rgba(0, 245, 212, 0.08);
+}
+
+.live-chat-room-page #liveChatRoomGrid.project-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.live-chat-room-card:hover {
+  border-color: rgba(255, 62, 214, 0.52);
+  box-shadow:
+    0 24px 52px rgba(1, 6, 18, 0.42),
+    0 0 0 1px rgba(0, 245, 212, 0.14) inset,
+    0 0 32px rgba(0, 245, 212, 0.12),
+    0 0 36px rgba(255, 62, 214, 0.1);
 }
 
 .live-chat-room-card h4 {
   margin: 0;
+  color: #f4fbff;
+  font-size: 1.3rem;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow:
+    0 0 18px rgba(84, 177, 255, 0.18),
+    0 0 24px rgba(255, 62, 214, 0.12);
 }
 
 .live-chat-room-card-main {
@@ -838,17 +875,49 @@ body[data-screen="stories"] .live-chat-room-session-list {
 .live-chat-room-card-copy {
   min-width: 0;
   display: grid;
-  gap: 0.45rem;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 0.65rem;
+  align-content: start;
+  z-index: 1;
+}
+
+.live-chat-room-title-block {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.live-chat-room-card-media {
+  min-width: 0;
+  display: grid;
+  align-items: center;
+}
+
+.live-chat-room-introduction {
+  min-width: 0;
+  color: rgba(223, 246, 255, 0.82);
+  font-size: 0.95rem;
+  line-height: 1.72;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.live-chat-room-card-action-stack {
+  align-self: end;
+  display: grid;
+  gap: 0.55rem;
 }
 
 .live-chat-room-character-thumb {
-  width: 88px;
-  height: 88px;
+  width: 100%;
+  aspect-ratio: 3 / 4;
   overflow: hidden;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(84, 177, 255, 0.24);
-  border-radius: 1rem;
+  border: 1px solid rgba(255, 62, 214, 0.34);
+  border-radius: 8px;
   background:
     radial-gradient(circle at top right, rgba(189, 92, 255, 0.18), transparent 42%),
     linear-gradient(180deg, rgba(10, 22, 40, 0.92), rgba(8, 17, 31, 0.86));
@@ -856,8 +925,8 @@ body[data-screen="stories"] .live-chat-room-session-list {
   font-size: 1.6rem;
   font-weight: 800;
   box-shadow:
-    0 12px 28px rgba(1, 6, 18, 0.28),
-    inset 0 0 18px rgba(98, 192, 255, 0.05);
+    0 14px 30px rgba(0, 0, 0, 0.28),
+    0 0 22px rgba(255, 62, 214, 0.12);
 }
 
 .live-chat-room-character-thumb img {
@@ -875,7 +944,7 @@ body[data-screen="stories"] .live-chat-room-session-list {
   flex-wrap: wrap;
   gap: 0.55rem;
   align-items: center;
-  margin-top: 0.35rem;
+  margin-top: 0;
 }
 
 .live-chat-room-actions .btn {
@@ -887,6 +956,26 @@ body[data-screen="stories"] .live-chat-room-session-list {
 }
 
 @media (max-width: 575.98px) {
+  .live-chat-room-page #liveChatRoomGrid.project-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .live-chat-room-card {
+    grid-template-columns: minmax(0, 1fr) minmax(7.25rem, 34%);
+    gap: 0.75rem;
+    padding: 0.85rem;
+  }
+
+  .live-chat-room-card h4 {
+    font-size: 1.05rem;
+  }
+
+  .live-chat-room-introduction {
+    font-size: 0.88rem;
+    line-height: 1.58;
+    -webkit-line-clamp: 5;
+  }
+
   .live-chat-room-start .input-group {
     display: grid;
     grid-template-columns: 1fr;
@@ -899,7 +988,14 @@ body[data-screen="stories"] .live-chat-room-session-list {
   }
 }
 
+@media (max-width: 991.98px) {
+  .live-chat-room-page #liveChatRoomGrid.project-card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .live-chat-room-session-list {
+  grid-column: 1 / -1;
   display: grid;
   gap: 0.55rem;
   max-height: 22rem;
@@ -3158,9 +3254,28 @@ body[data-screen="character-create"] .modal-backdrop {
 }
 
 .character-memory-note-panel {
+  order: 3;
   display: grid;
   gap: 1rem;
   align-content: start;
+}
+
+.character-image-panel {
+  order: 2;
+}
+
+.character-bromide-preview {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.character-bromide-preview img {
+  width: min(100%, 18rem);
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
 }
 
 .character-memory-note-form {

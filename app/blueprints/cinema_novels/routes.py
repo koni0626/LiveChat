@@ -199,6 +199,63 @@ def get_cinema_novel(novel_id: int):
     return json_response(cinema_novel_service.serialize_novel(novel, include_chapters=True, user_id=user.id))
 
 
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>", methods=["DELETE"])
+def delete_cinema_novel(novel_id: int):
+    novel, _project, _user = _require_novel(novel_id, for_manage=True)
+    if not cinema_novel_service.delete_novel(novel.id):
+        raise NotFoundError()
+    return json_response({"deleted": True})
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/reviews", methods=["GET"])
+def list_cinema_novel_reviews(novel_id: int):
+    novel, _project, user = _require_novel(novel_id)
+    reviews = cinema_novel_service.list_reviews(novel.id, user_id=user.id)
+    return json_response([cinema_novel_service.serialize_review(review) for review in reviews])
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/reviews", methods=["POST"])
+def create_cinema_novel_review(novel_id: int):
+    novel, _project, user = _require_novel(novel_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        review = cinema_novel_service.create_character_review(novel.id, user.id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not review:
+        raise NotFoundError()
+    return json_response(cinema_novel_service.serialize_review(review), status=201)
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/lore", methods=["GET"])
+def list_cinema_novel_lore(novel_id: int):
+    novel, _project, _user = _require_novel(novel_id)
+    return json_response([cinema_novel_service.serialize_lore_entry(entry) for entry in cinema_novel_service.list_lore_entries(novel.id)])
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/lore", methods=["POST"])
+def generate_cinema_novel_lore(novel_id: int):
+    novel, _project, _user = _require_novel(novel_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        entries = cinema_novel_service.ensure_novel_lore(novel.id, force=bool(payload.get("force")))
+    except (RuntimeError, ValueError) as exc:
+        raise ValidationError(str(exc))
+    return json_response([cinema_novel_service.serialize_lore_entry(entry) for entry in entries], status=201)
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/character-impressions", methods=["GET"])
+def list_cinema_novel_character_impressions(novel_id: int):
+    novel, _project, user = _require_novel(novel_id)
+    reviewer_character_id = request.args.get("reviewer_character_id", type=int)
+    impressions = cinema_novel_service.list_character_impressions(
+        novel.id,
+        reviewer_character_id=reviewer_character_id,
+        user_id=user.id,
+    )
+    return json_response([cinema_novel_service.serialize_character_impression(item) for item in impressions])
+
+
 @cinema_novels_bp.route("/cinema-novels/<int:novel_id>/chapters/from-production-outline", methods=["POST"])
 def create_chapters_from_production_outline(novel_id: int):
     novel, _project, user = _require_novel(novel_id, for_manage=True)

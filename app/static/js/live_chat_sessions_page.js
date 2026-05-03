@@ -25,27 +25,32 @@
     }
     roomGrid.innerHTML = rooms.map((room) => {
       const characterName = room.character?.name || "キャラクター未設定";
-      const characterThumb = room.character?.thumbnail_asset?.media_url || room.character?.base_asset?.media_url || "";
+      const characterThumb = room.character?.bromide_asset?.media_url || room.character?.thumbnail_asset?.media_url || room.character?.base_asset?.media_url || "";
+      const roomIntro = room.description || room.character?.introduction_text || room.conversation_objective || "";
       const status = room.status || "draft";
       return `
         <article class="project-card live-chat-room-card entity-card-stable" data-room-id="${room.id}">
-          <div class="project-card-top">
-            <span class="badge text-bg-light">${manageMode ? NovelUI.escape(NovelUI.statusLabel(status)) : "ライブチャット"}</span>
-            <span class="soft-code">${manageMode ? `${room.my_session_count || 0} sessions` : `履歴 ${room.my_session_count || 0}件`}</span>
+          <div class="live-chat-room-card-copy">
+            <div class="project-card-top">
+              <span class="badge text-bg-light">${manageMode ? NovelUI.escape(NovelUI.statusLabel(status)) : "ライブチャット"}</span>
+              <span class="soft-code">${manageMode ? `${room.my_session_count || 0} sessions` : `履歴 ${room.my_session_count || 0}件`}</span>
+            </div>
+            <div class="live-chat-room-title-block">
+              <h4>${NovelUI.escape(room.title || "ライブチャット")}</h4>
+              <div class="small text-secondary">話し相手: ${NovelUI.escape(characterName)}</div>
+            </div>
+            <p class="live-chat-room-introduction">${NovelUI.escape(roomIntro || "ルーム紹介はまだ入力されていません。")}</p>
+            <div class="live-chat-room-card-action-stack">
+              ${manageMode ? renderManageActions(room) : renderStartForm(room)}
+            </div>
           </div>
-          <div class="live-chat-room-card-main">
+          <div class="live-chat-room-card-media">
             <div class="live-chat-room-character-thumb">
               ${characterThumb
                 ? `<img src="${NovelUI.escape(characterThumb)}" alt="${NovelUI.escape(characterName)}">`
                 : `<span>${NovelUI.escape((characterName || "?").slice(0, 1))}</span>`}
             </div>
-            <div class="live-chat-room-card-copy">
-              <h4>${NovelUI.escape(room.title || "ライブチャット")}</h4>
-              <p class="live-chat-session-excerpt">${NovelUI.escape(NovelUI.truncateText(room.description || room.conversation_objective))}</p>
-              <div class="small text-secondary">話す相手: ${NovelUI.escape(characterName)}</div>
-            </div>
           </div>
-          ${manageMode ? renderManageActions(room) : renderStartForm(room)}
           <div class="live-chat-room-session-list entity-history-list mt-3" id="roomSessions-${room.id}"></div>
         </article>
       `;

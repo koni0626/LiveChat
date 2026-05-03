@@ -110,6 +110,7 @@ def _serialize_character(character):
         "ng_rules": character.ng_rules,
         "appearance_summary": character.appearance_summary,
         "art_style": character.art_style,
+        "introduction_text": getattr(character, "introduction_text", None),
         "memory_notes": character.memory_notes,
         "favorite_items": favorite_items,
         "favorite_items_text": "\n".join(str(item) for item in favorite_items if str(item).strip()),
@@ -127,6 +128,8 @@ def _serialize_character(character):
         "base_asset": _serialize_asset_summary(character.base_asset_id),
         "thumbnail_asset_id": character.thumbnail_asset_id,
         "thumbnail_asset": _serialize_asset_summary(character.thumbnail_asset_id),
+        "bromide_asset_id": getattr(character, "bromide_asset_id", None),
+        "bromide_asset": _serialize_asset_summary(getattr(character, "bromide_asset_id", None)),
         "created_at": character.created_at.isoformat() if getattr(character, "created_at", None) else None,
         "updated_at": character.updated_at.isoformat() if getattr(character, "updated_at", None) else None,
         "deleted_at": character.deleted_at.isoformat() if getattr(character, "deleted_at", None) else None,
@@ -148,6 +151,7 @@ def list_characters(project_id: int):
             or keyword in (character.nickname or "").lower()
             or keyword in (character.gender or "").lower()
             or keyword in (getattr(character, "character_summary", None) or "").lower()
+            or keyword in (getattr(character, "introduction_text", None) or "").lower()
             or keyword in (character.speech_style or "").lower()
             or keyword in (character.appearance_summary or "").lower()
         ]
@@ -237,6 +241,43 @@ def generate_character_portrait_image(character_id: int):
     payload = user_setting_service.apply_global_image_generation_settings(payload)
     try:
         character = character_service.generate_portrait_image(character_id, payload)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    if not character:
+        return json_response({"message": "not_found"}, status=404)
+    return json_response(_serialize_character(character))
+
+
+@characters_bp.route("/characters/<int:character_id>/introduction/generate", methods=["POST"])
+def generate_character_introduction(character_id: int):
+    payload = request.get_json(silent=True) or {}
+    existing = character_service.get_character(character_id)
+    if not existing:
+        raise NotFoundError()
+    require_project_manage(existing.project_id)
+    try:
+        character = character_service.generate_introduction_text(character_id, payload)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    if not character:
+        return json_response({"message": "not_found"}, status=404)
+    return json_response(_serialize_character(character))
+
+
+@characters_bp.route("/characters/<int:character_id>/bromide/generate", methods=["POST"])
+def generate_character_bromide_image(character_id: int):
+    payload = request.get_json(silent=True) or {}
+    existing = character_service.get_character(character_id)
+    if not existing:
+        raise NotFoundError()
+    require_project_manage(existing.project_id)
+    payload = user_setting_service.apply_global_image_generation_settings(payload)
+    try:
+        character = character_service.generate_bromide_image(character_id, payload)
     except ValueError as exc:
         return json_response({"message": str(exc)}, status=400)
     except RuntimeError as exc:

@@ -105,6 +105,25 @@
     </div>
   </section>
   {% endif %}
+  {% if can_manage_project %}
+  <section class="cinema-review-panel" id="cinemaReviewPanel" hidden>
+    <div class="cinema-review-panel-head">
+      <div>
+        <h3 id="cinemaReviewTitle">映画レビュー</h3>
+        <p>指定キャラクターがノベルを鑑賞し、Feedに感想を書き、AIメモに鑑賞体験を保存します。</p>
+      </div>
+      <button class="btn btn-sm btn-outline-dark" type="button" id="cinemaReviewCloseButton">閉じる</button>
+    </div>
+    <div class="cinema-review-controls">
+      <select class="form-select" id="cinemaReviewCharacterSelect"></select>
+      <button class="btn btn-dark" type="button" id="cinemaCreateReviewButton">
+        <i class="bi bi-chat-square-quote"></i>
+        レビューを書く
+      </button>
+    </div>
+    <div class="cinema-review-result" id="cinemaReviewResult"></div>
+  </section>
+  {% endif %}
   <div class="cinema-list-grid" id="cinemaNovelList"></div>
   <div class="empty-panel" id="cinemaNovelEmpty" hidden>上映作品がまだありません。</div>
 </section>

@@ -11,6 +11,7 @@
     <form id="characterForm" class="vstack gap-3">
       <input type="hidden" name="base_asset_id">
       <input type="hidden" name="thumbnail_asset_id">
+      <input type="hidden" name="bromide_asset_id">
       <div class="row g-3">
         <div class="col-md-8">
           <label class="form-label">名前</label>
@@ -116,7 +117,37 @@
     </details>
   </section>
 
-  <section class="panel-card">
+  <section class="panel-card character-image-panel">
+    <div class="panel-head">
+      <div>
+        <h3>自己紹介</h3>
+        <p class="section-copy mb-0">キャラクター本人の言葉として、一覧やライブチャット開始前に見せる短い紹介文です。</p>
+      </div>
+      <button class="btn btn-sm btn-outline-dark" type="button" id="characterIntroductionGenerateButton">
+        <i class="bi bi-stars"></i>
+        <span>自動生成</span>
+      </button>
+    </div>
+    <div class="vstack gap-3 mb-4">
+      <textarea class="form-control" id="characterIntroductionText" name="introduction_text" form="characterForm" rows="5" placeholder="キャラクター本人が初対面の相手に話す自己紹介文"></textarea>
+    </div>
+
+    <div class="panel-head">
+      <div>
+        <h3>プロマイド画像</h3>
+        <p class="section-copy mb-0">基準画像とキャラクター設定から、3:4の縦長プロフィール画像を生成します。</p>
+      </div>
+    </div>
+    <div class="vstack gap-3 mb-4">
+      <div id="bromideAssetPreview"></div>
+      <form id="bromideGenerateForm" class="d-flex gap-2 justify-content-end">
+        <button class="btn btn-sunrise" type="submit" id="generateBromideButton">
+          <i class="bi bi-image-fill"></i>
+          <span>プロマイドをAI生成</span>
+        </button>
+      </form>
+    </div>
+
     <div class="panel-head">
       <div>
         <h3>顔アイコン</h3>

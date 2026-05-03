@@ -1,9 +1,11 @@
 import base64
 import binascii
+import io
 import os
 from datetime import datetime
 
 from flask import current_app
+from PIL import Image
 
 from ..clients.image_ai_client import ImageAIClient
 from ..clients.text_ai_client import TextAIClient
@@ -130,6 +132,79 @@ class CharacterService:
         if not character:
             return None
         character = self._refresh_thumbnail(character, payload=payload)
+        return self.get_character(character.id)
+
+    def generate_introduction_text(self, character_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        character = self.get_character(character_id)
+        if not character:
+            return None
+        prompt = self._build_introduction_prompt(character, payload)
+        result = self._text_ai_client.generate_text(
+            prompt,
+            temperature=0.75,
+            max_tokens=700,
+        )
+        text = self._normalize_generated_introduction(result.get("text"))
+        if not text:
+            raise RuntimeError("introduction generation response is empty")
+        return self._repo.update(character.id, {"introduction_text": text})
+
+    def generate_bromide_image(self, character_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        character = self.get_character(character_id)
+        if not character:
+            return None
+        reference_paths, reference_asset_ids = self._character_reference_image_paths(character)
+        prompt = self._build_bromide_image_prompt(character, has_reference=bool(reference_paths), payload=payload)
+        generation_size = payload.get("size") or "1024x1536"
+        result = self._image_ai_client.generate_image(
+            prompt,
+            size=generation_size,
+            quality=payload.get("quality") or "medium",
+            model=payload.get("model") or payload.get("image_ai_model"),
+            provider=payload.get("provider") or payload.get("image_ai_provider"),
+            output_format="png",
+            background="opaque",
+            input_image_paths=reference_paths,
+            input_fidelity="high" if reference_paths else None,
+        )
+        image_base64 = result.get("image_base64")
+        if not image_base64:
+            raise RuntimeError("bromide image generation response did not include image_base64")
+        file_name, file_path, file_size, width, height = self._store_generated_bromide_image(
+            project_id=character.project_id,
+            character_id=character.id,
+            image_base64=image_base64,
+        )
+        asset = self._asset_service.create_asset(
+            character.project_id,
+            {
+                "asset_type": "character_bromide",
+                "file_name": file_name,
+                "file_path": file_path,
+                "mime_type": "image/png",
+                "file_size": file_size,
+                "width": width,
+                "height": height,
+                "metadata_json": json_util.dumps(
+                    {
+                        "source": "character_bromide_generation",
+                        "character_id": character.id,
+                        "reference_asset_ids": reference_asset_ids,
+                        "prompt": prompt,
+                        "revised_prompt": result.get("revised_prompt"),
+                        "model": result.get("model"),
+                        "quality": result.get("quality"),
+                        "size": generation_size,
+                        "final_aspect_ratio": "3:4",
+                        "reference_image_count": result.get("reference_image_count") or len(reference_paths),
+                        "operation": result.get("operation"),
+                    }
+                ),
+            },
+        )
+        self._repo.update(character.id, {"bromide_asset_id": asset.id})
         return self.get_character(character.id)
 
     def generate_character_draft(self, project_id: int, payload: dict | None = None) -> dict:
@@ -325,6 +400,110 @@ class CharacterService:
         parts.append("Background: simple neutral studio background so the character design is easy to reuse as a reference image.")
         return "\n".join(parts)
 
+    def _build_introduction_prompt(self, character, payload: dict) -> str:
+        world = self._world_service.get_world(character.project_id)
+        lines = [
+            "日本語で、キャラクター本人が初対面の相手に向けて話す自己紹介文を作成してください。",
+            "用途はキャラクター一覧とライブチャット開始前のプロフィールです。",
+            "一人称、口調、距離感、価値観をキャラクター設定に合わせてください。",
+            "長さは180〜320字程度。説明臭くしすぎず、会話したくなる余白を残してください。",
+            "箇条書き、Markdown、見出し、引用符、前置きは禁止。本文だけを返してください。",
+            "",
+            f"名前: {character.name}",
+        ]
+        field_map = [
+            ("あだ名", getattr(character, "nickname", None)),
+            ("性別", getattr(character, "gender", None)),
+            ("年齢印象", getattr(character, "age_impression", None)),
+            ("一人称", getattr(character, "first_person", None)),
+            ("相手の呼び方", getattr(character, "second_person", None)),
+            ("概要", getattr(character, "character_summary", None)),
+            ("性格", getattr(character, "personality", None)),
+            ("話し方", getattr(character, "speech_style", None)),
+            ("セリフ例", getattr(character, "speech_sample", None)),
+            ("見た目", getattr(character, "appearance_summary", None)),
+            ("NGルール", getattr(character, "ng_rules", None)),
+        ]
+        for label, value in field_map:
+            text = self._shorten_for_prompt(value, limit=700)
+            if text:
+                lines.append(f"{label}: {text}")
+        if world:
+            lines.extend(
+                [
+                    "",
+                    "世界観:",
+                    f"世界名: {getattr(world, 'name', '') or ''}",
+                    f"雰囲気: {getattr(world, 'tone', '') or ''}",
+                    f"概要: {self._shorten_for_prompt(getattr(world, 'overview', None), limit=600)}",
+                ]
+            )
+        if payload.get("direction"):
+            lines.extend(["", f"追加方針: {self._shorten_for_prompt(payload.get('direction'), limit=500)}"])
+        return "\n".join(lines)
+
+    def _normalize_generated_introduction(self, value) -> str:
+        text = str(value or "").strip()
+        text = text.replace("\r\n", "\n").strip()
+        if text.startswith("```"):
+            text = text.strip("`").strip()
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        text = "\n".join(lines).strip()
+        if (text.startswith('"') and text.endswith('"')) or (text.startswith("「") and text.endswith("」")):
+            text = text[1:-1].strip()
+        return text[:1000]
+
+    def _character_reference_image_paths(self, character) -> tuple[list[str], list[int]]:
+        reference_paths = []
+        reference_asset_ids = []
+        for asset_id in (getattr(character, "base_asset_id", None), getattr(character, "thumbnail_asset_id", None)):
+            if not asset_id or asset_id in reference_asset_ids:
+                continue
+            asset = self._asset_service.get_asset(asset_id)
+            if asset and getattr(asset, "file_path", None) and os.path.exists(asset.file_path):
+                reference_paths.append(asset.file_path)
+                reference_asset_ids.append(asset.id)
+        return reference_paths[:2], reference_asset_ids[:2]
+
+    def _build_bromide_image_prompt(self, character, *, has_reference: bool, payload: dict) -> str:
+        art_style = str(payload.get("art_style") or getattr(character, "art_style", None) or "").strip()
+        parts = [
+            "Create a glamorous 3:4 character bromide portrait for a Japanese visual novel / live chat character.",
+            "This is a premium collectible profile image, not a plain ID icon. Make it visually striking, polished, and memorable.",
+            "Show exactly one character. Use a vertical composition with the face clearly readable and the upper body or full figure attractively staged.",
+            "Use cinematic lighting, a charming pose, expressive eyes, and a background motif that supports the character concept.",
+            "No text, no words, no letters, no subtitles, no captions, no speech bubbles, no readable signs, no UI overlay, no watermark, no logo.",
+            "Final image will be cropped to a 3:4 aspect ratio, so keep the character centered with safe margins around the head and body.",
+            f"Name: {character.name}",
+        ]
+        if has_reference:
+            parts.append(
+                "Use the provided reference image as the primary identity reference. Preserve the same character, face impression, hairstyle, body impression, outfit motifs, color palette, and art style."
+            )
+        field_map = [
+            ("Nickname", getattr(character, "nickname", None)),
+            ("Gender", getattr(character, "gender", None)),
+            ("Age impression", getattr(character, "age_impression", None)),
+            ("First person", getattr(character, "first_person", None)),
+            ("How they call the player", getattr(character, "second_person", None)),
+            ("Character overview and concept", getattr(character, "character_summary", None)),
+            ("Appearance", getattr(character, "appearance_summary", None)),
+            ("Personality", getattr(character, "personality", None)),
+            ("Speech style", getattr(character, "speech_style", None)),
+            ("Sample lines", getattr(character, "speech_sample", None)),
+            ("Self introduction", getattr(character, "introduction_text", None)),
+            ("Do not violate these character rules", getattr(character, "ng_rules", None)),
+        ]
+        for label, value in field_map:
+            text = self._shorten_for_prompt(value, limit=800)
+            if text:
+                parts.append(f"{label}: {text}")
+        if art_style:
+            parts.append(f"Art style: {art_style}")
+        else:
+            parts.append("Art style: high-quality Japanese anime visual novel key art, consistent linework and colors.")
+        return "\n".join(parts)
+
     def _build_character_draft_prompt(self, world, payload: dict, existing_characters=None) -> str:
         current = payload.get("current_character") if isinstance(payload.get("current_character"), dict) else payload
         current_name = str((current or {}).get("name") or "").strip()
@@ -427,3 +606,40 @@ class CharacterService:
         with open(file_path, "wb") as file_handle:
             file_handle.write(raw_bytes)
         return file_name, file_path, len(raw_bytes)
+
+    def _store_generated_bromide_image(self, *, project_id: int, character_id: int, image_base64: str):
+        try:
+            raw_bytes = base64.b64decode(image_base64)
+        except (binascii.Error, ValueError) as exc:
+            raise RuntimeError("generated bromide image payload is invalid") from exc
+        output_dir = self._build_bromide_output_directory(project_id)
+        os.makedirs(output_dir, exist_ok=True)
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        file_name = f"character_{character_id}_bromide_{timestamp}.png"
+        file_path = os.path.join(output_dir, file_name)
+        with Image.open(io.BytesIO(raw_bytes)) as image:
+            canvas = self._crop_image_to_three_by_four(image.convert("RGB"))
+            canvas.save(file_path, "PNG", optimize=True)
+        file_size = os.path.getsize(file_path)
+        with Image.open(file_path) as stored:
+            width, height = stored.size
+        return file_name, file_path, file_size, width, height
+
+    def _crop_image_to_three_by_four(self, image: Image.Image) -> Image.Image:
+        width, height = image.size
+        target_ratio = 3 / 4
+        current_ratio = width / height if height else target_ratio
+        if current_ratio > target_ratio:
+            new_width = int(round(height * target_ratio))
+            left = max(0, (width - new_width) // 2)
+            box = (left, 0, left + new_width, height)
+        else:
+            new_height = int(round(width / target_ratio))
+            top = max(0, int(round((height - new_height) * 0.42)))
+            box = (0, top, width, top + new_height)
+        cropped = image.crop(box)
+        return cropped.resize((960, 1280), Image.Resampling.LANCZOS)
+
+    def _build_bromide_output_directory(self, project_id: int) -> str:
+        storage_root = current_app.config.get("STORAGE_ROOT") or os.path.join(os.getcwd(), "storage")
+        return os.path.join(storage_root, "projects", str(project_id), "assets", "character_bromide")

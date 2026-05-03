@@ -39,8 +39,20 @@
         </div>
       </div>
       <div class="col-12">
-        <label class="form-label" for="liveChatRoomDescriptionInput">説明</label>
-        <input class="form-control" id="liveChatRoomDescriptionInput" name="description" placeholder="ユーザーに見せる簡単な説明">
+        <div class="d-flex gap-2 justify-content-between align-items-center flex-wrap">
+          <label class="form-label mb-0" for="liveChatRoomDescriptionInput">ルーム紹介</label>
+          <button class="btn btn-sm btn-outline-light" type="button" id="liveChatRoomDescriptionGenerateButton">
+            <i class="bi bi-stars"></i>
+            <span>自動入力</span>
+          </button>
+        </div>
+        <textarea
+          class="form-control mt-2"
+          id="liveChatRoomDescriptionInput"
+          name="description"
+          rows="4"
+          placeholder="ルーム一覧でユーザーに見せる紹介文。どんな会話ができるか、キャラクターの魅力が伝わる短い文章。"
+        ></textarea>
       </div>
       <div class="col-12">
         <textarea class="d-none" id="liveChatRoomObjectiveInput" name="conversation_objective"></textarea>
@@ -198,6 +210,7 @@
   const objectivePreview = document.getElementById("liveChatRoomObjectivePreview");
   const objectiveEditButton = document.getElementById("liveChatRoomObjectiveEditButton");
   const objectiveGenerateButton = document.getElementById("liveChatRoomObjectiveGenerateButton");
+  const descriptionGenerateButton = document.getElementById("liveChatRoomDescriptionGenerateButton");
   const objectiveModalElement = document.getElementById("liveChatRoomObjectiveModal");
   if (objectiveModalElement) document.body.appendChild(objectiveModalElement);
   const objectiveModal = objectiveModalElement ? new bootstrap.Modal(objectiveModalElement) : null;
@@ -301,6 +314,41 @@
     objectiveGenerateButton.innerHTML = active
       ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>生成中...'
       : '<i class="bi bi-stars"></i><span>自動生成</span>';
+  }
+
+  function setDescriptionGenerating(active) {
+    if (!descriptionGenerateButton) return;
+    descriptionGenerateButton.disabled = active;
+    descriptionGenerateButton.innerHTML = active
+      ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>生成中...'
+      : '<i class="bi bi-stars"></i><span>自動入力</span>';
+  }
+
+  async function generateDescriptionDraft() {
+    const characterId = Number(roomForm.character_id.value || 0);
+    if (!characterId) {
+      NovelUI.toast("先にキャラクターを選択してください。", "warning");
+      characterSelect.focus();
+      return;
+    }
+    setDescriptionGenerating(true);
+    try {
+      const draft = await NovelUI.api(`/api/v1/projects/${projectId}/chat/rooms/description-draft`, {
+        method: "POST",
+        body: {
+          character_id: characterId,
+          title: roomForm.title.value,
+          description: roomForm.description.value,
+          conversation_objective: roomForm.conversation_objective.value,
+        },
+      });
+      roomForm.description.value = draft.description || "";
+      NovelUI.toast("ルーム紹介を自動入力しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "ルーム紹介の自動入力に失敗しました。", "danger");
+    } finally {
+      setDescriptionGenerating(false);
+    }
   }
 
   async function generateObjectiveDraft() {
@@ -408,6 +456,7 @@
 
   objectiveEditButton?.addEventListener("click", openObjectiveEditor);
   objectiveGenerateButton?.addEventListener("click", generateObjectiveDraft);
+  descriptionGenerateButton?.addEventListener("click", generateDescriptionDraft);
   objectiveApplyButton?.addEventListener("click", applyObjectiveEditor);
   objectiveMarkdownInput?.addEventListener("input", () => {
     objectiveMarkdownPreview.innerHTML = markdownToHtml(objectiveMarkdownInput.value);

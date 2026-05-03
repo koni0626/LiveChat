@@ -10,6 +10,7 @@ from .asset_service import AssetService
 from .character_service import CharacterService
 from .closet_service import ClosetService
 from .project_service import ProjectService
+from ..clients.text_ai_client import TextAIClient
 
 
 class LiveChatRoomService:
@@ -23,6 +24,7 @@ class LiveChatRoomService:
         chat_session_repository: ChatSessionRepository | None = None,
         asset_service: AssetService | None = None,
         closet_service: ClosetService | None = None,
+        text_ai_client: TextAIClient | None = None,
     ):
         self._repo = repository or LiveChatRoomRepository()
         self._project_service = project_service or ProjectService()
@@ -30,6 +32,7 @@ class LiveChatRoomService:
         self._chat_session_repo = chat_session_repository or ChatSessionRepository()
         self._asset_service = asset_service or AssetService()
         self._closet_service = closet_service or ClosetService()
+        self._text_ai_client = text_ai_client or TextAIClient()
 
     def list_rooms(self, project_id: int, *, include_unpublished: bool = False):
         status = None if include_unpublished else "published"
@@ -46,6 +49,7 @@ class LiveChatRoomService:
             return None
         character = self._character_service.get_character(room.character_id)
         thumbnail_asset = self._serialize_asset_summary(getattr(character, "thumbnail_asset_id", None) if character else None)
+        bromide_asset = self._serialize_asset_summary(getattr(character, "bromide_asset_id", None) if character else None)
         base_asset = self._serialize_asset_summary(getattr(character, "base_asset_id", None) if character else None)
         default_outfit = self._closet_service.serialize_outfit(
             self._closet_service.resolve_outfit(room.character_id, getattr(room, "default_outfit_id", None))
@@ -72,9 +76,12 @@ class LiveChatRoomService:
                     "id": character.id,
                     "name": character.name,
                     "nickname": getattr(character, "nickname", None),
+                    "introduction_text": getattr(character, "introduction_text", None),
                     "thumbnail_asset_id": getattr(character, "thumbnail_asset_id", None),
+                    "bromide_asset_id": getattr(character, "bromide_asset_id", None),
                     "base_asset_id": getattr(character, "base_asset_id", None),
                     "thumbnail_asset": thumbnail_asset,
+                    "bromide_asset": bromide_asset,
                     "base_asset": base_asset,
                 }
                 if character
@@ -144,6 +151,28 @@ class LiveChatRoomService:
             raise ValueError("character_id is invalid")
         return self._character_service.build_default_live_chat_room_payload(character)
 
+    def build_description_draft(self, project_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        try:
+            character_id = int(payload.get("character_id") or 0)
+        except (TypeError, ValueError):
+            character_id = 0
+        if character_id <= 0:
+            raise ValueError("character_id is required")
+        character = self._character_service.get_character(character_id)
+        if not character or character.project_id != project_id:
+            raise ValueError("character_id is invalid")
+        prompt = self._build_description_draft_prompt(character, payload)
+        result = self._text_ai_client.generate_text(
+            prompt,
+            temperature=0.75,
+            max_tokens=500,
+        )
+        text = self._normalize_description_text(result.get("text"))
+        if not text:
+            raise RuntimeError("description draft response is empty")
+        return {"description": text}
+
     def update_room(self, room_id: int, payload: dict | None):
         payload = dict(payload or {})
         room = self.get_room(room_id)
@@ -159,6 +188,50 @@ class LiveChatRoomService:
         if not normalized:
             raise ValueError("payload must not be empty")
         return self._repo.update(room_id, normalized)
+
+    def _build_description_draft_prompt(self, character, payload: dict) -> str:
+        title = str(payload.get("title") or "").strip()
+        objective = str(payload.get("conversation_objective") or "").strip()
+        current_description = str(payload.get("description") or "").strip()
+        lines = [
+            "日本語で、ライブチャットのルーム紹介文を作成してください。",
+            "ユーザーがルーム一覧で読み、どんな会話ができるか直感的に分かる短い紹介です。",
+            "キャラクター本人の魅力、距離感、会話したくなる入口を入れてください。",
+            "長さは120〜220字程度。Markdown、箇条書き、見出し、引用符、前置きは禁止。本文だけを返してください。",
+            "",
+            f"キャラクター名: {character.name}",
+        ]
+        for label, value in (
+            ("ルーム名", title),
+            ("既存の紹介文", current_description),
+            ("キャラクター自己紹介", getattr(character, "introduction_text", None)),
+            ("概要", getattr(character, "character_summary", None)),
+            ("性格", getattr(character, "personality", None)),
+            ("話し方", getattr(character, "speech_style", None)),
+            ("セリフ例", getattr(character, "speech_sample", None)),
+            ("見た目", getattr(character, "appearance_summary", None)),
+            ("ルーム内の会話方針", objective),
+        ):
+            text = self._shorten_for_prompt(value, limit=700)
+            if text:
+                lines.append(f"{label}: {text}")
+        return "\n".join(lines)
+
+    def _normalize_description_text(self, value) -> str:
+        text = str(value or "").strip().replace("\r\n", "\n")
+        if text.startswith("```"):
+            text = text.strip("`").strip()
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        text = " ".join(lines).strip()
+        if (text.startswith('"') and text.endswith('"')) or (text.startswith("「") and text.endswith("」")):
+            text = text[1:-1].strip()
+        return text[:600]
+
+    def _shorten_for_prompt(self, value, limit: int = 500) -> str:
+        text = str(value or "").strip().replace("\r\n", "\n")
+        if len(text) <= limit:
+            return text
+        return text[:limit].rstrip() + "..."
 
     def delete_room(self, room_id: int):
         return self._repo.delete(room_id)

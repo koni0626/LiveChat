@@ -41,20 +41,21 @@
   }
 
   function renderThumbnail(character) {
-    const url = character.thumbnail_asset?.media_url || character.base_asset?.media_url;
+    const url = character.bromide_asset?.media_url || character.thumbnail_asset?.media_url || character.base_asset?.media_url;
     if (!url) {
       return `
-        <div class="character-card-image character-card-placeholder">
+        <div class="character-card-bromide character-card-placeholder">
           <i class="bi bi-person-bounding-box"></i>
           <span>画像なし</span>
         </div>
       `;
     }
-    return `<img class="character-card-image" src="${escapeText(url)}" alt="${escapeText(character.name)}">`;
+    return `<img class="character-card-bromide" src="${escapeText(url)}" alt="${escapeText(character.name)}">`;
   }
 
   function renderCharacter(character) {
     const nickname = character.nickname ? `<span class="character-role-badge">${escapeText(character.nickname)}</span>` : "";
+    const intro = character.introduction_text || character.character_summary || character.personality || "自己紹介文はまだ生成されていません。";
     const action = canManageProject
       ? `<button class="btn btn-sm btn-outline-danger character-delete-button" type="button" data-character-id="${character.id}">削除</button>`
       : "";
@@ -65,12 +66,15 @@
 
     return `
       <article class="${cardClass}" data-character-id="${character.id}" ${clickableAttrs}>
-        ${renderThumbnail(character)}
-        <div class="vstack gap-2 flex-grow-1">
-          <div>${nickname}</div>
-          <h4 class="mb-0">${escapeText(character.name)}</h4>
+        <div class="character-card-copy">
+          <div class="character-card-kicker">${nickname || "<span>PROFILE</span>"}</div>
+          <h4>${escapeText(character.name)}</h4>
+          <p class="character-card-introduction">${escapeText(intro)}</p>
+          ${action}
         </div>
-        ${action}
+        <div class="character-card-media">
+          ${renderThumbnail(character)}
+        </div>
       </article>
     `;
   }

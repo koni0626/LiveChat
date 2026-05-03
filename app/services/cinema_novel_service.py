@@ -13,7 +13,20 @@ from pathlib import Path
 from flask import current_app
 
 from ..extensions import db
-from ..models import Asset, Character, CinemaNovel, CinemaNovelChapter, CinemaNovelProgress, Project, World
+from ..models import (
+    Asset,
+    Character,
+    CharacterMemoryNote,
+    CinemaNovel,
+    CinemaNovelChapter,
+    CinemaNovelCharacterImpression,
+    CinemaNovelLoreEntry,
+    CinemaNovelProgress,
+    CinemaNovelReview,
+    FeedPost,
+    Project,
+    World,
+)
 from ..utils import json_util
 from ..clients.image_ai_client import ImageAIClient
 from ..clients.text_ai_client import TextAIClient
@@ -35,6 +48,52 @@ class CinemaNovelService:
 
     def get_novel(self, novel_id: int):
         return CinemaNovel.query.filter(CinemaNovel.id == novel_id, CinemaNovel.deleted_at.is_(None)).first()
+
+    def delete_novel(self, novel_id: int) -> bool:
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return False
+        now = datetime.utcnow()
+        novel.deleted_at = now
+        novel.status = "archived"
+        for chapter in CinemaNovelChapter.query.filter(CinemaNovelChapter.novel_id == novel.id).all():
+            chapter.deleted_at = now
+            db.session.add(chapter)
+        for entry in CinemaNovelLoreEntry.query.filter(CinemaNovelLoreEntry.novel_id == novel.id).all():
+            entry.deleted_at = now
+            db.session.add(entry)
+        reviews = CinemaNovelReview.query.filter(CinemaNovelReview.novel_id == novel.id).all()
+        feed_post_ids = []
+        memory_note_ids = []
+        for review in reviews:
+            review.deleted_at = now
+            if review.feed_post_id:
+                feed_post_ids.append(review.feed_post_id)
+            if review.memory_note_id:
+                memory_note_ids.append(review.memory_note_id)
+            db.session.add(review)
+        for impression in CinemaNovelCharacterImpression.query.filter(CinemaNovelCharacterImpression.novel_id == novel.id).all():
+            impression.deleted_at = now
+            if impression.memory_note_id:
+                memory_note_ids.append(impression.memory_note_id)
+            db.session.add(impression)
+        if feed_post_ids:
+            for post in FeedPost.query.filter(FeedPost.id.in_(feed_post_ids)).all():
+                post.deleted_at = now
+                post.status = "archived"
+                db.session.add(post)
+        source_refs = [f"cinema_novel:{novel.id}", f"cinema_novel:{novel.id}:impressions"]
+        note_query = CharacterMemoryNote.query.filter(
+            (CharacterMemoryNote.source_ref.in_(source_refs))
+            | (CharacterMemoryNote.id.in_(memory_note_ids or [-1]))
+        )
+        for note in note_query.all():
+            note.enabled = False
+            db.session.add(note)
+        CinemaNovelProgress.query.filter(CinemaNovelProgress.novel_id == novel.id).delete(synchronize_session=False)
+        db.session.add(novel)
+        db.session.commit()
+        return True
 
     def list_chapters(self, novel_id: int):
         return CinemaNovelChapter.query.filter(
@@ -76,7 +135,258 @@ class CinemaNovelService:
             payload["chapters"] = [self.serialize_chapter(chapter) for chapter in chapters]
         if user_id:
             payload["progress"] = self.serialize_progress(self.get_progress(user_id, novel.id))
+            payload["reviews"] = [self.serialize_review(review) for review in self.list_reviews(novel.id, user_id=user_id)]
+        else:
+            payload["reviews"] = [self.serialize_review(review) for review in self.list_reviews(novel.id)]
+        payload["lore_entries"] = [self.serialize_lore_entry(entry) for entry in self.list_lore_entries(novel.id)]
         return payload
+
+    def list_reviews(self, novel_id: int, *, user_id: int | None = None):
+        query = CinemaNovelReview.query.filter(
+            CinemaNovelReview.novel_id == novel_id,
+            CinemaNovelReview.deleted_at.is_(None),
+        )
+        if user_id:
+            query = query.filter(CinemaNovelReview.user_id == user_id)
+        return query.order_by(CinemaNovelReview.updated_at.desc(), CinemaNovelReview.id.desc()).all()
+
+    def serialize_review(self, review) -> dict | None:
+        if not review:
+            return None
+        character = Character.query.get(review.character_id)
+        thumbnail_id = getattr(character, "thumbnail_asset_id", None) or getattr(character, "base_asset_id", None)
+        return {
+            "id": review.id,
+            "novel_id": review.novel_id,
+            "character_id": review.character_id,
+            "user_id": review.user_id,
+            "feed_post_id": review.feed_post_id,
+            "memory_note_id": review.memory_note_id,
+            "review_text": review.review_text,
+            "memory_note": review.memory_note,
+            "rating_label": review.rating_label,
+            "status": review.status,
+            "metadata": self._load_json(review.metadata_json, default={}),
+            "impressions": [
+                self.serialize_character_impression(impression)
+                for impression in self.list_character_impressions(
+                    review.novel_id,
+                    reviewer_character_id=review.character_id,
+                    user_id=review.user_id,
+                )
+            ],
+            "character": {
+                "id": character.id,
+                "name": character.name,
+                "nickname": character.nickname,
+                "thumbnail_asset": self._serialize_asset(thumbnail_id),
+            } if character else None,
+            "created_at": review.created_at.isoformat() if review.created_at else None,
+            "updated_at": review.updated_at.isoformat() if review.updated_at else None,
+        }
+
+    def create_character_review(self, novel_id: int, user_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        try:
+            character_id = int(payload.get("character_id") or 0)
+        except (TypeError, ValueError):
+            raise ValueError("character_id is required")
+        character = Character.query.filter(
+            Character.id == character_id,
+            Character.project_id == novel.project_id,
+            Character.deleted_at.is_(None),
+        ).first()
+        if not character:
+            raise ValueError("character was not found")
+        existing = CinemaNovelReview.query.filter(
+            CinemaNovelReview.novel_id == novel.id,
+            CinemaNovelReview.character_id == character.id,
+            CinemaNovelReview.user_id == user_id,
+            CinemaNovelReview.deleted_at.is_(None),
+        ).first()
+        lore_entries = self.ensure_novel_lore(novel.id)
+        result = self._generate_character_review(novel, character)
+        review_text = str(result.get("feed_review") or "").strip()
+        memory_note_text = str(result.get("memory_note") or "").strip()
+        rating_label = str(result.get("rating_label") or "").strip()[:80] or None
+        if not review_text:
+            raise RuntimeError("review response did not include review text")
+        if not memory_note_text:
+            memory_note_text = self._fallback_review_memory_note(novel, character, review_text)
+        feed_post = self._upsert_review_feed_post(
+            novel=novel,
+            character=character,
+            user_id=user_id,
+            review_text=review_text,
+            existing_feed_post_id=existing.feed_post_id if existing else None,
+        )
+        memory_note = self._upsert_review_memory_note(
+            novel=novel,
+            character=character,
+            user_id=user_id,
+            note_text=memory_note_text,
+            existing_memory_note_id=existing.memory_note_id if existing else None,
+        )
+        impressions = self._generate_and_upsert_character_impressions(
+            novel=novel,
+            character=character,
+            user_id=user_id,
+            lore_entries=lore_entries,
+        )
+        impression_memory = self._upsert_impression_memory_note(
+            novel=novel,
+            character=character,
+            user_id=user_id,
+            impressions=impressions,
+        )
+        if impression_memory:
+            for impression in impressions:
+                impression.memory_note_id = impression_memory.id
+            db.session.commit()
+        metadata = {
+            "source": "cinema_novel_review",
+            "model": result.get("model"),
+            "usage": result.get("usage"),
+            "review_summary": result.get("review_summary"),
+            "lore_entry_count": len(lore_entries or []),
+            "impression_count": len(impressions or []),
+        }
+        if existing:
+            existing.feed_post_id = feed_post.id if feed_post else None
+            existing.memory_note_id = memory_note.id if memory_note else None
+            existing.review_text = review_text
+            existing.memory_note = memory_note_text
+            existing.rating_label = rating_label
+            existing.status = "published"
+            existing.metadata_json = json_util.dumps(metadata)
+            db.session.commit()
+            return existing
+        review = CinemaNovelReview(
+            novel_id=novel.id,
+            character_id=character.id,
+            user_id=user_id,
+            feed_post_id=feed_post.id if feed_post else None,
+            memory_note_id=memory_note.id if memory_note else None,
+            review_text=review_text,
+            memory_note=memory_note_text,
+            rating_label=rating_label,
+            status="published",
+            metadata_json=json_util.dumps(metadata),
+        )
+        db.session.add(review)
+        db.session.commit()
+        return review
+
+    def list_lore_entries(self, novel_id: int):
+        return CinemaNovelLoreEntry.query.filter(
+            CinemaNovelLoreEntry.novel_id == novel_id,
+            CinemaNovelLoreEntry.deleted_at.is_(None),
+        ).order_by(CinemaNovelLoreEntry.sort_order.asc(), CinemaNovelLoreEntry.id.asc()).all()
+
+    def serialize_lore_entry(self, entry) -> dict | None:
+        if not entry:
+            return None
+        return {
+            "id": entry.id,
+            "novel_id": entry.novel_id,
+            "lore_type": entry.lore_type,
+            "name": entry.name,
+            "summary": entry.summary,
+            "role_note": entry.role_note,
+            "source_note": entry.source_note,
+            "sort_order": entry.sort_order,
+            "metadata": self._load_json(entry.metadata_json, default={}),
+            "created_at": entry.created_at.isoformat() if entry.created_at else None,
+            "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
+        }
+
+    def list_character_impressions(
+        self,
+        novel_id: int,
+        *,
+        reviewer_character_id: int | None = None,
+        user_id: int | None = None,
+    ):
+        query = CinemaNovelCharacterImpression.query.filter(
+            CinemaNovelCharacterImpression.novel_id == novel_id,
+            CinemaNovelCharacterImpression.deleted_at.is_(None),
+        )
+        if reviewer_character_id:
+            query = query.filter(CinemaNovelCharacterImpression.reviewer_character_id == reviewer_character_id)
+        if user_id:
+            query = query.filter(CinemaNovelCharacterImpression.user_id == user_id)
+        return query.order_by(CinemaNovelCharacterImpression.id.asc()).all()
+
+    def serialize_character_impression(self, impression) -> dict | None:
+        if not impression:
+            return None
+        target = Character.query.get(impression.target_character_id) if impression.target_character_id else None
+        return {
+            "id": impression.id,
+            "novel_id": impression.novel_id,
+            "reviewer_character_id": impression.reviewer_character_id,
+            "user_id": impression.user_id,
+            "target_name": impression.target_name,
+            "target_character_id": impression.target_character_id,
+            "target_character": {
+                "id": target.id,
+                "name": target.name,
+                "nickname": target.nickname,
+            } if target else None,
+            "impression_text": impression.impression_text,
+            "talk_hint": impression.talk_hint,
+            "memory_note_id": impression.memory_note_id,
+            "metadata": self._load_json(impression.metadata_json, default={}),
+            "created_at": impression.created_at.isoformat() if impression.created_at else None,
+            "updated_at": impression.updated_at.isoformat() if impression.updated_at else None,
+        }
+
+    def ensure_novel_lore(self, novel_id: int, *, force: bool = False):
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return []
+        existing = self.list_lore_entries(novel.id)
+        if existing and not force:
+            return existing
+        result = self._generate_novel_lore(novel)
+        entries = result.get("entries") if isinstance(result, dict) else []
+        if not isinstance(entries, list):
+            entries = []
+        saved = []
+        for index, item in enumerate(entries[:40], start=1):
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()[:255]
+            summary = str(item.get("summary") or "").strip()
+            if not name or not summary:
+                continue
+            lore_type = str(item.get("lore_type") or "other").strip().lower()[:50] or "other"
+            entry = CinemaNovelLoreEntry.query.filter(
+                CinemaNovelLoreEntry.novel_id == novel.id,
+                CinemaNovelLoreEntry.lore_type == lore_type,
+                CinemaNovelLoreEntry.name == name,
+            ).first()
+            if not entry:
+                entry = CinemaNovelLoreEntry(novel_id=novel.id, lore_type=lore_type, name=name)
+            entry.summary = summary[:1600]
+            entry.role_note = str(item.get("role_note") or "").strip()[:1200] or None
+            entry.source_note = str(item.get("source_note") or "").strip()[:1200] or None
+            entry.sort_order = index
+            entry.metadata_json = json_util.dumps(
+                {
+                    "source": "cinema_novel_lore_generation",
+                    "model": result.get("model"),
+                    "usage": result.get("usage"),
+                }
+            )
+            entry.deleted_at = None
+            db.session.add(entry)
+            saved.append(entry)
+        db.session.commit()
+        return self.list_lore_entries(novel.id)
 
     def serialize_chapter(self, chapter):
         if not chapter:
@@ -398,6 +708,372 @@ class CinemaNovelService:
                 ]
             )
         return "\n".join(lines)
+
+    def _generate_character_review(self, novel, character) -> dict:
+        settings = self._user_setting_service.apply_cinema_novel_text_generation_settings({})
+        novel_context = self._novel_review_context(novel)
+        lore_context = self._lore_prompt_context(self.list_lore_entries(novel.id))
+        character_context = "\n".join(
+            [
+                f"name: {character.name or ''}",
+                f"nickname: {character.nickname or ''}",
+                f"first_person: {character.first_person or ''}",
+                f"second_person: {character.second_person or ''}",
+                f"summary: {self._shorten_for_prompt(getattr(character, 'character_summary', None), 1000)}",
+                f"personality: {self._shorten_for_prompt(character.personality, 900)}",
+                f"speech_style: {self._shorten_for_prompt(character.speech_style, 700)}",
+                f"speech_sample: {self._shorten_for_prompt(character.speech_sample, 700)}",
+                f"ng_rules: {self._shorten_for_prompt(character.ng_rules, 400)}",
+            ]
+        )
+        prompt = "\n".join(
+            [
+                "Return only JSON.",
+                "A registered character has read/watched the following visual novel as an in-world cinema work.",
+                "Create a public Feed review and a private memory note for future chat.",
+                "Japanese only.",
+                "Required keys: feed_review, memory_note, rating_label, review_summary.",
+                "feed_review: 80-220 Japanese characters. Write as the character posting to Feed, in their voice. Mention one specific memorable element from the novel.",
+                "memory_note: 120-360 Japanese characters. Third-person memory for AI prompt. It must say this character has read/watched the work, what they remember, and how they tend to talk about it.",
+                "rating_label: short Japanese label such as 爆笑, 傑作, 怪作, 刺さった, 困惑.",
+                "Do not change the character's permanent personality. This is a viewing experience memory.",
+                "Do not invent facts that contradict the novel context.",
+                "",
+                "Character:",
+                character_context,
+                "",
+                "Novel context:",
+                novel_context,
+                "",
+                "Known novel lore:",
+                lore_context or "(none yet)",
+            ]
+        )
+        result = self._text_ai_client.generate_text(
+            prompt,
+            model=settings.get("model"),
+            response_format={"type": "json_object"},
+            temperature=0.8,
+            max_tokens=2000,
+        )
+        parsed = self._text_ai_client._try_parse_json(result.get("text")) or {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+        parsed["model"] = result.get("model")
+        parsed["usage"] = result.get("usage")
+        return parsed
+
+    def _generate_novel_lore(self, novel) -> dict:
+        settings = self._user_setting_service.apply_cinema_novel_text_generation_settings({})
+        prompt = "\n".join(
+            [
+                "Return only JSON.",
+                "Extract reusable in-world knowledge from this visual novel for future character chats.",
+                "Japanese only.",
+                "Required shape: {\"entries\":[{\"lore_type\":\"character|term|event|location|scene|theme|other\",\"name\":\"...\",\"summary\":\"...\",\"role_note\":\"...\",\"source_note\":\"...\"}]}",
+                "Focus on characters, named concepts, important incidents, iconic scenes, relationships, jokes, and emotional hooks.",
+                "Character entries must explain how the character appears in this novel, what they want, what makes them funny or memorable, and how they relate to other entries.",
+                "Term/event entries must be understandable later without rereading the novel.",
+                "Do not invent facts that are not supported by the novel context.",
+                "Create 8-24 compact entries.",
+                "",
+                "Novel context:",
+                self._novel_review_context(novel),
+            ]
+        )
+        result = self._text_ai_client.generate_text(
+            prompt,
+            model=settings.get("model"),
+            response_format={"type": "json_object"},
+            temperature=0.35,
+            max_tokens=5000,
+        )
+        parsed = self._text_ai_client._try_parse_json(result.get("text")) or {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+        parsed["model"] = result.get("model")
+        parsed["usage"] = result.get("usage")
+        return parsed
+
+    def _generate_character_impressions(self, novel, character, lore_entries: list) -> dict:
+        settings = self._user_setting_service.apply_cinema_novel_text_generation_settings({})
+        character_context = "\n".join(
+            [
+                f"name: {character.name or ''}",
+                f"nickname: {character.nickname or ''}",
+                f"first_person: {character.first_person or ''}",
+                f"summary: {self._shorten_for_prompt(getattr(character, 'character_summary', None), 1000)}",
+                f"personality: {self._shorten_for_prompt(character.personality, 900)}",
+                f"speech_style: {self._shorten_for_prompt(character.speech_style, 700)}",
+                f"speech_sample: {self._shorten_for_prompt(character.speech_sample, 700)}",
+            ]
+        )
+        prompt = "\n".join(
+            [
+                "Return only JSON.",
+                "A registered character has watched this visual novel. Create that character's private impressions of the novel's characters, terms, and iconic scenes.",
+                "Japanese only.",
+                "Required shape: {\"impressions\":[{\"target_name\":\"...\",\"impression_text\":\"...\",\"talk_hint\":\"...\"}]}",
+                "target_name must match an entry name from Known novel lore when possible.",
+                "impression_text: 80-260 Japanese characters. Write in third person. Explain how the reviewing character interprets or reacts to that target.",
+                "talk_hint: 40-160 Japanese characters. How this reviewing character should bring it up in future chats.",
+                "Prefer 4-10 memorable targets. Include important registered characters and the funniest or most emotionally useful concepts.",
+                "Do not change the reviewing character's permanent personality. This is a viewing experience memory.",
+                "",
+                "Reviewing character:",
+                character_context,
+                "",
+                "Novel:",
+                f"title: {novel.title or ''}",
+                f"description: {novel.description or ''}",
+                "",
+                "Known novel lore:",
+                self._lore_prompt_context(lore_entries) or "(none)",
+            ]
+        )
+        result = self._text_ai_client.generate_text(
+            prompt,
+            model=settings.get("model"),
+            response_format={"type": "json_object"},
+            temperature=0.55,
+            max_tokens=4000,
+        )
+        parsed = self._text_ai_client._try_parse_json(result.get("text")) or {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+        parsed["model"] = result.get("model")
+        parsed["usage"] = result.get("usage")
+        return parsed
+
+    def _lore_prompt_context(self, entries: list) -> str:
+        lines = []
+        for entry in entries or []:
+            if isinstance(entry, dict):
+                lore_type = entry.get("lore_type") or "other"
+                name = entry.get("name") or ""
+                summary = entry.get("summary") or ""
+                role_note = entry.get("role_note") or ""
+            else:
+                lore_type = entry.lore_type
+                name = entry.name
+                summary = entry.summary
+                role_note = entry.role_note
+            if not name or not summary:
+                continue
+            lines.append(f"- [{lore_type}] {name}: {self._shorten_for_prompt(summary, 600)}")
+            if role_note:
+                lines.append(f"  role_note={self._shorten_for_prompt(role_note, 300)}")
+        return "\n".join(lines)[:9000]
+
+    def _resolve_lore_target_character_id(self, project_id: int, target_name: str) -> int | None:
+        normalized = str(target_name or "").strip().lower()
+        if not normalized:
+            return None
+        characters = Character.query.filter(
+            Character.project_id == project_id,
+            Character.deleted_at.is_(None),
+        ).all()
+        for character in characters:
+            names = {str(character.name or "").strip().lower(), str(character.nickname or "").strip().lower()}
+            if normalized in names:
+                return character.id
+        return None
+
+    def _generate_and_upsert_character_impressions(self, *, novel, character, user_id: int, lore_entries: list):
+        result = self._generate_character_impressions(novel, character, lore_entries)
+        impressions = result.get("impressions") if isinstance(result, dict) else []
+        if not isinstance(impressions, list):
+            impressions = []
+        saved = []
+        for item in impressions[:12]:
+            if not isinstance(item, dict):
+                continue
+            target_name = str(item.get("target_name") or "").strip()[:255]
+            impression_text = str(item.get("impression_text") or "").strip()
+            if not target_name or not impression_text:
+                continue
+            row = CinemaNovelCharacterImpression.query.filter(
+                CinemaNovelCharacterImpression.novel_id == novel.id,
+                CinemaNovelCharacterImpression.reviewer_character_id == character.id,
+                CinemaNovelCharacterImpression.user_id == user_id,
+                CinemaNovelCharacterImpression.target_name == target_name,
+            ).first()
+            if not row:
+                row = CinemaNovelCharacterImpression(
+                    novel_id=novel.id,
+                    reviewer_character_id=character.id,
+                    user_id=user_id,
+                    target_name=target_name,
+                )
+            row.target_character_id = self._resolve_lore_target_character_id(novel.project_id, target_name)
+            row.impression_text = impression_text[:1200]
+            row.talk_hint = str(item.get("talk_hint") or "").strip()[:800] or None
+            row.metadata_json = json_util.dumps(
+                {
+                    "source": "cinema_novel_character_impression",
+                    "model": result.get("model"),
+                    "usage": result.get("usage"),
+                }
+            )
+            row.deleted_at = None
+            db.session.add(row)
+            saved.append(row)
+        db.session.commit()
+        return self.list_character_impressions(novel.id, reviewer_character_id=character.id, user_id=user_id)
+
+    def _novel_review_context(self, novel) -> str:
+        production = self._load_json(novel.production_json, default={})
+        lines = [
+            f"title: {novel.title or ''}",
+            f"subtitle: {novel.subtitle or ''}",
+            f"description: {novel.description or ''}",
+        ]
+        source_input = production.get("source_input") if isinstance(production, dict) else {}
+        if isinstance(source_input, dict):
+            premise = source_input.get("premise") if isinstance(source_input.get("premise"), dict) else {}
+            if premise:
+                lines.extend(
+                    [
+                        f"genre: {premise.get('genre') or ''}",
+                        f"theme: {premise.get('theme') or ''}",
+                        f"concept: {premise.get('concept_note') or ''}",
+                    ]
+                )
+        outline = str((production or {}).get("outline_markdown") or "").strip()
+        if outline:
+            lines.append("production_outline:")
+            lines.append(self._shorten_for_prompt(outline, 4500))
+        chapters = self.list_chapters(novel.id)
+        if chapters:
+            lines.append("chapters:")
+            for chapter in chapters[:8]:
+                body = str(chapter.body_markdown or "").strip()
+                lines.append(f"- {chapter.chapter_no}. {chapter.title}: {self._shorten_for_prompt(body, 1200)}")
+        return "\n".join(lines)[:12000]
+
+    def _fallback_review_memory_note(self, novel, character, review_text: str) -> str:
+        return (
+            f"{character.name}はラプ・シネマの上映作品『{novel.title}』を鑑賞済み。"
+            f"印象に残った感想として「{review_text[:180]}」という反応を持っている。"
+            "今後この作品が話題に出たら、鑑賞済みの体験として自分の口調で反応できる。"
+        )
+
+    def _upsert_review_feed_post(self, *, novel, character, user_id: int, review_text: str, existing_feed_post_id: int | None):
+        post = FeedPost.query.filter(
+            FeedPost.id == existing_feed_post_id,
+            FeedPost.deleted_at.is_(None),
+        ).first() if existing_feed_post_id else None
+        generation_state = json_util.dumps(
+            {
+                "source": "cinema_novel_review",
+                "cinema_novel_id": novel.id,
+                "cinema_novel_title": novel.title,
+                "character_id": character.id,
+            }
+        )
+        if post:
+            post.body = review_text
+            post.character_id = character.id
+            post.status = "published"
+            post.generation_state_json = generation_state
+            if not post.published_at:
+                post.published_at = datetime.utcnow()
+            db.session.commit()
+            return post
+        post = FeedPost(
+            project_id=novel.project_id,
+            character_id=character.id,
+            created_by_user_id=user_id,
+            body=review_text,
+            status="published",
+            like_count=0,
+            generation_state_json=generation_state,
+            published_at=datetime.utcnow(),
+        )
+        db.session.add(post)
+        db.session.commit()
+        return post
+
+    def _upsert_review_memory_note(self, *, novel, character, user_id: int, note_text: str, existing_memory_note_id: int | None):
+        note = CharacterMemoryNote.query.filter(
+            CharacterMemoryNote.id == existing_memory_note_id,
+            CharacterMemoryNote.user_id == user_id,
+            CharacterMemoryNote.character_id == character.id,
+        ).first() if existing_memory_note_id else None
+        source_ref = f"cinema_novel:{novel.id}"
+        if note:
+            note.category = "fun_fact"
+            note.note = note_text[:1000]
+            note.source_type = "cinema_novel_review"
+            note.source_ref = source_ref
+            note.confidence = 1.0
+            note.enabled = True
+            db.session.commit()
+            return note
+        note = CharacterMemoryNote.query.filter(
+            CharacterMemoryNote.user_id == user_id,
+            CharacterMemoryNote.character_id == character.id,
+            CharacterMemoryNote.source_type == "cinema_novel_review",
+            CharacterMemoryNote.source_ref == source_ref,
+        ).first()
+        if note:
+            note.note = note_text[:1000]
+            note.enabled = True
+            db.session.commit()
+            return note
+        note = CharacterMemoryNote(
+            user_id=user_id,
+            character_id=character.id,
+            category="fun_fact",
+            note=note_text[:1000],
+            source_type="cinema_novel_review",
+            source_ref=source_ref,
+            confidence=1.0,
+            enabled=True,
+            pinned=False,
+        )
+        db.session.add(note)
+        db.session.commit()
+        return note
+
+    def _upsert_impression_memory_note(self, *, novel, character, user_id: int, impressions: list):
+        if not impressions:
+            return None
+        lines = []
+        for impression in impressions[:8]:
+            if not impression.impression_text:
+                continue
+            hint = f" 話題化: {impression.talk_hint}" if impression.talk_hint else ""
+            lines.append(f"- {impression.target_name}: {impression.impression_text}{hint}")
+        if not lines:
+            return None
+        note_text = (
+            f"{character.name}は『{novel.title}』の登場人物・用語について次の鑑賞印象を持っている。\n"
+            + "\n".join(lines)
+        )[:1000]
+        source_ref = f"cinema_novel:{novel.id}:impressions"
+        note = CharacterMemoryNote.query.filter(
+            CharacterMemoryNote.user_id == user_id,
+            CharacterMemoryNote.character_id == character.id,
+            CharacterMemoryNote.source_type == "cinema_novel_character_impression",
+            CharacterMemoryNote.source_ref == source_ref,
+        ).first()
+        if not note:
+            note = CharacterMemoryNote(
+                user_id=user_id,
+                character_id=character.id,
+                category="fun_fact",
+                source_type="cinema_novel_character_impression",
+                source_ref=source_ref,
+                confidence=1.0,
+                enabled=True,
+                pinned=False,
+        )
+        note.note = note_text
+        note.enabled = True
+        db.session.add(note)
+        db.session.commit()
+        return note
 
     def _shorten_for_prompt(self, value, limit: int = 500) -> str:
         text = str(value or "").strip().replace("\r\n", "\n")
