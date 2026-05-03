@@ -39,6 +39,7 @@ class ImageAIClient:
         "1024x1536": "2:3",
         "1536x1024": "3:2",
     }
+    XAI_MAX_PROMPT_BYTES = 7600
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, provider: str = "openai") -> None:
         self._api_key = api_key
@@ -80,13 +81,27 @@ class ImageAIClient:
             raise ValueError("prompt is required")
         return value
 
+    def _limit_xai_prompt(self, prompt: str) -> str:
+        normalized = self._normalize_prompt(prompt)
+        if len(normalized.encode("utf-8")) <= self.XAI_MAX_PROMPT_BYTES:
+            return normalized
+        suffix = "\n\n[Prompt shortened to fit the image provider limit. Preserve the most important character identity, outfit, pose, and scene instructions above.]"
+        suffix_bytes = suffix.encode("utf-8")
+        available_bytes = max(1, self.XAI_MAX_PROMPT_BYTES - len(suffix_bytes))
+        shortened = normalized.encode("utf-8")[:available_bytes].decode("utf-8", errors="ignore").rstrip()
+        return shortened + suffix
+
     def _is_sexual_safety_rejection(self, error: Exception) -> bool:
         message = str(error or "").lower()
-        return "safety" in message and (
-            "sexual" in message
-            or "safety_violations=[sexual]" in message
+        has_safety_signal = (
+            "safety" in message
+            or "policy" in message
+            or "moderation" in message
+            or "content_policy" in message
             or "safety_violations" in message
         )
+        has_sexual_signal = "sexual" in message or "sexually" in message or "safety_violations=[sexual]" in message
+        return has_safety_signal and (has_sexual_signal or "safety_violations" in message)
 
     def _prompt_has_sexual_safety_risk(self, prompt: str) -> bool:
         lowered = str(prompt or "").lower()
@@ -318,9 +333,10 @@ class ImageAIClient:
         model: Optional[str] = None,
         quality: Optional[str] = None,
     ) -> dict[str, Any]:
-        normalized_prompt = self._normalize_prompt(prompt)
+        normalized_prompt = self._limit_xai_prompt(prompt)
         if negative_prompt:
             normalized_prompt = f"{normalized_prompt}\n\nAvoid: {negative_prompt}"
+            normalized_prompt = self._limit_xai_prompt(normalized_prompt)
         return {
             "model": self._resolve_model(model, "grok"),
             "prompt": normalized_prompt,
@@ -515,6 +531,7 @@ class ImageAIClient:
                 "Only change pose, expression, camera, lighting, and background.\n\n"
                 f"{prompt}"
             )
+        request_payload["prompt"] = self._limit_xai_prompt(str(request_payload.get("prompt") or ""))
         image_items = [
             {"type": "image_url", "url": self._image_path_to_data_uri(image_path)}
             for image_path in image_paths[:5]
@@ -580,6 +597,50 @@ class ImageAIClient:
             "revised_prompt": response_json.get("revised_prompt") or first.get("revised_prompt"),
             "raw_response": response_json,
         }
+
+    def _generate_with_grok_fallback(
+        self,
+        prompt: str,
+        *,
+        negative_prompt: Optional[str],
+        size: Optional[str],
+        quality: Optional[str],
+        background: str,
+        input_image_paths: list[str],
+        input_fidelity: Optional[str],
+        prompt_before_retry: str,
+        operation: str,
+        original_provider: str,
+        original_model: str,
+    ) -> dict[str, Any]:
+        grok_model = self._resolve_model(None, "grok")
+        xai_payload = self._build_xai_request_payload(
+            prompt,
+            negative_prompt=negative_prompt,
+            size=size,
+            model=grok_model,
+            quality=quality,
+        )
+        response_json = (
+            self._call_xai_image_edits_api(xai_payload, input_image_paths)
+            if input_image_paths
+            else self._call_xai_images_api(xai_payload)
+        )
+        result = self._normalize_xai_response(response_json, prompt=prompt, model=grok_model)
+        result["operation"] = operation
+        result["reference_image_count"] = len(input_image_paths)
+        result["input_fidelity"] = input_fidelity if input_image_paths else None
+        result["quality"] = self._xai_resolution(quality)
+        result["output_format"] = "png"
+        result["background"] = background
+        result["aspect_ratio"] = xai_payload.get("aspect_ratio")
+        result["safety_preflight"] = False
+        result["safety_retry"] = True
+        result["safety_retry_provider"] = "grok"
+        result["fallback_from_provider"] = original_provider
+        result["fallback_from_model"] = original_model
+        result["prompt_before_safety_retry"] = prompt_before_retry
+        return result
 
     def generate_image(
         self,
@@ -668,10 +729,27 @@ class ImageAIClient:
             try:
                 response_json = self._call_openai_image_edits_api(data, normalized_input_paths)
             except RuntimeError as exc:
-                if not self._allow_safety_retry() or not self._is_sexual_safety_rejection(exc):
+                if not self._is_sexual_safety_rejection(exc):
                     raise
                 safety_retry = True
                 normalized_prompt = self._rewrite_prompt_for_safety_retry(prompt_before_retry)
+                try:
+                    return self._generate_with_grok_fallback(
+                        normalized_prompt,
+                        negative_prompt=negative_prompt,
+                        size=size,
+                        quality=quality,
+                        background=background,
+                        input_image_paths=normalized_input_paths,
+                        input_fidelity=input_fidelity,
+                        prompt_before_retry=prompt_before_retry,
+                        operation="edit",
+                        original_provider="openai",
+                        original_model=resolved_model,
+                    )
+                except RuntimeError:
+                    if not self._allow_safety_retry():
+                        raise
                 data = self._build_edit_request_data(
                     normalized_prompt,
                     size=size,
@@ -713,10 +791,27 @@ class ImageAIClient:
         try:
             response_json = self._call_openai_images_api(payload)
         except RuntimeError as exc:
-            if not self._allow_safety_retry() or not self._is_sexual_safety_rejection(exc):
+            if not self._is_sexual_safety_rejection(exc):
                 raise
             safety_retry = True
             normalized_prompt = self._rewrite_prompt_for_safety_retry(prompt_before_retry)
+            try:
+                return self._generate_with_grok_fallback(
+                    normalized_prompt,
+                    negative_prompt=negative_prompt,
+                    size=size,
+                    quality=quality,
+                    background=background,
+                    input_image_paths=[],
+                    input_fidelity=None,
+                    prompt_before_retry=prompt_before_retry,
+                    operation="generate",
+                    original_provider="openai",
+                    original_model=resolved_model,
+                )
+            except RuntimeError:
+                if not self._allow_safety_retry():
+                    raise
             payload = self._build_request_payload(
                 normalized_prompt,
                 negative_prompt=negative_prompt,

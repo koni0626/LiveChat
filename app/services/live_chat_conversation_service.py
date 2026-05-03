@@ -503,6 +503,87 @@ class LiveChatConversationService:
         prompt = prompt_support.apply_visual_style(prompt, context)
         return prompt_support.forbid_text_in_image(prompt)
 
+    def _build_location_background_prompt_v2(self, context: dict, location) -> str:
+        character_names = "、".join(character.get("name") or "" for character in context.get("characters") or [])
+        recent_lines = []
+        for message in (context.get("messages") or [])[-6:]:
+            speaker = message.get("speaker_name") or message.get("sender_type") or ""
+            text = message.get("message_text") or ""
+            if text:
+                recent_lines.append(f"{speaker}: {text}")
+        lines = [
+            "ライブチャットの場所移動用の背景画像。",
+            "まず移動先施設の背景だけを強く作る。キャラクターは主役にしない。",
+            "移動先の施設説明、地域、施設タイプ、画像方針が一目で分かる背景にする。",
+            "後続工程でキャラクターを合成するため、背景の情報量と空間の奥行きを重視する。",
+            "画像内に文字、ロゴ、字幕、吹き出し、UI、看板の可読文字を入れない。",
+            "グレー背景、単色背景、無地スタジオ背景は禁止。",
+            f"移動先施設: {location.name or ''}",
+            f"地域: {location.region or ''}",
+            f"施設タイプ: {location.location_type or ''}",
+            f"施設説明: {location.description or ''}",
+            f"施設画像方針: {location.image_prompt or ''}",
+            f"登場キャラクター: {character_names}",
+            "会話の直前ログ:",
+            *recent_lines,
+            "演出: 場所の特徴が一目でわかり、ここに移動したと感じられるノベルゲーム背景。",
+        ]
+        prompt = "\n".join(lines)
+        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        return prompt_support.forbid_text_in_image(prompt)
+
+    def _build_location_costume_scene_prompt(self, context: dict, location, selected_costume_image: dict | None) -> str:
+        character_names = "、".join(character.get("name") or "" for character in context.get("characters") or [])
+        costume_state = (selected_costume_image or {}).get("state_json") or {}
+        costume_notes = "\n".join(
+            str(part or "").strip()
+            for part in [
+                costume_state.get("instruction") if isinstance(costume_state, dict) else "",
+                costume_state.get("rewritten_instruction") if isinstance(costume_state, dict) else "",
+                (selected_costume_image or {}).get("prompt_text"),
+            ]
+            if str(part or "").strip()
+        )
+        prompt = "\n".join(
+            [
+                "移動先背景と選択中衣装画像を使って、移動後の中間画像を作る。",
+                "参照画像が2枚ある場合、1枚目は移動先背景、2枚目はクローゼットで選択されているキャラクター衣装画像。",
+                "背景は必ず移動先背景を優先する。衣装画像のグレー背景や単色背景は使わない。",
+                "衣装画像からはキャラクターの顔、髪型、体型、画風、現在選択中の衣装だけを維持する。",
+                "まだ最終演出ではないため、自然な立ち姿でよい。背景とキャラクターが同じ空間にいるようにする。",
+                "画像内に文字、ロゴ、字幕、吹き出し、UI、看板の可読文字を入れない。",
+                f"移動先施設: {location.name or ''}",
+                f"施設説明: {location.description or ''}",
+                f"施設画像方針: {location.image_prompt or ''}",
+                f"登場キャラクター: {character_names}",
+                f"選択衣装メモ: {costume_notes[:1600]}",
+            ]
+        )
+        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        return prompt_support.forbid_text_in_image(prompt)
+
+    def _build_location_scene_final_prompt(self, context: dict, location) -> str:
+        character_names = "、".join(character.get("name") or "" for character in context.get("characters") or [])
+        prompt = "\n".join(
+            [
+                "提供された中間画像をベースに、ライブチャットのノベルゲーム用ワンシーン画像へ仕上げる。",
+                "同じキャラクター、同じ衣装、同じ移動先背景を維持する。",
+                "変更するのは主にポーズ、表情、カメラ角度、構図、ライティング、空気感。",
+                "キャラクターが移動先で会話を始める直前の、魅力的なイベントCGにする。",
+                "背景をグレーや単色に戻さない。必ず移動先施設の背景を残す。",
+                "衣装カタログ画像ではなく、ノベルゲームの会話シーンとして自然に見せる。",
+                "画像内に文字、ロゴ、字幕、吹き出し、UI、看板の可読文字を入れない。",
+                f"移動先施設: {location.name or ''}",
+                f"施設説明: {location.description or ''}",
+                f"登場キャラクター: {character_names}",
+            ]
+        )
+        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        return prompt_support.forbid_text_in_image(prompt)
+
     def move_to_location(self, session_id: int, location_id: int, payload: dict | None = None):
         payload = dict(payload or {})
         session = self._chat_session_service.get_session(session_id)
@@ -517,7 +598,7 @@ class LiveChatConversationService:
         state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
         location_payload = self._serialize_location_for_state(location)
         focus_summary = f"{location.name}へ移動した。{(location.description or '')[:180]}"
-        prompt = self._build_location_move_prompt(context, location)
+        prompt = self._build_location_background_prompt_v2(context, location)
         scene_update = {
             "scene_phase": "location_move",
             "location": location.name,
@@ -561,16 +642,55 @@ class LiveChatConversationService:
         generated_image = None
         image_generation_error = None
         try:
-            generated_image = self._media_service.generate_image(
+            location_background_image = self._media_service.generate_image(
                 session_id,
                 {
-                    "image_type": "location_move",
+                    "image_type": "location_move_background",
                     "prompt_text": prompt,
                     "use_existing_prompt": True,
+                    "skip_character_references": True,
+                    "skip_outfit_prompt": True,
                     "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
                     "quality": payload.get("quality") or "low",
                 },
             )
+            selected_costume_image = self._media_service.selected_costume_image(session_id)
+            if selected_costume_image and location_background_image:
+                costume_scene_prompt = self._build_location_costume_scene_prompt(context, location, selected_costume_image)
+                costume_scene_image = self._media_service.generate_image(
+                    session_id,
+                    {
+                        "image_type": "location_costume_scene",
+                        "prompt_text": costume_scene_prompt,
+                        "use_existing_prompt": True,
+                        "reference_asset_ids": [
+                            location_background_image.get("asset_id"),
+                            selected_costume_image.get("asset_id"),
+                        ],
+                        "skip_character_references": True,
+                        "skip_outfit_prompt": True,
+                        "input_fidelity": "high",
+                        "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
+                        "quality": payload.get("quality") or "low",
+                    },
+                )
+                final_prompt = self._build_location_scene_final_prompt(context, location)
+                generated_image = self._media_service.generate_image(
+                    session_id,
+                    {
+                        "image_type": "location_move",
+                        "prompt_text": final_prompt,
+                        "use_existing_prompt": True,
+                        "reference_asset_ids": [costume_scene_image.get("asset_id")],
+                        "skip_character_references": True,
+                        "skip_outfit_prompt": True,
+                        "input_fidelity": "low",
+                        "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
+                        "quality": payload.get("quality") or "low",
+                    },
+                )
+            else:
+                generated_image = location_background_image
         except Exception as exc:
             current_app.logger.exception("location move image generation failed")
             image_generation_error = str(exc)
@@ -781,6 +901,51 @@ class LiveChatConversationService:
         prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
         prompt = prompt_support.apply_visual_style(prompt, context)
         return prompt_support.forbid_text_in_image(prompt)
+
+    def _generate_photo_finish_reply(
+        self,
+        session_id: int,
+        *,
+        speaker_name: str,
+        instruction: str,
+        pose_style: str,
+        photo_image: dict | None,
+    ) -> dict:
+        context = self._context_provider(session_id)
+        state_json = (context.get("state") or {}).get("state_json") or {}
+        current_location = state_json.get("current_location") or {}
+        scene_update = {
+            "scene_phase": "photo_mode_finished",
+            "location": current_location.get("name") or state_json.get("location") or "",
+            "background": state_json.get("background") or current_location.get("description") or "",
+            "focus_summary": f"撮影モードで写真を撮り直した。撮影指示: {instruction[:180]}",
+            "next_topic": "撮れた写真の雰囲気、ポーズ、表情、場面に触れながら自然に会話を続ける",
+            "transition_occurred": False,
+            "character_reaction_hint": (
+                "固定文ではなく、キャラクター本人の口調で、撮れた写真への感想を一言から二言で返す。"
+                "衣装はそのまま等の説明口調を避け、照れ、得意げ、悪戯っぽさ、品評、誘いなどキャラクター性を出す。"
+                "ユーザーの撮影指示や現在地に具体的に触れる。"
+            ),
+            "photo_mode": True,
+            "photo_image_id": (photo_image or {}).get("id"),
+            "pose_style": pose_style,
+        }
+        reply = text_support.generate_narration_reaction(
+            self._text_ai_client,
+            context,
+            (
+                "撮影モードの写真が完成した。"
+                f"ユーザーの撮影指示: {instruction}。"
+                f"ポーズ方針: {pose_style or '自動'}。"
+                "キャラクターが撮れた写真を見せながら、気の利いたセリフを言う。"
+            ),
+            scene_update,
+        )
+        if not reply.get("speaker_name"):
+            reply["speaker_name"] = speaker_name
+        if not reply.get("message_text"):
+            reply["message_text"] = "……どう？ 今の空気、少しだけ閉じ込められた気がする。"
+        return reply
 
     def _lccd_location_payload(self, context: dict) -> dict:
         character = (context.get("characters") or [{}])[0]
@@ -1006,12 +1171,19 @@ class LiveChatConversationService:
                     "provider": payload.get("provider") or payload.get("image_ai_provider"),
                 },
             )
+            finish_reply = self._generate_photo_finish_reply(
+                session_id,
+                speaker_name=thinking_reply["speaker_name"],
+                instruction=instruction,
+                pose_style=pose_style,
+                photo_image=photo_image,
+            )
             finish_message = self._chat_message_service.create_message(
                 session_id,
                 {
                     "sender_type": "character",
-                    "speaker_name": thinking_reply["speaker_name"],
-                    "message_text": "撮影してきたよ。衣装はそのまま、今の場面でポーズと構図だけ変えてみた。",
+                    "speaker_name": finish_reply["speaker_name"],
+                    "message_text": finish_reply["message_text"],
                     "message_role": "assistant",
                     "state_snapshot_json": {
                         "photo_mode": True,
@@ -1116,12 +1288,19 @@ class LiveChatConversationService:
                     "provider": payload.get("provider") or payload.get("image_ai_provider"),
                 },
             )
+            finish_reply = self._generate_photo_finish_reply(
+                session_id,
+                speaker_name=thinking_reply["speaker_name"],
+                instruction=instruction,
+                pose_style=pose_style,
+                photo_image=photo_image,
+            )
             finish_message = self._chat_message_service.create_message(
                 session_id,
                 {
                     "sender_type": "character",
-                    "speaker_name": thinking_reply["speaker_name"],
-                    "message_text": "撮影してきたよ。衣装はそのまま、今の場面でポーズと構図だけ変えてみた。",
+                    "speaker_name": finish_reply["speaker_name"],
+                    "message_text": finish_reply["message_text"],
                     "message_role": "assistant",
                     "state_snapshot_json": {
                         "photo_mode": True,

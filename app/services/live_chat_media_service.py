@@ -215,6 +215,10 @@ class LiveChatMediaService:
                     return outfit
         return None
 
+    def selected_costume_image(self, session_id: int):
+        selected_costume = self._session_image_service.get_selected_costume(session_id)
+        return self.serialize_session_image(selected_costume) if selected_costume else None
+
     def _selected_scene_reference_asset(self, session_id: int):
         scene_images = [
             item
