@@ -19,6 +19,7 @@ from .cinema_novel_progress import CinemaNovelProgress
 from .cinema_novel_review import CinemaNovelReview
 from .feed_like import FeedLike
 from .feed_post import FeedPost
+from .inventory_item import InventoryItem
 from .live_chat_room import LiveChatRoom
 from .letter import Letter
 from .project import Project
@@ -63,6 +64,7 @@ __all__ = [
     "CinemaNovelReview",
     "FeedLike",
     "FeedPost",
+    "InventoryItem",
     "LiveChatRoom",
     "Letter",
     "OutingSession",

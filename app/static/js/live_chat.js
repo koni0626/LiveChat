@@ -37,6 +37,12 @@
   const toggleLccdButton = document.getElementById("liveChatToggleLccdButton");
   const conversationModeButton = document.getElementById("liveChatConversationModeButton");
   const togglePhotoModeButton = document.getElementById("liveChatTogglePhotoModeButton");
+  const toggleInventoryButton = document.getElementById("liveChatToggleInventoryButton");
+  const inventoryPanel = document.getElementById("liveChatInventoryPanel");
+  const inventoryList = document.getElementById("liveChatInventoryList");
+  const inventoryGenerateButton = document.getElementById("liveChatInventoryGenerateButton");
+  const inventoryCloseButton = document.getElementById("liveChatInventoryCloseButton");
+  const inventoryPromptInput = document.getElementById("liveChatInventoryPromptInput");
   const lccdCloseButton = document.getElementById("liveChatLccdCloseButton");
   const lccdForm = document.getElementById("liveChatLccdForm");
   const lccdGenerateButton = document.getElementById("liveChatLccdGenerateButton");
@@ -88,6 +94,9 @@
   let conversationModeActive = true;
   let photoModeActive = false;
   let photoModeBusy = false;
+  let inventoryVisible = false;
+  let inventoryBusy = false;
+  let inventoryItems = [];
   let currentShortStory = null;
   let idleTalkTimer = null;
   let idleTalkBusy = false;
@@ -297,6 +306,106 @@
     renderCharacterAffinity(context);
     renderPlayerReaction(context);
     renderSavedShortStories(context);
+    renderInventoryPanel();
+  }
+
+  function inventoryTargetCharacterId() {
+    const characters = currentContext?.characters || [];
+    return characters[0]?.id || null;
+  }
+
+  function setInventoryVisible(visible) {
+    inventoryVisible = Boolean(visible);
+    renderInventoryPanel();
+    if (inventoryVisible) {
+      loadInventoryItems();
+    }
+  }
+
+  function renderInventoryPanel() {
+    if (!inventoryPanel || !inventoryList) return;
+    inventoryPanel.classList.toggle("is-hidden", !inventoryVisible);
+    toggleInventoryButton?.setAttribute("aria-expanded", inventoryVisible ? "true" : "false");
+    toggleInventoryButton?.classList.toggle("is-active", inventoryVisible);
+    if (!inventoryVisible) return;
+    if (inventoryBusy) {
+      inventoryList.innerHTML = '<div class="live-chat-inventory-empty">Loading...</div>';
+      return;
+    }
+    if (!inventoryItems.length) {
+      inventoryList.innerHTML = '<div class="live-chat-inventory-empty">アイテムがありません。生成してからステージ画像へドラッグしてください。</div>';
+      return;
+    }
+    inventoryList.innerHTML = inventoryItems.map((item) => {
+      const imageUrl = item.asset?.media_url || "";
+      return `
+        <button class="live-chat-inventory-item" type="button" draggable="true" data-inventory-item-id="${item.id}" title="${NovelUI.escape(item.description || item.name || "")}">
+          ${imageUrl ? `<img src="${NovelUI.escape(imageUrl)}" alt="${NovelUI.escape(item.name || "item")}">` : '<i class="bi bi-gift"></i>'}
+          <span>${NovelUI.escape(item.name || "Item")}</span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  async function loadInventoryItems() {
+    if (!projectId) return;
+    inventoryBusy = true;
+    renderInventoryPanel();
+    try {
+      const payload = await LiveChatApi.loadInventory(projectId);
+      inventoryItems = Array.isArray(payload?.items) ? payload.items : [];
+    } catch (error) {
+      NovelUI.toast(error.message || "インベントリーを読み込めませんでした。", "warning");
+    } finally {
+      inventoryBusy = false;
+      renderInventoryPanel();
+    }
+  }
+
+  async function generateInventoryItem() {
+    if (!projectId || inventoryBusy) return;
+    inventoryBusy = true;
+    inventoryGenerateButton.disabled = true;
+    renderInventoryPanel();
+    try {
+      const prompt = inventoryPromptInput?.value?.trim() || "";
+      const body = {
+        session_id: sessionId,
+        character_id: inventoryTargetCharacterId(),
+        size: "1024x1024",
+      };
+      if (prompt) body.prompt = prompt;
+      const result = await LiveChatApi.generateInventoryItem(projectId, body);
+      if (result?.points?.balance !== undefined) NovelUI.setPointsBalance(result.points.balance);
+      if (result?.item) inventoryItems = [result.item, ...inventoryItems.filter((item) => item.id !== result.item.id)];
+      NovelUI.toast("アイテムを生成しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "アイテム生成に失敗しました。", "danger");
+    } finally {
+      inventoryBusy = false;
+      inventoryGenerateButton.disabled = false;
+      renderInventoryPanel();
+    }
+  }
+
+  async function giveInventoryItem(itemId) {
+    if (!itemId || shell.getState().replyLoading) return;
+    const item = inventoryItems.find((entry) => Number(entry.id) === Number(itemId));
+    shell.setReplyLoading(true, currentContext);
+    try {
+      await LiveChatApi.giveInventoryItem(sessionId, itemId, {
+        character_id: inventoryTargetCharacterId(),
+        message_text: item?.name ? `${item.name}を渡した。` : "アイテムを渡した。",
+      });
+      inventoryItems = inventoryItems.filter((entry) => Number(entry.id) !== Number(itemId));
+      NovelUI.toast("アイテムを渡しました。");
+      await loadContext();
+    } catch (error) {
+      NovelUI.toast(error.message || "アイテムを渡せませんでした。", "danger");
+    } finally {
+      shell.setReplyLoading(false, currentContext);
+      renderInventoryPanel();
+    }
   }
 
   function renderCharacterAffinity(context) {
@@ -638,6 +747,7 @@
   async function loadContext() {
     const context = await LiveChatApi.loadContext(sessionId);
     applyContext(context);
+    await loadInventoryItems();
     scheduleIdleTalk();
   }
 
@@ -1295,6 +1405,54 @@
     if (!locationMoveVisible) selectedLocationMoveId = null;
     renderLocationMovePanel(currentContext);
     renderLocationServicePanel(currentContext);
+  });
+
+  toggleInventoryButton?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setInventoryVisible(!inventoryVisible);
+  });
+
+  inventoryPanel?.addEventListener("click", (event) => {
+    if (event.target.closest("#liveChatInventoryCloseButton")) {
+      event.preventDefault();
+      event.stopPropagation();
+      setInventoryVisible(false);
+      return;
+    }
+    event.stopPropagation();
+  });
+
+  inventoryCloseButton?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setInventoryVisible(false);
+  });
+
+  inventoryGenerateButton?.addEventListener("click", generateInventoryItem);
+
+  inventoryList?.addEventListener("dragstart", (event) => {
+    const itemButton = event.target.closest("[data-inventory-item-id]");
+    if (!itemButton) return;
+    event.dataTransfer.setData("text/plain", itemButton.dataset.inventoryItemId);
+    event.dataTransfer.effectAllowed = "move";
+  });
+
+  selectedImagePanel?.addEventListener("dragover", (event) => {
+    if (!event.dataTransfer.types.includes("text/plain")) return;
+    event.preventDefault();
+    selectedImagePanel.classList.add("is-inventory-dragover");
+  });
+
+  selectedImagePanel?.addEventListener("dragleave", () => {
+    selectedImagePanel.classList.remove("is-inventory-dragover");
+  });
+
+  selectedImagePanel?.addEventListener("drop", async (event) => {
+    const itemId = Number(event.dataTransfer.getData("text/plain") || 0);
+    if (!itemId) return;
+    event.preventDefault();
+    selectedImagePanel.classList.remove("is-inventory-dragover");
+    await giveInventoryItem(itemId);
   });
 
   locationMovePanel?.addEventListener("click", async (event) => {

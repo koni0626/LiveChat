@@ -96,7 +96,7 @@ body[data-screen="stories"] .live-chat-room-session-list {
   top: var(--stage-actions-top, 0.9rem);
   left: var(--stage-actions-left, auto);
   right: var(--stage-actions-right, 0.9rem);
-  z-index: 12;
+  z-index: 16;
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
@@ -2971,7 +2971,7 @@ body[data-screen="live-chat"] .live-chat-stage .live-chat-stage-actions {
   top: var(--stage-actions-top, 1rem);
   left: var(--stage-actions-left, auto);
   right: var(--stage-actions-right, 1rem);
-  z-index: 12;
+  z-index: 16;
   display: inline-flex;
   width: auto;
 }
@@ -4445,7 +4445,7 @@ body[data-screen="live-chat"] .live-chat-stage .live-chat-stage-actions {
   top: var(--stage-actions-top, 1rem);
   left: var(--stage-actions-left, auto);
   right: var(--stage-actions-right, 1rem);
-  z-index: 12;
+  z-index: 16;
   display: inline-flex;
   grid-template-columns: none;
   width: auto;
@@ -4454,4 +4454,139 @@ body[data-screen="live-chat"] .live-chat-stage .live-chat-stage-actions {
 body[data-screen="live-chat"] .live-chat-stage .live-chat-stage-action-button {
   width: 2.35rem;
   height: 2.35rem;
+}
+.live-chat-inventory-panel {
+  position: absolute;
+  z-index: 14;
+  top: calc(var(--stage-actions-top, 1rem) + 3.2rem);
+  right: var(--stage-actions-right, 1rem);
+  width: min(360px, calc(100% - 2rem));
+  max-height: min(420px, calc(100% - 4rem));
+  overflow: auto;
+  padding: 0.9rem;
+  border: 1px solid rgba(103, 235, 255, 0.28);
+  border-radius: 0.85rem;
+  background: rgba(6, 13, 26, 0.94);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(16px);
+}
+
+.live-chat-inventory-panel.is-hidden {
+  display: none;
+}
+
+.live-chat-inventory-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.75rem;
+}
+
+.live-chat-inventory-head h4 {
+  margin: 0;
+  color: #f6fbff;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.live-chat-inventory-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+}
+
+.live-chat-inventory-actions .btn {
+  white-space: nowrap;
+}
+
+.live-chat-inventory-close {
+  width: 2.1rem;
+  height: 2.1rem;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+}
+
+.live-chat-inventory-prompt {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  color: rgba(160, 225, 255, 0.88);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.live-chat-inventory-prompt input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.58rem 0.72rem;
+  border: 1px solid rgba(103, 235, 255, 0.24);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f6fbff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.live-chat-inventory-prompt input::placeholder {
+  color: rgba(211, 241, 255, 0.48);
+}
+
+.live-chat-inventory-prompt input:focus {
+  border-color: rgba(126, 250, 255, 0.58);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(103, 235, 255, 0.12);
+}
+
+.live-chat-inventory-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.live-chat-inventory-item {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.45rem;
+  border: 1px solid rgba(103, 235, 255, 0.2);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.05);
+  color: #dffbff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: center;
+  cursor: grab;
+}
+
+.live-chat-inventory-item img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 0.45rem;
+}
+
+.live-chat-inventory-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-chat-inventory-empty {
+  grid-column: 1 / -1;
+  padding: 0.75rem;
+  border: 1px dashed rgba(103, 235, 255, 0.25);
+  border-radius: 0.65rem;
+  color: rgba(211, 241, 255, 0.78);
+  font-size: 0.82rem;
+}
+
+.live-chat-image-panel.is-inventory-dragover {
+  outline: 3px solid rgba(0, 245, 212, 0.82);
+  outline-offset: -6px;
 }

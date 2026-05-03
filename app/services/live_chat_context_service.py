@@ -208,6 +208,29 @@ class LiveChatContextService:
                     )
         return {"available_hints": available[:12], "learned_hints_for_active_targets": learned[:20]}
 
+    def _serialize_world_context(self, world) -> dict:
+        if not world:
+            return {
+                "name": None,
+                "overview": None,
+                "tone": None,
+                "era_description": None,
+                "technology_level": None,
+                "social_structure": None,
+                "rules_json": None,
+                "forbidden_json": None,
+            }
+        return {
+            "name": getattr(world, "name", None),
+            "overview": getattr(world, "overview", None),
+            "tone": getattr(world, "tone", None),
+            "era_description": getattr(world, "era_description", None),
+            "technology_level": getattr(world, "technology_level", None),
+            "social_structure": getattr(world, "social_structure", None),
+            "rules_json": getattr(world, "rules_json", None),
+            "forbidden_json": getattr(world, "forbidden_json", None),
+        }
+
     def list_sessions(
         self,
         project_id: int,
@@ -299,6 +322,7 @@ class LiveChatContextService:
             character_user_memories=character_user_memories,
         )
         world = self._world_service.get_world(session.project_id)
+        world_context = self._serialize_world_context(world)
         world_map_context = self._world_map_context(session.project_id)
         world_activity_context = self._world_activity_context(session.project_id, session.owner_user_id, characters)
         if not messages and characters:
@@ -309,11 +333,7 @@ class LiveChatContextService:
                     "genre": project.genre if project else None,
                 },
                 "story_outline": {},
-                "world": {
-                    "name": getattr(world, "name", None) if world else None,
-                    "overview": getattr(world, "overview", None) if world else None,
-                    "tone": getattr(world, "tone", None) if world else None,
-                },
+                "world": world_context,
                 "world_map": world_map_context,
                 "world_activity": world_activity_context,
                 "session": self._serializer.serialize_session(session),
@@ -336,11 +356,7 @@ class LiveChatContextService:
                 "genre": project.genre if project else None,
             },
             "story_outline": {},
-            "world": {
-                "name": getattr(world, "name", None) if world else None,
-                "overview": getattr(world, "overview", None) if world else None,
-                "tone": getattr(world, "tone", None) if world else None,
-            },
+            "world": world_context,
             "world_map": world_map_context,
             "world_activity": world_activity_context,
             "session": self._serializer.serialize_session(session),

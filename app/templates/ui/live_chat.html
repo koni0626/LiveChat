@@ -38,6 +38,9 @@
         <button class="live-chat-stage-action-button" type="button" id="liveChatTogglePhotoModeButton" aria-pressed="false" aria-label="撮影モード" title="撮影モード">
           <i class="bi bi-camera-fill" aria-hidden="true"></i>
         </button>
+        <button class="live-chat-stage-action-button" type="button" id="liveChatToggleInventoryButton" aria-expanded="false" aria-label="Inventory" title="Inventory">
+          <i class="bi bi-bag-heart-fill" aria-hidden="true"></i>
+        </button>
         <button class="live-chat-stage-action-button" type="button" id="liveChatToggleTextboxButton" aria-label="テキストボックス非表示" title="テキストボックス非表示">
           <i class="bi bi-chat-left-text-fill" aria-hidden="true"></i>
         </button>
@@ -47,6 +50,28 @@
       </div>
       <section class="live-chat-location-panel is-hidden" id="liveChatLocationMovePanel" aria-live="polite"></section>
       <section class="live-chat-location-service-panel is-hidden" id="liveChatLocationServicePanel" aria-live="polite"></section>
+      <section class="live-chat-inventory-panel is-hidden" id="liveChatInventoryPanel" aria-live="polite">
+        <div class="live-chat-inventory-head">
+          <div>
+            <div class="eyebrow">Inventory</div>
+            <h4>Items</h4>
+          </div>
+          <div class="live-chat-inventory-actions">
+            <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatInventoryGenerateButton" title="Generate item">
+              <i class="bi bi-stars" aria-hidden="true"></i>
+              <span>Generate 30pt</span>
+            </button>
+            <button class="btn btn-sm btn-outline-dark live-chat-inventory-close" type="button" id="liveChatInventoryCloseButton" aria-label="Close inventory" title="Close">
+              <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+        <label class="live-chat-inventory-prompt" for="liveChatInventoryPromptInput">
+          <span>Prompt</span>
+          <input type="text" id="liveChatInventoryPromptInput" maxlength="160" placeholder="任意: サイバーなアクセサリー、好きなお菓子、思い出の品など">
+        </label>
+        <div class="live-chat-inventory-list" id="liveChatInventoryList"></div>
+      </section>
     </div>
 
     <div class="live-chat-camera-status" id="liveChatCameraStatus" hidden>

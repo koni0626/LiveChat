@@ -45,19 +45,93 @@ def collect_visual_style(context: dict, state_json: dict | None = None) -> str:
     return " / ".join(normalized)
 
 
+
+def collect_world_visual_context(context: dict) -> str:
+    world = context.get("world") or {}
+    parts = []
+    labels = (
+        ("World name", "name"),
+        ("Tone", "tone"),
+        ("Era", "era_description"),
+        ("Place", "overview"),
+        ("Technology", "technology_level"),
+        ("Society", "social_structure"),
+        ("Important facilities and visual rules", "rules_json"),
+    )
+    for label, key in labels:
+        value = str(world.get(key) or "").strip()
+        if value:
+            parts.append(f"{label}: {value[:900]}")
+    return "\n".join(parts)
+
+
+def world_has_cyber_direction(context: dict) -> bool:
+    world = context.get("world") or {}
+    world_text = " ".join(
+        str(world.get(key) or "")
+        for key in (
+            "name",
+            "overview",
+            "tone",
+            "era_description",
+            "technology_level",
+            "social_structure",
+            "rules_json",
+        )
+    ).lower()
+    markers = (
+        "cyber",
+        "\u30b5\u30a4\u30d0\u30fc",
+        "\u8fd1\u672a\u6765",
+        "ai",
+        "neon",
+        "\u30cd\u30aa\u30f3",
+        "\u90fd\u5e02",
+        "city",
+        "hologram",
+        "\u30db\u30ed\u30b0\u30e9\u30e0",
+        "android",
+        "\u30a2\u30f3\u30c9\u30ed\u30a4\u30c9",
+        "\u96fb\u8133",
+    )
+    return any(marker in world_text for marker in markers)
+
+
+def build_world_visual_rule(context: dict) -> str:
+    world_visual = collect_world_visual_context(context)
+    if not world_visual:
+        return ""
+    rule = (
+        "World visual continuity:\n"
+        f"{world_visual}\n"
+        "Reflect the world setting in the environment, props, lighting, architecture, materials, and atmosphere. "
+        "Do not replace the requested location with a generic room, neutral studio, or plain modern street."
+    )
+    if world_has_cyber_direction(context):
+        rule += (
+            "\nCyber / near-future emphasis: make backgrounds visibly cyberpunk where it fits the scene: layered neon, "
+            "holographic light, luminous panels, dense futuristic urban detail, glass/metal surfaces, data-display ambience "
+            "without readable letters, and high-contrast cinematic night lighting. Avoid beige, generic modern, rural, or neutral backgrounds unless explicitly requested."
+        )
+    return rule
+
 def apply_visual_style(prompt: str, context: dict) -> str:
     value = str(prompt or "").strip()
     style = collect_visual_style(context)
+    world_rule = build_world_visual_rule(context)
     reference_rule = (
-        "参照画像・基準画像がある場合は、その画像の画風を最優先で維持する。"
-        "線の太さ、塗り、色味、光の質感、肌や髪のレンダリング、顔立ち、キャラクターデザインの密度、"
-        "3D/2D/実写寄りなどの表現方向を変えない。"
-        "新しい場面や衣装を描く場合も、別作品の絵柄に寄せず、参照画像と同じ作家・同じシリーズの続きに見えるようにする。"
+        "Keep the character design and image style consistent with reference images when available. "
+        "Preserve line weight, coloring, texture, face rendering, hair rendering, pose readability, and character design accuracy. "
+        "Do not switch between 2D, 3D, photorealistic, or painterly styles unless explicitly requested. "
+        "New scenes, clothes, and backgrounds should still look like the same visual series."
     )
-    if not style:
-        return f"{value}\n\n{reference_rule}"
-    return f"{value}\n\n画風・スタイル指定: {style}\n{reference_rule}\nこの画風を優先し、以後のシーンでも線、塗り、色味、質感を一貫させる。"
-
+    blocks = [value]
+    if world_rule:
+        blocks.append(world_rule)
+    if style:
+        blocks.append(f"Visual style instruction: {style}")
+    blocks.append(reference_rule)
+    return "\n\n".join(block for block in blocks if block)
 
 def forbid_text_in_image(prompt: str) -> str:
     value = str(prompt or "").strip()
@@ -136,6 +210,7 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
     conversation_director = state_json.get("conversation_director") or {}
     active = active_characters(context, state_json)
     visual_style = collect_visual_style(context, state_json)
+    world_visual = collect_world_visual_context(context)
 
     lines = [
         "あなたはノベルゲームのイベントCG演出担当です。",
@@ -152,6 +227,7 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
         "",
         f"作品名: {context['project'].get('title') or '無題'}",
         f"世界観: {context['world'].get('overview') or context['world'].get('name') or ''}",
+        f"World visual setting: {world_visual}",
         f"現在地のヒント: {line_visual_note.get('location') or scene_progression.get('location') or state_json.get('location') or ''}",
         f"背景のヒント: {line_visual_note.get('background') or scene_progression.get('background') or state_json.get('background') or ''}",
         f"場面要約: {line_visual_note.get('scene_moment') or scene_progression.get('focus_summary') or state_json.get('focus_summary') or ''}",
@@ -162,6 +238,15 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
     if world_map_context:
         lines.extend(["ワールドマップ登録施設:", world_map_context])
+    if world_has_cyber_direction(context):
+        lines.extend(
+            [
+                "Cyberpunk visual requirement:",
+                "- Make the background visibly cyberpunk when it fits the scene: neon, holographic glow, luminous panels, glass/metal, dense near-future city detail.",
+                "- Do not draw readable text; use abstract unreadable signage or UI-like light shapes only.",
+                "- Avoid generic rooms, plain modern streets, beige interiors, rural scenery, or neutral studio backgrounds unless explicitly requested.",
+            ]
+        )
     for character in active[:20]:
         nickname = character.get("nickname")
         label = f"{character['name']} / あだ名: {nickname}" if nickname else character["name"]
@@ -188,6 +273,7 @@ def fallback_japanese_conversation_image_prompt(context: dict, state: dict) -> d
     camera = line_visual_note.get("camera") or state_json.get("camera") or "印象的なイベントCG構図"
     focus_object = line_visual_note.get("focus_object")
     visual_style = collect_visual_style(context, state_json)
+    world_rule = build_world_visual_rule(context)
 
     prompt_parts = [
         "この会話に合う、ドラマチックなノベルゲーム風イベントCGを生成してください。",
@@ -199,6 +285,8 @@ def fallback_japanese_conversation_image_prompt(context: dict, state: dict) -> d
     ]
     if location:
         prompt_parts.append(f"会話内容に合う背景として「{location}」が自然に分かるように描いてください。")
+    if world_rule:
+        prompt_parts.append(f"World visual setting to reflect in the background: {world_rule}")
     if focus_object:
         prompt_parts.append(f"画面の見せ場は「{focus_object}」です。")
     if visual_style:

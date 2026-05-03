@@ -140,6 +140,7 @@ class LiveChatService:
             update_session_memory=self._update_session_memory,
             update_conversation_evaluation=self._update_conversation_evaluation,
             serialize_message=self._serialize_message,
+            character_user_memory_service=self._character_user_memory_service,
         )
         self._short_story_service = LiveChatShortStoryService(
             text_ai_client=self._text_ai_client,

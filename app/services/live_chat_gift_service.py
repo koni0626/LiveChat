@@ -15,6 +15,7 @@ from .chat_message_service import ChatMessageService
 from .chat_session_service import ChatSessionService
 from .letter_service import LetterService
 from .live_chat_media_service import LiveChatMediaService
+from .character_user_memory_service import CharacterUserMemoryService
 from .session_gift_event_service import SessionGiftEventService
 from .session_image_service import SessionImageService
 from .session_state_service import SessionStateService
@@ -40,6 +41,7 @@ class LiveChatGiftService:
         update_session_memory: Callable[[int, dict], object],
         update_conversation_evaluation: Callable[[int, dict], object],
         serialize_message: Callable[[object], dict],
+        character_user_memory_service: CharacterUserMemoryService | None = None,
     ):
         self._chat_session_service = chat_session_service
         self._chat_message_service = chat_message_service
@@ -55,6 +57,7 @@ class LiveChatGiftService:
         self._update_session_memory = update_session_memory
         self._update_conversation_evaluation = update_conversation_evaluation
         self._serialize_message = serialize_message
+        self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
 
     def _load_json(self, value):
         if value is None:
@@ -434,20 +437,31 @@ class LiveChatGiftService:
         if not character:
             raise ValueError("target character is required")
 
-        analysis_prompt = (
-            "Return only JSON. Identify what gift is shown in this image for a romance live chat. "
-            "Required keys: label, short_description, tags, likely_categories. "
-            "label must be a short noun phrase in Japanese. tags and likely_categories must be arrays."
-        )
-        analysis = self._text_ai_client.analyze_image(asset.file_path, prompt=analysis_prompt)
-        parsed = analysis.get("parsed_json") or {}
-        recognized_label = str(parsed.get("label") or asset.file_name or "贈り物").strip()[:120]
+        recognized_label = str(payload.get("recognized_label") or "").strip()[:120]
         recognized_tags = [
             str(item or "").strip()[:80]
-            for item in (parsed.get("tags") or [])
+            for item in (payload.get("recognized_tags") or [])
             if str(item or "").strip()
         ][:8]
+        if not recognized_label:
+            analysis_prompt = (
+                "Return only JSON. Identify what gift is shown in this image for a romance live chat. "
+                "Required keys: label, short_description, tags, likely_categories. "
+                "label must be a short noun phrase in Japanese. tags and likely_categories must be arrays."
+            )
+            analysis = self._text_ai_client.analyze_image(asset.file_path, prompt=analysis_prompt)
+            parsed = analysis.get("parsed_json") or {}
+            recognized_label = str(parsed.get("label") or asset.file_name or "gift").strip()[:120]
+            recognized_tags = [
+                str(item or "").strip()[:80]
+                for item in (parsed.get("tags") or [])
+                if str(item or "").strip()
+            ][:8]
         evaluation = self._evaluate_gift_for_character(character, recognized_label, recognized_tags)
+        if payload.get("inventory_item_id") and int(evaluation.get("score_delta") or 0) <= 0:
+            evaluation["score_delta"] = 2
+            evaluation["mood"] = "happy"
+            evaluation["summary"] = f"{character.get('name') or 'Character'} appreciates the gift."
         visual_decision = self._decide_gift_visual_direction(context, character, recognized_label, recognized_tags, evaluation)
         gift_event = self._session_gift_event_service.create_gift_event(
             session_id,
@@ -497,6 +511,12 @@ class LiveChatGiftService:
             },
         )
         self._update_gift_state_memory(session_id, character, recognized_label, recognized_tags, evaluation)
+        self._character_user_memory_service.update_affinity_from_ai_evaluation(
+            user_id=int(session.owner_user_id),
+            character_id=int(character.get("id") or 0),
+            affinity_delta=int(evaluation.get("score_delta") or 0),
+            reason=f"gift: {recognized_label}",
+        )
         generated_image = None
         try:
             generated_image = self._generate_gift_visual_image(

@@ -9,6 +9,7 @@ from ...services.authorization_service import AuthorizationService
 from ...services.chat_session_service import ChatSessionService
 from ...services.live_chat_room_service import LiveChatRoomService
 from ...services.live_chat_service import LiveChatService
+from ...services.inventory_service import InventoryService
 from ...services.point_billing_service import PointBillingService
 from ...services.project_service import ProjectService
 from ...services.session_state_service import SessionStateService
@@ -17,6 +18,7 @@ from ...services.user_setting_service import UserSettingService
 
 chat_bp = Blueprint("chat", __name__)
 live_chat_service = LiveChatService()
+inventory_service = InventoryService()
 project_service = ProjectService()
 asset_service = AssetService()
 chat_session_service = ChatSessionService()
@@ -671,6 +673,72 @@ def upload_chat_gift(session_id: int):
     )
     if not result:
         raise NotFoundError()
+    return json_response(result, status=201)
+
+
+@chat_bp.route("/projects/<int:project_id>/inventory", methods=["GET"])
+def list_project_inventory(project_id: int):
+    _, user = _require_project(project_id)
+    return json_response({"items": inventory_service.list_items(user_id=user.id, project_id=project_id)})
+
+
+@chat_bp.route("/projects/<int:project_id>/inventory/generate", methods=["POST"])
+def generate_project_inventory_item(project_id: int):
+    _, user = _require_project(project_id)
+    payload = request.get_json(silent=True) or {}
+    point_billing_service.ensure_image_generation_balance(user)
+    try:
+        item = inventory_service.generate_item(
+            user_id=user.id,
+            project_id=project_id,
+            payload=user_setting_service.apply_global_image_generation_settings(payload),
+        )
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    result = {"item": item}
+    result = point_billing_service.charge_image_generation(
+        user,
+        project_id=project_id,
+        session_id=int(payload.get("session_id") or 0),
+        result=result,
+        action_type="inventory_item_generation",
+        detail={"inventory_item_id": item.get("id") if item else None},
+    )
+    return json_response(result, status=201)
+
+
+@chat_bp.route("/chat/sessions/<int:session_id>/inventory/<int:item_id>/give", methods=["POST"])
+def give_inventory_item(session_id: int, item_id: int):
+    chat_session, project, user = _require_session(session_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    item = inventory_service.get_available_item(
+        item_id=item_id,
+        user_id=user.id,
+        project_id=project.id,
+    )
+    if not item:
+        raise NotFoundError()
+    tags = inventory_service.serialize_item(item).get("tags") if item else []
+    result = live_chat_service.upload_gift(
+        chat_session.id,
+        item.asset_id,
+        {
+            "character_id": payload.get("character_id") or item.target_character_id,
+            "message_text": payload.get("message_text") or f"{item.name}を渡した。",
+            "recognized_label": item.name,
+            "recognized_tags": tags,
+            "inventory_item_id": item.id,
+        },
+    )
+    if not result:
+        raise NotFoundError()
+    used_item = inventory_service.mark_used(
+        item_id=item.id,
+        user_id=user.id,
+        session_id=chat_session.id,
+        character_id=payload.get("character_id") or item.target_character_id,
+    )
+    result["inventory_item"] = used_item
     return json_response(result, status=201)
 
 

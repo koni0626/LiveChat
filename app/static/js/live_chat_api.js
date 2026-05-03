@@ -182,6 +182,24 @@
     return payload;
   }
 
+  async function loadInventory(projectId) {
+    return NovelUI.api(`/api/v1/projects/${projectId}/inventory`);
+  }
+
+  async function generateInventoryItem(projectId, body = {}) {
+    return NovelUI.api(`/api/v1/projects/${projectId}/inventory/generate`, {
+      method: "POST",
+      body,
+    });
+  }
+
+  async function giveInventoryItem(sessionId, itemId, body = {}) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/inventory/${itemId}/give`, {
+      method: "POST",
+      body,
+    });
+  }
+
   async function selectImage(sessionId, imageId) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/images/${imageId}/select`, {
       method: "POST",
@@ -217,6 +235,9 @@
     extractState,
     uploadImage,
     uploadGift,
+    loadInventory,
+    generateInventoryItem,
+    giveInventoryItem,
     selectImage,
     selectCostume,
     loadClosetOutfits,
