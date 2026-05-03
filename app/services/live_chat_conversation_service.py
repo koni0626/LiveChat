@@ -617,6 +617,693 @@ class LiveChatConversationService:
             "context": updated_context,
         }
 
+    def _build_lccd_photo_prompt(self, context: dict, instruction: str, pose_style: str, costume_image) -> str:
+        characters = context.get("characters") or []
+        character = characters[0] if characters else {}
+        state_json = (context.get("state") or {}).get("state_json") or {}
+        current_location = state_json.get("current_location") or {}
+        costume_state = costume_image.get("state_json") if isinstance(costume_image, dict) else {}
+        costume_prompt = costume_image.get("prompt_text") if isinstance(costume_image, dict) else ""
+        costume_notes = "\n".join(
+            str(part or "").strip()
+            for part in [
+                instruction,
+                costume_state.get("instruction") if isinstance(costume_state, dict) else "",
+                costume_state.get("rewritten_instruction") if isinstance(costume_state, dict) else "",
+                costume_prompt,
+            ]
+            if str(part or "").strip()
+        )
+        prompt = "\n".join(
+            [
+                "This image is the live-chat story display photo only. It is not a closet reference image.",
+                "Set the background in a cyber-feeling apparel shop interior: luminous clothing racks, smart mirrors, fitting-room doors, glossy floor, neon accent lights, and a boutique photo-shoot corner. The exact previous background does not need to match.",
+                "Do not use a plain studio, blank wall, outdoor background, bedroom, generic room, or simple reference-image background for this story display photo.",
+                "The character must take an attractive fashion photo pose, not a stiff standing pose: use a graceful S-curve, one hand near hair or collar, playful turn, confident hip shift, stepping pose, mirror pose, or magazine-style pose that matches the character.",
+                "Make the pose expressive and charming while preserving the outfit design from the newly generated costume reference image.",
+                "Do not use or imitate the closet reference image composition: no straight front-facing pose, no catalog camera angle, no plain composition, no neutral expression.",
+                "The final image must look like a realistic fashion editorial photo inside the apparel shop: cinematic lighting, natural body weight shift, expressive face, believable fabric movement, and a posed model-shoot composition.",
+                "Use the newly generated apparel-shop background image as the primary scene base. The final background must be the cyber apparel shop interior.",
+                "Use the newly generated costume reference image only for the character identity, face, hair, body type, art style, and outfit design. Never copy its gray/plain background.",
+                "If the two reference images conflict, prioritize the apparel-shop background image for the environment and the costume reference image only for the character and outfit.",
+                "If the result looks like a plain gray reference sheet, catalog full-body image, or background-only swap, it is invalid.",
+                "お着替えモードの写真撮影。ビジュアルノベルの鑑賞用イベントCG。",
+                "サイバー感のあるアパレル店内で、キャラクターがモデルのようなポーズで立つ。",
+                "背景は厳密に同じ店内でなくてよい。アパレルショップだと分かるラック、鏡、試着室、ネオン照明を入れる。",
+                "衣装基準画像の構図は使わない。衣装の内容はユーザーの衣装相談と保存済み衣装メモのテキストから反映する。",
+                "保存用の全身衣装カタログではなく、会話画面で映えるポーズ、表情、ライティング、背景を重視する。",
+                "衣装基準画像の正面棒立ち、無表情、単純な全身カタログ構図、同じカメラ角度をコピーしない。",
+                "モデル撮影としてリアリティのあるポーズにする。重心移動、肩や腰の角度、手の置き方、視線、布の揺れ、店内照明を使った立体感を必ず入れる。",
+                "衣装基準画像のグレー背景や単色背景は絶対に使わない。背景は必ずサイバー感のあるアパレルショップ店内にする。",
+                "背景参照画像を最優先し、衣装基準画像からはキャラクターと衣装だけを抜き出して使う。",
+                "ただし顔、髪型、体格、画風、衣装の形状、色、素材感、装飾は変えない。",
+                "背景はラプラスシティのお着替えルーム兼撮影ブース。試着室、ラック、鏡、柔らかい照明、近未来ファッションスタジオ。",
+                "画像内に文字、ロゴ、字幕、吹き出し、UI、看板の可読文字を入れない。",
+                f"キャラクター: {character.get('name') or ''}",
+                f"キャラクター外見: {character.get('appearance_summary') or ''}",
+                f"キャラクター性格: {character.get('personality') or ''}",
+                f"ユーザーの衣装相談: {instruction}",
+                f"保存済み衣装メモ: {costume_notes[:1800]}",
+                f"撮影ポーズ方針: {pose_style or '衣装相談の文脈から、キャラクターらしい撮影ポーズを自動で決める'}",
+                "衣装相談にポーズ、雰囲気、距離感、撮影場所の希望が含まれている場合は、それを撮影カットに反映する。",
+                f"直前の現在地: {current_location.get('name') or state_json.get('location') or ''}",
+                f"衣装基準画像ID: {(costume_image or {}).get('id') if isinstance(costume_image, dict) else getattr(costume_image, 'id', '') if costume_image else ''}",
+            ]
+        )
+        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        return prompt_support.forbid_text_in_image(prompt)
+
+    def _build_lccd_background_prompt(self, context: dict, instruction: str) -> str:
+        prompt = "\n".join(
+            [
+                "Live-chat dress-up mode background plate only.",
+                "Create a cyber-feeling apparel shop interior for a visual novel scene.",
+                "No character, no person, no mannequin as the main subject.",
+                "Include luminous clothing racks, smart mirrors, fitting-room doors, glossy floor, neon accent lights, soft boutique lighting, and a photo-shoot corner.",
+                "This background will be used as a reference image for a later character fashion photo.",
+                "Do not use a plain gray studio, blank wall, bedroom, outdoor street, or generic empty room.",
+                "No readable text, no logo, no subtitles, no UI.",
+                "サイバー感のあるアパレルショップ店内。衣装ラック、鏡、試着室、ネオン照明、撮影ブースが見える背景。",
+                "キャラクターは描かない。背景だけを作る。",
+                f"衣装相談の雰囲気: {instruction[:500]}",
+            ]
+        )
+        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        return prompt_support.forbid_text_in_image(prompt)
+
+    def _build_lccd_costume_scene_prompt(self, context: dict, instruction: str, costume_image) -> str:
+        characters = context.get("characters") or []
+        character = characters[0] if characters else {}
+        costume_state = costume_image.get("state_json") if isinstance(costume_image, dict) else {}
+        costume_notes = "\n".join(
+            str(part or "").strip()
+            for part in [
+                instruction,
+                costume_state.get("instruction") if isinstance(costume_state, dict) else "",
+                costume_state.get("rewritten_instruction") if isinstance(costume_state, dict) else "",
+            ]
+            if str(part or "").strip()
+        )
+        prompt = "\n".join(
+            [
+                "Edit the provided costume reference image into a live-chat display source image.",
+                "Keep the same character identity, face, hair, body type, art style, and outfit design from the reference image.",
+                "Change the plain or gray reference background into a cyber-feeling apparel shop interior.",
+                "The new background must include luminous clothing racks, smart mirrors, fitting-room doors, glossy floor, neon accent lights, and a boutique photo-shoot corner.",
+                "Do not keep the plain studio background. Do not use a blank wall or gray backdrop.",
+                "Keep a simple full-body or near full-body composition for this intermediate source image. This is not the final posed photo.",
+                "No readable text, logo, subtitles, UI, or sign text in the image.",
+                "衣装参照画像のキャラクター、顔、髪型、体型、画風、衣装デザインを維持する。",
+                "背景だけをサイバー感のあるアパレルショップ店内に変更する。",
+                "グレー背景、単色背景、無地スタジオ背景は禁止。",
+                "店内には衣装ラック、スマートミラー、試着室、ネオン照明、撮影ブースを入れる。",
+                f"キャラクター: {character.get('name') or ''}",
+                f"キャラクター外見: {character.get('appearance_summary') or ''}",
+                f"衣装メモ: {costume_notes[:1600]}",
+            ]
+        )
+        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        return prompt_support.forbid_text_in_image(prompt)
+
+    def _build_lccd_pose_from_costume_scene_prompt(self, context: dict, instruction: str, pose_style: str) -> str:
+        characters = context.get("characters") or []
+        character = characters[0] if characters else {}
+        prompt = "\n".join(
+            [
+                "Create the final live-chat story display photo from the provided source image.",
+                "Use the provided image as the only visual reference.",
+                "Keep the same character identity, face, hair, body type, art style, outfit design, and cyber apparel shop background.",
+                "Change mainly the pose, expression, camera angle, and fashion-photo composition.",
+                "The character must take an attractive model pose, not a stiff front-facing catalog pose.",
+                "Use a graceful S-curve, confident hip shift, one hand near hair or collar, slight turn, stepping pose, mirror pose, or magazine-style fashion pose.",
+                "Keep the cyber apparel shop interior visible behind the character. Do not replace it with a gray or plain background.",
+                "This is a visual novel event CG for the chat screen, not a closet reference image.",
+                "No readable text, logo, subtitles, UI, or sign text in the image.",
+                "参照画像と同じキャラクター、同じ衣装、同じサイバー感のあるアパレルショップ店内を維持する。",
+                "変更するのは主にポーズ、表情、カメラ角度、構図。",
+                "正面棒立ちの衣装カタログではなく、モデル撮影らしい魅力的なポーズにする。",
+                "背景をグレーや単色に戻さない。必ずアパレルショップ店内を残す。",
+                f"キャラクター: {character.get('name') or ''}",
+                f"ユーザーの衣装相談: {instruction}",
+                f"ポーズ方針: {pose_style or '衣装とキャラクター性に合うモデルポーズを自動で決める'}",
+            ]
+        )
+        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        return prompt_support.forbid_text_in_image(prompt)
+
+    def _build_photo_mode_prompt(self, context: dict, instruction: str, pose_style: str) -> str:
+        characters = context.get("characters") or []
+        character = characters[0] if characters else {}
+        state_json = (context.get("state") or {}).get("state_json") or {}
+        current_location = state_json.get("current_location") or {}
+        displayed_observation = state_json.get("displayed_image_observation") or {}
+        prompt = "\n".join(
+            [
+                "撮影モードのライブチャット表示用イベントCG。",
+                "現在表示されている画像を背景・場所・光・雰囲気の最優先リファレンスとして使う。",
+                "衣装は現在選択中の衣装をそのまま維持する。衣装デザイン、色、素材、装飾を変更しない。",
+                "変更するのは主にキャラクターのポーズ、表情、立ち位置、カメラ距離、構図のみ。",
+                "背景を別の場所に変えない。現在の表示画像と同じ場所で撮影し直したように見せる。",
+                "画像内に文字、ロゴ、字幕、吹き出し、UI、看板の可読文字を入れない。",
+                f"キャラクター: {character.get('name') or ''}",
+                f"キャラクター外見: {character.get('appearance_summary') or ''}",
+                f"キャラクター性格: {character.get('personality') or ''}",
+                f"現在地: {current_location.get('name') or state_json.get('location') or ''}",
+                f"現在表示画像の観察メモ: {displayed_observation}",
+                f"ユーザーの撮影指示: {instruction}",
+                f"ポーズ・構図方針: {pose_style or 'ユーザー指示をもとに、キャラクターらしい魅力的なポーズと構図にする'}",
+            ]
+        )
+        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        return prompt_support.forbid_text_in_image(prompt)
+
+    def _lccd_location_payload(self, context: dict) -> dict:
+        character = (context.get("characters") or [{}])[0]
+        return {
+            "id": "lccd",
+            "name": "お着替え",
+            "region": "Laplace City",
+            "location_type": "apparel_shop_photo_studio",
+            "description": "衣装相談、試着、撮影ができるお着替えルーム。キャラクターと一緒に似合う衣装を考え、着替えた姿を撮影する場所。",
+            "image_prompt": "near-future apparel shop and fashion photo studio, fitting room, mirrors, clothing racks, soft neon lighting",
+            "owner_character_id": character.get("id"),
+        }
+
+    def _build_lccd_room_prompt(self, context: dict, location_payload: dict) -> str:
+        character_names = "、".join(character.get("name") or "" for character in context.get("characters") or [])
+        prompt = "\n".join(
+            [
+                "ライブチャットの場所移動イベントCG。",
+                "キャラクターと一緒にサイバーなアパレルショップ店内に移動した場面。",
+                "近未来の公式アパレルショップ兼フォトスタジオ。試着室、衣装ラック、大きな鏡、撮影ライト、柔らかいネオン照明。",
+                "キャラクターは現在の衣装のまま登場する。新しい衣装への着替えや衣装差分はまだ描かない。",
+                "キャラクターは棒立ちではなく、店内を案内するような自然で魅力的なポーズ。軽く振り向く、手を差し出す、鏡や衣装ラックを示すなど、会話が始まる瞬間にする。",
+                "全身カタログ写真ではなく、背景とキャラクターが馴染むノベルゲームのシーンCG。",
+                "ここでは移動先のシーンだけを作る。衣装生成や撮影は、ユーザーが次のメッセージで希望を送ってから始める。",
+                "画像内に文字、ロゴ、字幕、吹き出し、UI、看板の可読文字を入れない。",
+                f"施設名: {location_payload.get('name') or ''}",
+                f"施設説明: {location_payload.get('description') or ''}",
+                f"登場キャラクター: {character_names}",
+            ]
+        )
+        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        return prompt_support.forbid_text_in_image(prompt)
+
+    def enter_lccd_room(self, session_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return None
+        context = self._context_provider(session_id)
+        location_payload = self._lccd_location_payload(context)
+        prompt = self._build_lccd_room_prompt(context, location_payload)
+        scene_update = {
+            "scene_phase": "dress_up_room",
+            "location": location_payload["name"],
+            "background": location_payload["description"],
+            "focus_summary": "お着替えルームへ移動した。ここでキャラクター自身が着る衣装をユーザーと一緒に考える。",
+            "next_topic": "キャラクターが自分に似合う衣装や自分が着る服について相談し、ユーザーに一緒に選んでほしいと頼む",
+            "transition_occurred": True,
+            "character_reaction_hint": (
+                "ユーザーを着替えさせるのではなく、キャラクター自身が着替える前提で話す。"
+                "「あなたに似合う衣装」「あなたが着る服」とは絶対に言わない。"
+                "「私に似合う衣装、一緒に考えてくれる？」「私が着る服、どんなのがいいと思う？」のように誘う。"
+            ),
+            "image_focus": prompt,
+            "selected_location": location_payload,
+        }
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        state_json["current_location"] = location_payload
+        state_json["location"] = location_payload["name"]
+        state_json["background"] = location_payload["description"]
+        state_json["scene_progression"] = scene_update
+        state_json["directed_scene"] = scene_update
+        state_json["visual_prompt_text"] = prompt
+        state_json["lccd_ready"] = True
+        self._session_state_service.upsert_state(
+            session_id,
+            {
+                "state_json": state_json,
+                "narration_note": scene_update["focus_summary"],
+                "visual_prompt_text": prompt,
+            },
+        )
+        user_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "narration",
+                "speaker_name": "移動",
+                "message_text": "お着替えルームへ移動した。",
+                "message_role": "lccd_enter",
+                "state_snapshot_json": {"location_move": location_payload, "directed_scene": scene_update},
+            },
+        )
+        generated_image = None
+        image_generation_error = None
+        try:
+            generated_image = self._media_service.generate_image(
+                session_id,
+                {
+                    "image_type": "dress_up_room",
+                    "prompt_text": prompt,
+                    "use_existing_prompt": True,
+                    "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
+                    "quality": payload.get("quality") or "low",
+                },
+            )
+        except Exception as exc:
+            current_app.logger.exception("dress up room image generation failed")
+            image_generation_error = str(exc)
+        intro_reply = text_support.generate_narration_reaction(
+            self._text_ai_client,
+            self._context_provider(session_id),
+            (
+                "お着替えルームへ移動した。"
+                "ここではユーザーではなくキャラクター自身が着替える。"
+                "キャラクターは『私に似合う衣装、一緒に考えてくれる？』という方向で話す。"
+            ),
+            scene_update,
+        )
+        assistant_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "character",
+                "speaker_name": intro_reply["speaker_name"],
+                "message_text": intro_reply["message_text"],
+                "message_role": "assistant",
+                "state_snapshot_json": {"lccd": True, "phase": "enter", "directed_scene": scene_update},
+            },
+        )
+        updated_context = self._context_provider(session_id)
+        self.update_line_visual_note(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        return {
+            "location": location_payload,
+            "generated_image": generated_image,
+            "image_generation_error": image_generation_error,
+            "messages": [self._serialize_message(user_message), self._serialize_message(assistant_message)],
+            "context": updated_context,
+        }
+
+    def generate_lccd_photo_shoot(self, session_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return None
+        instruction = str(payload.get("prompt_text") or "").strip()
+        if not instruction:
+            raise ValueError("prompt_text is required")
+        pose_style = str(payload.get("pose_style") or "").strip()
+        mode = str(payload.get("mode") or "combined").strip().lower()
+
+        context = self._context_provider(session_id)
+        character = (context.get("characters") or [{}])[0]
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        if mode in {"photo", "photo_only", "shoot", "shoot_only"}:
+            current_location = state_json.get("current_location") or {}
+            scene_update = {
+                "scene_phase": "photo_mode_shoot",
+                "location": current_location.get("name") or state_json.get("location") or "",
+                "background": state_json.get("background") or current_location.get("description") or "",
+                "focus_summary": f"撮影モードで、現在のシーンを背景にポーズと構図を撮り直す。撮影指示: {instruction[:180]}",
+                "next_topic": "現在の場面と衣装を保ったまま、撮影カットの感想を話す",
+                "transition_occurred": False,
+                "character_reaction_hint": "場所や衣装は変えず、今いるシーンで撮影し直す流れにする",
+            }
+            state_json["scene_progression"] = scene_update
+            state_json["directed_scene"] = scene_update
+            self._session_state_service.upsert_state(
+                session_id,
+                {
+                    "state_json": state_json,
+                    "narration_note": scene_update["focus_summary"],
+                },
+            )
+            opening_message = self._chat_message_service.create_message(
+                session_id,
+                {
+                    "sender_type": "user",
+                    "speaker_name": session.player_name or "プレイヤー",
+                    "message_text": instruction,
+                    "message_role": "player",
+                    "state_snapshot_json": {"directed_scene": scene_update, "photo_mode": True},
+                },
+            )
+            thinking_reply = text_support.generate_narration_reaction(
+                self._text_ai_client,
+                self._context_provider(session_id),
+                f"撮影モードで、現在のシーンのまま撮影する。指示: {instruction}",
+                scene_update,
+            )
+            thinking_message = self._chat_message_service.create_message(
+                session_id,
+                {
+                    "sender_type": "character",
+                    "speaker_name": thinking_reply["speaker_name"],
+                    "message_text": thinking_reply["message_text"],
+                    "message_role": "assistant",
+                    "state_snapshot_json": {"photo_mode": True, "phase": "consultation"},
+                },
+            )
+            photo_prompt = self._build_photo_mode_prompt(
+                self._context_provider(session_id),
+                instruction,
+                pose_style,
+            )
+            state_row = self._session_state_service.get_state(session_id)
+            state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+            state_json["visual_prompt_text"] = photo_prompt
+            state_json["photo_mode_shoot"] = {
+                "instruction": instruction,
+                "pose_style": pose_style,
+                "use_current_scene_as_background": True,
+            }
+            self._session_state_service.upsert_state(
+                session_id,
+                {
+                    "state_json": state_json,
+                    "visual_prompt_text": photo_prompt,
+                },
+            )
+            photo_image = self._media_service.generate_image(
+                session_id,
+                {
+                    "image_type": "photo_mode_shoot",
+                    "prompt_text": photo_prompt,
+                    "use_existing_prompt": True,
+                    "use_selected_scene_as_reference": True,
+                    "size": payload.get("photo_size") or payload.get("size") or "1536x1024",
+                    "quality": payload.get("photo_quality") or payload.get("quality") or "low",
+                    "model": payload.get("model") or payload.get("image_ai_model"),
+                    "provider": payload.get("provider") or payload.get("image_ai_provider"),
+                },
+            )
+            finish_message = self._chat_message_service.create_message(
+                session_id,
+                {
+                    "sender_type": "character",
+                    "speaker_name": thinking_reply["speaker_name"],
+                    "message_text": "撮影してきたよ。衣装はそのまま、今の場面でポーズと構図だけ変えてみた。",
+                    "message_role": "assistant",
+                    "state_snapshot_json": {
+                        "photo_mode": True,
+                        "phase": "finished",
+                        "photo_image_id": (photo_image or {}).get("id"),
+                    },
+                },
+            )
+            updated_context = self._context_provider(session_id)
+            return {
+                "costume_image": None,
+                "photo_image": photo_image,
+                "photo_generation_error": None,
+                "messages": [
+                    self._serialize_message(opening_message),
+                    self._serialize_message(thinking_message),
+                    self._serialize_message(finish_message),
+                ],
+                "context": updated_context,
+            }
+        lccd_location = self._lccd_location_payload(context)
+        scene_update = {
+            "scene_phase": "lccd_photo_shoot",
+            "location": lccd_location["name"],
+            "background": lccd_location["description"],
+            "focus_summary": f"お着替えで衣装相談をして撮影する。衣装希望: {instruction[:180]}",
+            "next_topic": "衣装を一緒に考え、着替えと撮影カットの感想を話す",
+            "transition_occurred": True,
+            "character_reaction_hint": "ユーザーの衣装希望を聞いて、似合う方向性と撮影ポーズを一緒に考え、着替えてくる流れにする",
+        }
+        state_json["current_location"] = lccd_location
+        state_json["location"] = lccd_location["name"]
+        state_json["background"] = lccd_location["description"]
+        state_json["scene_progression"] = scene_update
+        state_json["directed_scene"] = scene_update
+        self._session_state_service.upsert_state(
+            session_id,
+            {
+                "state_json": state_json,
+                "narration_note": scene_update["focus_summary"],
+            },
+        )
+
+        opening_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "user",
+                "speaker_name": session.player_name or "プレイヤー",
+                "message_text": instruction,
+                "message_role": "player",
+                "state_snapshot_json": {"directed_scene": scene_update, "lccd": True},
+            },
+        )
+        thinking_reply = text_support.generate_narration_reaction(
+            self._text_ai_client,
+            self._context_provider(session_id),
+            f"お着替えで衣装相談をする。希望: {instruction}",
+            scene_update,
+        )
+        thinking_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "character",
+                "speaker_name": thinking_reply["speaker_name"],
+                "message_text": thinking_reply["message_text"],
+                "message_role": "assistant",
+                "state_snapshot_json": {"lccd": True, "phase": "consultation"},
+            },
+        )
+
+        if mode in {"photo", "photo_only", "shoot", "shoot_only"}:
+            photo_prompt = self._build_photo_mode_prompt(
+                self._context_provider(session_id),
+                instruction,
+                pose_style,
+            )
+            state_row = self._session_state_service.get_state(session_id)
+            state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+            state_json["visual_prompt_text"] = photo_prompt
+            state_json["photo_mode_shoot"] = {
+                "instruction": instruction,
+                "pose_style": pose_style,
+                "use_current_scene_as_background": True,
+            }
+            self._session_state_service.upsert_state(
+                session_id,
+                {
+                    "state_json": state_json,
+                    "visual_prompt_text": photo_prompt,
+                },
+            )
+            photo_image = self._media_service.generate_image(
+                session_id,
+                {
+                    "image_type": "photo_mode_shoot",
+                    "prompt_text": photo_prompt,
+                    "use_existing_prompt": True,
+                    "use_selected_scene_as_reference": True,
+                    "size": payload.get("photo_size") or payload.get("size") or "1536x1024",
+                    "quality": payload.get("photo_quality") or payload.get("quality") or "low",
+                    "model": payload.get("model") or payload.get("image_ai_model"),
+                    "provider": payload.get("provider") or payload.get("image_ai_provider"),
+                },
+            )
+            finish_message = self._chat_message_service.create_message(
+                session_id,
+                {
+                    "sender_type": "character",
+                    "speaker_name": thinking_reply["speaker_name"],
+                    "message_text": "撮影してきたよ。衣装はそのまま、今の場面でポーズと構図だけ変えてみた。",
+                    "message_role": "assistant",
+                    "state_snapshot_json": {
+                        "photo_mode": True,
+                        "phase": "finished",
+                        "photo_image_id": (photo_image or {}).get("id"),
+                    },
+                },
+            )
+            updated_context = self._context_provider(session_id)
+            return {
+                "costume_image": None,
+                "photo_image": photo_image,
+                "photo_generation_error": None,
+                "messages": [
+                    self._serialize_message(opening_message),
+                    self._serialize_message(thinking_message),
+                    self._serialize_message(finish_message),
+                ],
+                "context": updated_context,
+            }
+
+        costume_instruction = "\n".join(
+            [
+                "お着替えで相談して決めた衣装。",
+                "クローゼット保存用なので、衣装の全体像と構造が分かる正面1枚の衣装基準画像にする。",
+                "必ず一人のキャラクターを正面向きで1回だけ描く。複数ポーズ、4分割、ターンアラウンド、背面図、側面図、コマ割り、比較表は禁止。",
+                "ユーザー指示に「回って」「くるっと」「ポーズ」「撮影」などの演出が含まれていても、保存用衣装基準画像では無視し、衣装デザインだけを抽出する。",
+                "背景はシンプルにして、衣装再利用のリファレンスとして使いやすくする。",
+                instruction,
+            ]
+        )
+        costume_image = self._media_service.generate_costume(
+            session_id,
+            {
+                "prompt_text": costume_instruction,
+                "size": payload.get("costume_size") or "1024x1536",
+                "quality": payload.get("costume_quality") or payload.get("quality") or "medium",
+                "model": payload.get("model") or payload.get("image_ai_model"),
+                "provider": payload.get("provider") or payload.get("image_ai_provider"),
+                "save_to_closet": True,
+                "outfit_name": payload.get("outfit_name") or f"お着替え {character.get('name') or 'outfit'}",
+                "outfit_description": instruction,
+                "usage_scene": "お着替え撮影",
+                "mood": pose_style or "photo shoot",
+            },
+        )
+
+        if mode in {"costume", "costume_only", "dress", "dress_only"}:
+            finish_message = self._chat_message_service.create_message(
+                session_id,
+                {
+                    "sender_type": "character",
+                    "speaker_name": thinking_reply["speaker_name"],
+                    "message_text": "着替えてきたよ。衣装は保存して、今のアクティブ衣装にしておいたよ。",
+                    "message_role": "assistant",
+                    "state_snapshot_json": {
+                        "lccd": True,
+                        "phase": "costume_finished",
+                        "costume_image_id": (costume_image or {}).get("id"),
+                    },
+                },
+            )
+            updated_context = self._context_provider(session_id)
+            return {
+                "costume_image": costume_image,
+                "photo_image": None,
+                "photo_generation_error": None,
+                "messages": [
+                    self._serialize_message(opening_message),
+                    self._serialize_message(thinking_message),
+                    self._serialize_message(finish_message),
+                ],
+                "context": updated_context,
+            }
+
+        photo_context = self._context_provider(session_id)
+        costume_scene_prompt = self._build_lccd_costume_scene_prompt(photo_context, instruction, costume_image)
+        costume_scene_image = None
+        costume_scene_generation_error = None
+        try:
+            costume_scene_image = self._media_service.generate_image(
+                session_id,
+                {
+                    "image_type": "dress_up_costume_scene",
+                    "prompt_text": costume_scene_prompt,
+                    "use_existing_prompt": True,
+                    "reference_asset_ids": [(costume_image or {}).get("asset_id")],
+                    "skip_character_references": True,
+                    "skip_outfit_prompt": True,
+                    "input_fidelity": "high",
+                    "size": payload.get("scene_size") or payload.get("photo_size") or payload.get("size") or "1536x1024",
+                    "quality": payload.get("scene_quality") or payload.get("photo_quality") or payload.get("quality") or "low",
+                    "model": payload.get("model") or payload.get("image_ai_model"),
+                    "provider": payload.get("provider") or payload.get("image_ai_provider"),
+                },
+            )
+        except Exception as exc:
+            current_app.logger.exception("dress up costume scene image generation failed")
+            costume_scene_generation_error = str(exc)
+
+        photo_prompt = self._build_lccd_pose_from_costume_scene_prompt(
+            self._context_provider(session_id),
+            instruction,
+            pose_style,
+        )
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        state_json["visual_prompt_text"] = photo_prompt
+        state_json["lccd_photo_shoot"] = {
+            "instruction": instruction,
+            "pose_style": pose_style,
+            "costume_image_id": (costume_image or {}).get("id"),
+            "costume_scene_image_id": (costume_scene_image or {}).get("id"),
+            "costume_scene_generation_error": costume_scene_generation_error,
+        }
+        self._session_state_service.upsert_state(
+            session_id,
+            {
+                "state_json": state_json,
+                "visual_prompt_text": photo_prompt,
+            },
+        )
+        photo_image = None
+        photo_generation_error = None
+        try:
+            reference_asset_ids = [
+                (costume_scene_image or {}).get("asset_id"),
+            ]
+            reference_asset_ids = [asset_id for asset_id in reference_asset_ids if asset_id]
+            photo_image = self._media_service.generate_image(
+                session_id,
+                {
+                    "image_type": "dress_up_photo_shoot",
+                    "prompt_text": photo_prompt,
+                    "use_existing_prompt": True,
+                    "reference_asset_ids": reference_asset_ids,
+                    "skip_character_references": True,
+                    "skip_outfit_prompt": True,
+                    "input_fidelity": "low",
+                    "size": payload.get("photo_size") or payload.get("size") or "1536x1024",
+                    "quality": payload.get("photo_quality") or payload.get("quality") or "low",
+                    "model": payload.get("model") or payload.get("image_ai_model"),
+                    "provider": payload.get("provider") or payload.get("image_ai_provider"),
+                },
+            )
+        except Exception as exc:
+            current_app.logger.exception("dress up photo shoot image generation failed")
+            photo_generation_error = str(exc)
+        if photo_image:
+            self._media_service.select_image(photo_image["id"], update_observation=False, session_id=session_id)
+        finish_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "character",
+                "speaker_name": thinking_reply["speaker_name"],
+                "message_text": (
+                    "着替えてきたよ。どうかな、この感じ。撮影用に少しポーズも作ってみた。"
+                    if photo_image
+                    else "衣装案は保存できたけど、会話画面用の撮影カットは失敗しちゃったみたい。もう一度撮影してみる？"
+                ),
+                "message_role": "assistant",
+                "state_snapshot_json": {
+                    "lccd": True,
+                    "phase": "finished",
+                    "costume_image_id": (costume_image or {}).get("id"),
+                    "photo_image_id": (photo_image or {}).get("id"),
+                },
+            },
+        )
+        updated_context = self._context_provider(session_id)
+        return {
+            "costume_image": costume_image,
+            "photo_image": photo_image,
+            "photo_generation_error": photo_generation_error,
+            "messages": [
+                self._serialize_message(opening_message),
+                self._serialize_message(thinking_message),
+                self._serialize_message(finish_message),
+            ],
+            "context": updated_context,
+        }
+
     def post_message(self, session_id: int, payload: dict | None = None):
         payload = dict(payload or {})
         session = self._chat_session_service.get_session(session_id)

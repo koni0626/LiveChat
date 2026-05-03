@@ -22,14 +22,32 @@
           </div>
         </div>
       </div>
+      <div class="live-chat-stage-actions" aria-label="ステージ操作">
+        <span class="live-chat-stage-actions-handle" id="liveChatStageActionsHandle" role="button" tabindex="0" aria-label="操作ボタンを移動" title="ドラッグで移動">
+          <i class="bi bi-grip-vertical" aria-hidden="true"></i>
+        </span>
+        <button class="live-chat-stage-action-button" type="button" id="liveChatToggleLocationMoveButton" aria-expanded="false" aria-label="移動する" title="移動する">
+          <i class="bi bi-compass-fill" aria-hidden="true"></i>
+        </button>
+        <button class="live-chat-stage-action-button" type="button" id="liveChatToggleLccdButton" aria-expanded="false" aria-label="お着替え" title="お着替え">
+          <i class="bi bi-person-standing-dress" aria-hidden="true"></i>
+        </button>
+        <button class="live-chat-stage-action-button is-active" type="button" id="liveChatConversationModeButton" aria-pressed="true" aria-label="会話モード" title="会話モード">
+          <i class="bi bi-chat-dots-fill" aria-hidden="true"></i>
+        </button>
+        <button class="live-chat-stage-action-button" type="button" id="liveChatTogglePhotoModeButton" aria-pressed="false" aria-label="撮影モード" title="撮影モード">
+          <i class="bi bi-camera-fill" aria-hidden="true"></i>
+        </button>
+        <button class="live-chat-stage-action-button" type="button" id="liveChatToggleTextboxButton" aria-label="テキストボックス非表示" title="テキストボックス非表示">
+          <i class="bi bi-chat-left-text-fill" aria-hidden="true"></i>
+        </button>
+        <button class="live-chat-stage-action-button live-chat-camera-toggle" type="button" id="liveChatCameraToggleButton" aria-pressed="false" aria-label="カメラOFF" title="カメラOFF" hidden>
+          <i class="bi bi-webcam" aria-hidden="true"></i>
+        </button>
+      </div>
+      <section class="live-chat-location-panel is-hidden" id="liveChatLocationMovePanel" aria-live="polite"></section>
     </div>
 
-    <div class="live-chat-stage-actions">
-      <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatGenerateImageButton">画像を生成</button>
-      <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleLocationMoveButton" aria-expanded="false">移動する</button>
-      <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleTextboxButton">テキストボックス非表示</button>
-      <button class="btn btn-sm btn-outline-dark live-chat-camera-toggle" type="button" id="liveChatCameraToggleButton" aria-pressed="false" hidden>カメラOFF</button>
-    </div>
     <div class="live-chat-camera-status" id="liveChatCameraStatus" hidden>
       <span class="live-chat-camera-dot"></span>
       <span id="liveChatCameraStatusText">カメラはOFFです</span>
@@ -38,7 +56,33 @@
     <canvas id="liveChatCameraCanvas" hidden></canvas>
 
     <div class="live-chat-choice-panel is-hidden" id="liveChatSceneChoicePanel"></div>
-    <section class="live-chat-location-panel is-hidden" id="liveChatLocationMovePanel" aria-live="polite"></section>
+    <section class="live-chat-lccd-panel is-hidden" id="liveChatLccdPanel" aria-live="polite">
+      <div class="live-chat-lccd-head">
+        <div>
+          <div class="eyebrow">Dress Up</div>
+          <h4>お着替え</h4>
+          <p>キャラクターと相談した衣装に着替えます。撮影はステージ上の撮影モードで行います。</p>
+        </div>
+        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatLccdCloseButton">閉じる</button>
+      </div>
+      <form class="live-chat-lccd-form" id="liveChatLccdForm">
+        <div class="live-chat-lccd-field-main">
+          <label class="form-label" for="liveChatLccdPromptInput">どんな衣装がいい？</label>
+          <textarea class="form-control" id="liveChatLccdPromptInput" name="prompt_text" rows="3" placeholder="例: 休日のアパレルショップで試着する、少し大人っぽい白いワンピース。キャラ本人も似合うか悩んでいる感じ。"></textarea>
+        </div>
+        <div>
+          <label class="form-label" for="liveChatLccdPoseSelect">衣装の雰囲気</label>
+          <select class="form-select" id="liveChatLccdPoseSelect" name="pose_style">
+            <option value="キャラクターらしい自然な立ち姿。表情重視。" selected>自然体</option>
+            <option value="ファッション誌の宣材写真のような決めポーズ。">宣材写真</option>
+            <option value="試着室の鏡の前で少し照れたポーズ。">試着室</option>
+            <option value="ライブチャット向けに距離が近い、かわいいポーズ。">近距離</option>
+            <option value="映画スチルのようにドラマ性のあるポーズ。">映画スチル</option>
+          </select>
+        </div>
+        <button class="btn btn-dark live-chat-lccd-submit" type="submit" id="liveChatLccdGenerateButton">衣装を生成</button>
+      </form>
+    </section>
 
     <section class="live-chat-log-card" id="liveChatLogCard">
       <div class="live-chat-log-head">

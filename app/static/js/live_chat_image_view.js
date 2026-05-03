@@ -131,6 +131,7 @@
       progressDetailsVisible,
       textboxVisible,
       imageLoading,
+      modeBadgeText,
       novelSpeakerText,
       novelTextValue,
     } = options;
@@ -170,9 +171,13 @@
     const stageBody = !mediaUrl
       ? '<div class="empty-panel">まだ画像がありません。</div>'
       : `<img class="live-chat-stage-image" src="${mediaUrl}" alt="selected image">`;
+    const modeBadgeMarkup = modeBadgeText
+      ? `<div class="live-chat-mode-badge">${NovelUI.escape(modeBadgeText)}</div>`
+      : "";
     selectedImagePanel.innerHTML = `
       ${evaluationMarkup}
       <div class="live-chat-stage-frame ${imageLoading ? "is-loading" : ""}">
+        ${modeBadgeMarkup}
         ${stageBody}
         ${novelMarkup}
       </div>

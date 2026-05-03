@@ -21,6 +21,9 @@ from .session_state_service import SessionStateService
 class LiveChatMediaService:
     """Image and costume operations for live chat sessions."""
 
+    COSTUME_IMAGE_TYPES = {"costume_initial", "costume_reference"}
+    DRESS_UP_DISPLAY_REFERENCE_STRATEGY = "dress_up_display"
+
     def __init__(
         self,
         *,
@@ -126,27 +129,76 @@ class LiveChatMediaService:
             "character_id": character.get("id") if character else None,
         }
 
+    def _append_asset_reference(self, asset_id, reference_paths: list, reference_asset_ids: list, seen_asset_ids: set, *, limit: int):
+        if not asset_id or asset_id in seen_asset_ids or len(reference_paths) >= limit:
+            return
+        asset = self._asset_service.get_asset(asset_id)
+        if asset and getattr(asset, "file_path", None):
+            seen_asset_ids.add(asset.id)
+            reference_paths.append(asset.file_path)
+            reference_asset_ids.append(asset.id)
+
+    def collect_explicit_reference_assets(self, asset_ids, *, limit: int = 4):
+        reference_paths = []
+        reference_asset_ids = []
+        seen_asset_ids = set()
+        for asset_id in asset_ids or []:
+            self._append_asset_reference(asset_id, reference_paths, reference_asset_ids, seen_asset_ids, limit=limit)
+        return reference_paths, reference_asset_ids
+
     def collect_session_reference_assets(self, session_id: int, active_characters: list[dict], *, limit: int = 1):
         selected_costume = self._session_image_service.get_selected_costume(session_id)
         reference_paths = []
         reference_asset_ids = []
         seen_asset_ids = set()
 
-        def add_asset(asset_id):
-            if not asset_id or asset_id in seen_asset_ids or len(reference_paths) >= limit:
-                return
-            asset = self._asset_service.get_asset(asset_id)
-            if asset and getattr(asset, "file_path", None):
-                seen_asset_ids.add(asset.id)
-                reference_paths.append(asset.file_path)
-                reference_asset_ids.append(asset.id)
-
         if selected_costume:
-            add_asset(selected_costume.asset_id)
+            self._append_asset_reference(selected_costume.asset_id, reference_paths, reference_asset_ids, seen_asset_ids, limit=limit)
             if reference_paths:
                 return reference_paths, reference_asset_ids
         for character in active_characters or []:
-            add_asset((character or {}).get("base_asset_id") or ((character or {}).get("base_asset") or {}).get("id"))
+            self._append_asset_reference(
+                (character or {}).get("base_asset_id") or ((character or {}).get("base_asset") or {}).get("id"),
+                reference_paths,
+                reference_asset_ids,
+                seen_asset_ids,
+                limit=limit,
+            )
+        if reference_paths:
+            return reference_paths, reference_asset_ids
+        return image_support.collect_reference_assets(active_characters, limit=limit)
+
+    def _latest_dress_up_room_asset(self, session_id: int):
+        room_image = next(
+            (
+                item
+                for item in self._session_image_service.list_session_images(session_id)
+                if item.image_type == "dress_up_room" and item.asset_id
+            ),
+            None,
+        )
+        if not room_image:
+            return None
+        return self._asset_service.get_asset(room_image.asset_id)
+
+    def collect_dress_up_display_reference_assets(self, active_characters: list[dict], *, limit: int = 1):
+        """References for staged dress-up photos.
+
+        Use character reference images only. The apparel-shop background is
+        controlled by text prompt; passing scene/background images causes the
+        generated shop interior to collapse into the previous background.
+        """
+        reference_paths = []
+        reference_asset_ids = []
+        seen_asset_ids = set()
+        for character in active_characters or []:
+            self._append_asset_reference(
+                (character or {}).get("base_asset_id") or ((character or {}).get("base_asset") or {}).get("id"),
+                reference_paths,
+                reference_asset_ids,
+                seen_asset_ids,
+                limit=limit,
+            )
         if reference_paths:
             return reference_paths, reference_asset_ids
         return image_support.collect_reference_assets(active_characters, limit=limit)
@@ -162,6 +214,19 @@ class LiveChatMediaService:
                 if outfit and int(outfit.id) == outfit_id:
                     return outfit
         return None
+
+    def _selected_scene_reference_asset(self, session_id: int):
+        scene_images = [
+            item
+            for item in self._session_image_service.list_session_images(session_id)
+            if item.image_type not in self.COSTUME_IMAGE_TYPES
+        ]
+        selected_scene = next((item for item in scene_images if item.is_selected), None)
+        if not selected_scene and scene_images:
+            selected_scene = scene_images[0]
+        if not selected_scene or not selected_scene.asset_id:
+            return None
+        return self._asset_service.get_asset(selected_scene.asset_id)
 
     def ensure_initial_costume(self, session_id: int):
         session = self._chat_session_service.get_session(session_id)
@@ -242,6 +307,8 @@ class LiveChatMediaService:
         state = context["state"]
         state_json = dict(state.get("state_json") or {})
         reuse_existing_prompt = str(payload.get("use_existing_prompt") or "").lower() in {"1", "true", "yes", "on"}
+        skip_character_references = str(payload.get("skip_character_references") or "").strip().lower() in {"1", "true", "yes", "on"}
+        skip_outfit_prompt = str(payload.get("skip_outfit_prompt") or "").strip().lower() in {"1", "true", "yes", "on"}
         conversation_prompt = {}
         if reuse_existing_prompt:
             prompt = str(payload.get("prompt_text") or "")
@@ -278,12 +345,26 @@ class LiveChatMediaService:
         visual_state = prompt_support.build_visual_state(context, state, prompt=prompt)
         state_json["visual_state"] = visual_state
 
-        active_characters = image_support.resolve_active_characters(context, state_json, conversation_prompt)
-        outfit = self._selected_outfit_for_session(session_id, active_characters)
+        active_characters = [] if skip_character_references else image_support.resolve_active_characters(context, state_json, conversation_prompt)
+        outfit = None if skip_outfit_prompt else self._selected_outfit_for_session(session_id, active_characters)
         outfit_lines = self._closet_service.outfit_prompt_lines(outfit)
         if outfit_lines:
             prompt = "\n".join([prompt, *outfit_lines])
-        reference_paths, reference_asset_ids = self.collect_session_reference_assets(session_id, active_characters, limit=2)
+        explicit_reference_asset_ids = payload.get("reference_asset_ids") or payload.get("input_asset_ids") or []
+        reference_strategy = str(payload.get("reference_strategy") or "").strip().lower()
+        if explicit_reference_asset_ids:
+            reference_paths, reference_asset_ids = self.collect_explicit_reference_assets(explicit_reference_asset_ids)
+        elif reference_strategy == self.DRESS_UP_DISPLAY_REFERENCE_STRATEGY:
+            reference_paths, reference_asset_ids = self.collect_dress_up_display_reference_assets(active_characters)
+        elif skip_character_references:
+            reference_paths, reference_asset_ids = [], []
+        else:
+            reference_paths, reference_asset_ids = self.collect_session_reference_assets(session_id, active_characters, limit=2)
+        if str(payload.get("use_selected_scene_as_reference") or "").strip().lower() in {"1", "true", "yes", "on"}:
+            scene_asset = self._selected_scene_reference_asset(session_id)
+            if scene_asset and getattr(scene_asset, "file_path", None) and scene_asset.id not in reference_asset_ids:
+                reference_paths.append(scene_asset.file_path)
+                reference_asset_ids.append(scene_asset.id)
         result = self._image_ai_client.generate_image(
             prompt,
             size=payload.get("size") or "1536x1024",
@@ -291,7 +372,7 @@ class LiveChatMediaService:
             model=payload.get("model") or payload.get("image_ai_model"),
             provider=payload.get("provider") or payload.get("image_ai_provider"),
             input_image_paths=reference_paths,
-            input_fidelity="high" if reference_paths else None,
+            input_fidelity=(payload.get("input_fidelity") or "high") if reference_paths else None,
         )
         image_base64 = result.get("image_base64")
         if not image_base64:
@@ -645,7 +726,9 @@ class LiveChatMediaService:
             "例えば海やビーチに行く流れなら、作業着ではなく、場面に合う魅力的なビーチファッションやリゾート服として解釈する。\n"
             "色気は衣装のシルエット、色、素材感、アクセサリー、表情、品のあるポーズで表現する。\n"
             "裸体、性的行為、局部や胸部の過度な強調、透け表現の強調、幼く見える表現は禁止。\n"
-            "キャラクター単体、全身または膝上、シンプル背景、衣装が分かる構図。\n"
+            "キャラクター単体、正面向き、全身または膝上、シンプル背景、衣装が分かる構図。\n"
+            "衣装基準画像は必ず1枚絵にする。複数人物、複数ポーズ、4分割、ターンアラウンド、背面図、側面図、コマ割り、比較表は禁止。\n"
+            "ユーザー指示に回転、振り向き、歩く、踊る、撮影ポーズなどの演出が含まれていても、衣装基準画像では正面立ち姿に変換し、衣装デザインだけを反映する。\n"
             "ライブチャット用の参照画像なので、複雑な背景やイベントCG構図にはしない。\n"
         )
         prompt = prompt_support.forbid_text_in_image(prompt)
@@ -696,6 +779,26 @@ class LiveChatMediaService:
                 ),
             },
         )
+        closet_outfit = None
+        if str(payload.get("save_to_closet") or "").strip().lower() in {"1", "true", "yes", "on"}:
+            outfit_name = str(payload.get("outfit_name") or "").strip() or f"お着替え {character.get('name') or ''} outfit".strip()
+            closet_outfit = self._closet_service.create_outfit(
+                session.project_id,
+                int(character.get("id")),
+                {
+                    "name": outfit_name[:255],
+                    "asset_id": asset.id,
+                    "thumbnail_asset_id": asset.id,
+                    "description": str(payload.get("outfit_description") or rewritten_instruction or instruction).strip(),
+                    "usage_scene": payload.get("usage_scene") or "お着替え撮影",
+                    "season": payload.get("season") or None,
+                    "mood": payload.get("mood") or "photo shoot",
+                    "tags": payload.get("tags") or ["お着替え", "photo shoot"],
+                    "prompt_notes": rewritten_instruction,
+                    "source_type": "outfit",
+                    "status": "active",
+                },
+            )
         row = self._session_image_service.create_session_image(
             session_id,
             {
@@ -711,6 +814,9 @@ class LiveChatMediaService:
                     "negative_note": negative_note,
                     "image_prompt_safety_rewrite": safety_rewrite,
                     "character_id": character.get("id"),
+                    "closet_outfit_id": (closet_outfit or {}).get("id") if isinstance(closet_outfit, dict) else None,
+                    "outfit_id": (closet_outfit or {}).get("id") if isinstance(closet_outfit, dict) else None,
+                    "outfit_name": (closet_outfit or {}).get("name") if isinstance(closet_outfit, dict) else None,
                     "reference_asset_ids": reference_asset_ids,
                 },
                 "quality": payload.get("quality") or "medium",
@@ -725,6 +831,8 @@ class LiveChatMediaService:
     def select_image(self, session_image_id: int, *, update_observation: bool = True, session_id: int | None = None):
         existing = self._session_image_service.get_session_image(session_image_id)
         if not existing:
+            return None
+        if existing.image_type in self.COSTUME_IMAGE_TYPES:
             return None
         if session_id is not None and int(existing.session_id) != int(session_id):
             return None

@@ -72,6 +72,28 @@
     });
   }
 
+  async function generateLccdPhotoShoot(sessionId, body = {}) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/lccd/photo-shoot`, {
+      method: "POST",
+      body,
+    });
+  }
+
+  async function generateLccdCostume(sessionId, body = {}) {
+    return generateLccdPhotoShoot(sessionId, { ...body, mode: "combined" });
+  }
+
+  async function generatePhotoModeShoot(sessionId, body = {}) {
+    return generateLccdPhotoShoot(sessionId, { ...body, mode: "photo_only" });
+  }
+
+  async function enterLccdRoom(sessionId, body = {}) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/lccd/enter`, {
+      method: "POST",
+      body,
+    });
+  }
+
   async function postMessage(sessionId, body) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/messages`, {
       method: "POST",
@@ -195,6 +217,10 @@
     deleteCostume,
     executeSceneChoice,
     moveToLocation,
+    generateLccdPhotoShoot,
+    generateLccdCostume,
+    generatePhotoModeShoot,
+    enterLccdRoom,
     setReferenceImage,
     deleteMessage,
   };

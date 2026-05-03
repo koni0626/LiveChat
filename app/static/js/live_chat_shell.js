@@ -29,6 +29,12 @@
       novelPageState: { messageId: null, pages: [], pageIndex: 0 },
       currentContext: null,
       selectedImage: null,
+      modeBadgeText: "",
+    };
+    const iconHtml = {
+      generate: '<i class="bi bi-camera-fill" aria-hidden="true"></i>',
+      textboxOn: '<i class="bi bi-chat-left-text-fill" aria-hidden="true"></i>',
+      textboxOff: '<i class="bi bi-chat-left" aria-hidden="true"></i>',
     };
 
     function renderNovel(messages, currentContext) {
@@ -68,8 +74,10 @@
       if (generateImageButton) {
         generateImageButton.disabled = active;
         generateImageButton.innerHTML = active
-          ? `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>${loadingLabel}`
-          : "\u753b\u50cf\u3092\u751f\u6210";
+          ? '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>'
+          : iconHtml.generate;
+        generateImageButton.setAttribute("aria-label", active ? loadingLabel : "\u753b\u50cf\u3092\u751f\u6210");
+        generateImageButton.setAttribute("title", active ? loadingLabel : "\u753b\u50cf\u3092\u751f\u6210");
       }
       if (regenerateImageButton) {
         regenerateImageButton.disabled = active;
@@ -118,7 +126,10 @@
         box.classList.toggle("is-hidden", !visible);
       }
       if (toggleTextboxButton) {
-        toggleTextboxButton.textContent = visible ? "\u30c6\u30ad\u30b9\u30c8\u30dc\u30c3\u30af\u30b9\u975e\u8868\u793a" : "\u30c6\u30ad\u30b9\u30c8\u30dc\u30c3\u30af\u30b9\u8868\u793a";
+        const label = visible ? "\u30c6\u30ad\u30b9\u30c8\u30dc\u30c3\u30af\u30b9\u975e\u8868\u793a" : "\u30c6\u30ad\u30b9\u30c8\u30dc\u30c3\u30af\u30b9\u8868\u793a";
+        toggleTextboxButton.innerHTML = visible ? iconHtml.textboxOn : iconHtml.textboxOff;
+        toggleTextboxButton.setAttribute("aria-label", label);
+        toggleTextboxButton.setAttribute("title", label);
       }
       if (state.currentContext) {
         renderSelectedImage(state.selectedImage, state.currentContext);
@@ -130,6 +141,9 @@
       state.selectedImage = selectedImage;
       state.currentContext = currentContext;
       const evaluation = currentContext?.state?.state_json?.conversation_evaluation || null;
+      const currentLocation = currentContext?.state?.state_json?.current_location || {};
+      const isDressUpMode = String(currentLocation?.id || "") === "lccd";
+      const modeBadgeText = state.modeBadgeText || (isDressUpMode ? "お着替えモード" : "");
       const isRomance = (evaluation?.theme || "general") === "romance";
       const score = Math.max(0, Math.min(100, Number(evaluation?.score || 0)));
       const novelElements = getNovelElements();
@@ -142,9 +156,17 @@
         textboxVisible: state.textboxVisible,
         imageLoading: state.imageLoading,
         replyLoading: state.replyLoading,
+        modeBadgeText,
         novelSpeakerText: "",
         novelTextValue: "",
       });
+    }
+
+    function setModeBadgeText(modeBadgeText) {
+      state.modeBadgeText = modeBadgeText || "";
+      if (state.currentContext) {
+        renderSelectedImage(state.selectedImage, state.currentContext);
+      }
     }
 
     function renderMessages(messages, currentContext) {
@@ -299,6 +321,7 @@
       renderImageGrid,
       setReplyLoading,
       setImageLoading,
+      setModeBadgeText,
       setMessagesVisible,
       setProgressDetailsVisible,
       setTextboxVisible,

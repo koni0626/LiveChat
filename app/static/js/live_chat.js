@@ -12,6 +12,9 @@
   const stateBoard = document.getElementById("liveChatStateBoard");
   const memoryBoard = document.getElementById("liveChatMemoryBoard");
   const selectedImagePanel = document.getElementById("liveChatSelectedImagePanel");
+  const stageElement = document.querySelector(".live-chat-stage");
+  const stageActions = document.querySelector(".live-chat-stage-actions");
+  const stageActionsHandle = document.getElementById("liveChatStageActionsHandle");
   const composeForm = document.getElementById("liveChatComposeForm");
   const composeInput = document.getElementById("liveChatComposeInput");
   const composeShell = document.getElementById("liveChatComposeShell");
@@ -29,6 +32,13 @@
   const sceneChoicePanel = document.getElementById("liveChatSceneChoicePanel");
   const locationMovePanel = document.getElementById("liveChatLocationMovePanel");
   const toggleLocationMoveButton = document.getElementById("liveChatToggleLocationMoveButton");
+  const lccdPanel = document.getElementById("liveChatLccdPanel");
+  const toggleLccdButton = document.getElementById("liveChatToggleLccdButton");
+  const conversationModeButton = document.getElementById("liveChatConversationModeButton");
+  const togglePhotoModeButton = document.getElementById("liveChatTogglePhotoModeButton");
+  const lccdCloseButton = document.getElementById("liveChatLccdCloseButton");
+  const lccdForm = document.getElementById("liveChatLccdForm");
+  const lccdGenerateButton = document.getElementById("liveChatLccdGenerateButton");
   const objectiveInitial = document.getElementById("liveChatObjectiveInitial");
   const objectiveList = document.getElementById("liveChatObjectiveList");
   const objectiveCount = document.getElementById("liveChatObjectiveDebugCount");
@@ -67,13 +77,159 @@
   let cameraBusy = false;
   let locationMoveVisible = false;
   let locationMoveBusy = false;
+  let lccdVisible = false;
+  let lccdBusy = false;
+  let lccdEnterBusy = false;
+  let conversationModeActive = true;
+  let photoModeActive = false;
+  let photoModeBusy = false;
   let currentShortStory = null;
   let idleTalkTimer = null;
   let idleTalkBusy = false;
   let idleTalksSincePlayerInput = 0;
+  const stageActionIcons = {
+    dressUp: '<i class="bi bi-person-standing-dress" aria-hidden="true"></i>',
+    conversation: '<i class="bi bi-chat-dots-fill" aria-hidden="true"></i>',
+    photoMode: '<i class="bi bi-camera-fill" aria-hidden="true"></i>',
+    cameraOn: '<i class="bi bi-webcam-fill" aria-hidden="true"></i>',
+    cameraOff: '<i class="bi bi-webcam" aria-hidden="true"></i>',
+  };
   const idleTalkEnabled = false;
   const idleTalkMinMs = 10000;
   const idleTalkMaxMs = 30000;
+  const stageActionsStorageKey = `liveChatStageActionsPosition:${sessionId}`;
+  let stageActionsPosition = loadStageActionsPosition();
+  let stageActionsDragState = null;
+
+  function loadStageActionsPosition() {
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(stageActionsStorageKey) || "null");
+      if (Number.isFinite(parsed?.x) && Number.isFinite(parsed?.y)) {
+        return { x: parsed.x, y: parsed.y };
+      }
+    } catch (_error) {
+      // Ignore corrupt saved UI positions.
+    }
+    return null;
+  }
+
+  function persistStageActionsPosition(position) {
+    try {
+      window.localStorage.setItem(stageActionsStorageKey, JSON.stringify(position));
+    } catch (_error) {
+      // localStorage can be unavailable in restricted browser contexts.
+    }
+  }
+
+  function clampStageActionsPosition(x, y) {
+    if (!stageElement || !stageActions) return { x: 12, y: 12 };
+    const stageRect = stageElement.getBoundingClientRect();
+    const actionsRect = stageActions.getBoundingClientRect();
+    const maxX = Math.max(12, stageRect.width - actionsRect.width - 12);
+    const maxY = Math.max(12, stageRect.height - actionsRect.height - 12);
+    return {
+      x: Math.min(Math.max(12, x), maxX),
+      y: Math.min(Math.max(12, y), maxY),
+    };
+  }
+
+  function applyStageActionsPosition(position, { persist = false } = {}) {
+    if (!stageElement || !stageActions || !position) return;
+    const clamped = clampStageActionsPosition(position.x, position.y);
+    stageActionsPosition = clamped;
+    stageElement.style.setProperty("--stage-actions-left", `${Math.round(clamped.x)}px`);
+    stageElement.style.setProperty("--stage-actions-top", `${Math.round(clamped.y)}px`);
+    stageElement.style.setProperty("--stage-actions-right", "auto");
+    if (persist) {
+      persistStageActionsPosition(clamped);
+    }
+  }
+
+  function positionStageActions() {
+    if (!stageElement || !selectedImagePanel || !stageActions) return;
+    if (stageActionsPosition) {
+      applyStageActionsPosition(stageActionsPosition);
+      return;
+    }
+    const stageRect = stageElement.getBoundingClientRect();
+    const stageFrame = selectedImagePanel.querySelector(".live-chat-stage-frame");
+    const anchorRect = (stageFrame || selectedImagePanel).getBoundingClientRect();
+    if (!stageRect.width || !anchorRect.width) return;
+    const top = Math.max(12, anchorRect.top - stageRect.top + 16);
+    const right = Math.max(12, stageRect.right - anchorRect.right + 16);
+    stageElement.style.setProperty("--stage-actions-left", "auto");
+    stageElement.style.setProperty("--stage-actions-top", `${Math.round(top)}px`);
+    stageElement.style.setProperty("--stage-actions-right", `${Math.round(right)}px`);
+  }
+
+  function scheduleStageActionPosition() {
+    window.requestAnimationFrame(positionStageActions);
+    window.setTimeout(positionStageActions, 160);
+  }
+
+  function beginStageActionsDrag(event) {
+    if (!stageElement || !stageActions) return;
+    event.preventDefault();
+    const stageRect = stageElement.getBoundingClientRect();
+    const actionsRect = stageActions.getBoundingClientRect();
+    const current = stageActionsPosition || {
+      x: actionsRect.left - stageRect.left,
+      y: actionsRect.top - stageRect.top,
+    };
+    stageActionsDragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: current.x,
+      originY: current.y,
+    };
+    stageActions.classList.add("is-dragging");
+    stageActionsHandle?.setPointerCapture?.(event.pointerId);
+  }
+
+  function moveStageActionsDrag(event) {
+    if (!stageActionsDragState) return;
+    const next = {
+      x: stageActionsDragState.originX + event.clientX - stageActionsDragState.startX,
+      y: stageActionsDragState.originY + event.clientY - stageActionsDragState.startY,
+    };
+    applyStageActionsPosition(next);
+  }
+
+  function endStageActionsDrag(event) {
+    if (!stageActionsDragState) return;
+    stageActionsHandle?.releasePointerCapture?.(stageActionsDragState.pointerId);
+    stageActionsDragState = null;
+    stageActions?.classList.remove("is-dragging");
+    if (stageActionsPosition) {
+      applyStageActionsPosition(stageActionsPosition, { persist: true });
+    }
+  }
+
+  function moveStageActionsByKeyboard(event) {
+    const deltaByKey = {
+      ArrowLeft: [-16, 0],
+      ArrowRight: [16, 0],
+      ArrowUp: [0, -16],
+      ArrowDown: [0, 16],
+    };
+    const delta = deltaByKey[event.key];
+    if (!delta || !stageElement || !stageActions) return;
+    event.preventDefault();
+    const stageRect = stageElement.getBoundingClientRect();
+    const actionsRect = stageActions.getBoundingClientRect();
+    const current = stageActionsPosition || {
+      x: actionsRect.left - stageRect.left,
+      y: actionsRect.top - stageRect.top,
+    };
+    applyStageActionsPosition(
+      {
+        x: current.x + delta[0],
+        y: current.y + delta[1],
+      },
+      { persist: true },
+    );
+  }
 
   function getMessageListElement() {
     return document.getElementById("liveChatMessageList");
@@ -123,11 +279,14 @@
     imageForm.prompt_text.value = context.state.visual_prompt_text || "";
 
     shell.renderSelectedImage(context.selected_image, context);
+    scheduleStageActionPosition();
+    refreshModeBadge();
     shell.renderMessages(context.messages || [], context);
     shell.renderImageGrid(context.images || []);
     costumeRoomController?.render(context);
     renderSceneChoices(context);
     renderLocationMovePanel(context);
+    renderLccdPanel();
     renderObjectiveNotes(context);
     renderPlayerReaction(context);
     renderSavedShortStories(context);
@@ -340,7 +499,11 @@
     if (!enabled) {
       cameraEnabled = false;
       cameraToggleButton?.setAttribute("aria-pressed", "false");
-      if (cameraToggleButton) cameraToggleButton.textContent = "カメラOFF";
+      if (cameraToggleButton) {
+        cameraToggleButton.innerHTML = stageActionIcons.cameraOff;
+        cameraToggleButton.setAttribute("aria-label", "カメラOFF");
+        cameraToggleButton.setAttribute("title", "カメラOFF");
+      }
       if (cameraStream) {
         cameraStream.getTracks().forEach((track) => track.stop());
         cameraStream = null;
@@ -368,7 +531,11 @@
       }
       cameraEnabled = true;
       cameraToggleButton?.setAttribute("aria-pressed", "true");
-      if (cameraToggleButton) cameraToggleButton.textContent = "カメラON";
+      if (cameraToggleButton) {
+        cameraToggleButton.innerHTML = stageActionIcons.cameraOn;
+        cameraToggleButton.setAttribute("aria-label", "カメラON");
+        cameraToggleButton.setAttribute("title", "カメラON");
+      }
       renderPlayerReaction(currentContext);
     } catch (error) {
       cameraEnabled = false;
@@ -512,6 +679,7 @@
           images: [generatedImage, ...((currentContext?.images || []).filter((item) => item.id !== generatedImage.id))],
         };
         shell.renderSelectedImage(generatedImage, currentContext);
+        scheduleStageActionPosition();
         shell.renderImageGrid(currentContext.images || []);
       }
       await loadContext();
@@ -621,6 +789,179 @@
     }
   }
 
+  function renderLccdPanel() {
+    if (!lccdPanel) return;
+    lccdPanel.classList.add("is-hidden");
+    toggleLccdButton?.setAttribute("aria-expanded", "false");
+  }
+
+  function currentModeBadgeText() {
+    if (conversationModeActive) return "会話モード";
+    if (photoModeActive) return "撮影モード";
+    if (isCurrentLocationLccd()) return "お着替えモード";
+    return "";
+  }
+
+  function refreshModeBadge() {
+    shell.setModeBadgeText?.(currentModeBadgeText());
+  }
+
+  function isCurrentLocationLccd() {
+    const location = currentContext?.state?.state_json?.current_location;
+    return String(location?.id || "") === "lccd";
+  }
+
+  function setLccdEnterLoading(active) {
+    lccdEnterBusy = active;
+    if (!toggleLccdButton) return;
+    toggleLccdButton.disabled = active;
+    toggleLccdButton.innerHTML = active
+      ? '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>'
+      : stageActionIcons.dressUp;
+    toggleLccdButton.setAttribute("aria-label", active ? "お着替えへ移動中" : "お着替え");
+    toggleLccdButton.setAttribute("title", active ? "お着替えへ移動中" : "お着替え");
+  }
+
+  async function enterLccdRoom() {
+    if (lccdEnterBusy) return;
+    locationMoveVisible = false;
+    lccdVisible = false;
+    renderLocationMovePanel(currentContext);
+    renderLccdPanel();
+    setLccdEnterLoading(true);
+    shell.setImageLoading(true, "auto");
+    try {
+      const result = await LiveChatApi.enterLccdRoom(sessionId, {
+        size: imageForm?.size?.value || "1536x1024",
+        quality: imageForm?.quality?.value || "low",
+      });
+      if (result?.context) {
+        applyContext(result.context);
+      } else {
+        await loadContext();
+      }
+      lccdVisible = false;
+      renderLccdPanel();
+      if (result?.image_generation_error) {
+        NovelUI.toast(`お着替えへ移動しました。背景画像は失敗しました: ${result.image_generation_error}`, "warning");
+      } else {
+        NovelUI.toast("お着替えへ移動しました。");
+      }
+    } catch (error) {
+      NovelUI.toast(error.message || "お着替えへの移動に失敗しました。", "danger");
+      await loadContext().catch(() => {});
+    } finally {
+      setLccdEnterLoading(false);
+      shell.setImageLoading(false, "auto");
+      renderLccdPanel();
+    }
+  }
+
+  function setLccdLoading(active) {
+    lccdBusy = active;
+    if (!lccdGenerateButton) return;
+    lccdGenerateButton.disabled = active;
+    lccdGenerateButton.innerHTML = active
+      ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>衣装を生成中...'
+      : "衣装を生成";
+  }
+
+  async function generateLccdCostume(promptText, poseStyle = "") {
+    if (lccdBusy) return;
+    promptText = String(promptText || "").trim();
+    if (!promptText) {
+      NovelUI.toast("衣装の希望を入力してください。", "warning");
+      return;
+    }
+    setLccdLoading(true);
+    shell.setImageLoading(true, "auto");
+    try {
+      const result = await LiveChatApi.generateLccdCostume(sessionId, {
+        prompt_text: promptText,
+        pose_style: poseStyle,
+        costume_size: "1024x1536",
+        quality: imageForm?.quality?.value || "low",
+      });
+      if (result?.context) {
+        applyContext(result.context);
+      } else {
+        await loadContext();
+      }
+      if (result?.photo_generation_error) {
+        NovelUI.toast(`衣装は保存しました。撮影カットは失敗しました: ${result.photo_generation_error}`, "warning");
+      } else {
+        NovelUI.toast("お着替えで衣装と撮影カットを生成しました。");
+      }
+    } catch (error) {
+      NovelUI.toast(error.message || "お着替え撮影に失敗しました。", "danger");
+      await loadContext().catch(() => {});
+    } finally {
+      setLccdLoading(false);
+      shell.setImageLoading(false, "auto");
+      renderLccdPanel();
+    }
+  }
+
+  function setPhotoModeActive(active) {
+    photoModeActive = active;
+    if (!togglePhotoModeButton) return;
+    togglePhotoModeButton.classList.toggle("is-active", active);
+    togglePhotoModeButton.setAttribute("aria-pressed", active ? "true" : "false");
+    togglePhotoModeButton.setAttribute("title", active ? "撮影モード中" : "撮影モード");
+    togglePhotoModeButton.setAttribute("aria-label", active ? "撮影モード中" : "撮影モード");
+    refreshModeBadge();
+  }
+
+  function setConversationModeActive(active) {
+    conversationModeActive = active;
+    if (!conversationModeButton) return;
+    conversationModeButton.classList.toggle("is-active", active);
+    conversationModeButton.setAttribute("aria-pressed", active ? "true" : "false");
+    conversationModeButton.setAttribute("title", active ? "会話モード中" : "会話モード");
+    conversationModeButton.setAttribute("aria-label", active ? "会話モード中" : "会話モード");
+    refreshModeBadge();
+  }
+
+  function setPhotoModeLoading(active) {
+    photoModeBusy = active;
+    if (!togglePhotoModeButton) return;
+    togglePhotoModeButton.disabled = active;
+    togglePhotoModeButton.innerHTML = active
+      ? '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>'
+      : stageActionIcons.photoMode;
+  }
+
+  async function generatePhotoModeShoot(promptText, poseStyle = "") {
+    if (photoModeBusy) return;
+    promptText = String(promptText || "").trim();
+    if (!promptText) {
+      NovelUI.toast("撮影したいポーズや構図を入力してください。", "warning");
+      return;
+    }
+    setPhotoModeLoading(true);
+    shell.setImageLoading(true, "auto");
+    try {
+      const result = await LiveChatApi.generatePhotoModeShoot(sessionId, {
+        prompt_text: promptText,
+        pose_style: poseStyle,
+        photo_size: imageForm?.size?.value || "1536x1024",
+        quality: imageForm?.quality?.value || "low",
+      });
+      if (result?.context) {
+        applyContext(result.context);
+      } else {
+        await loadContext();
+      }
+      NovelUI.toast("現在の背景と衣装のまま、撮影カットを生成しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "撮影に失敗しました。", "danger");
+      await loadContext().catch(() => {});
+    } finally {
+      setPhotoModeLoading(false);
+      shell.setImageLoading(false, "auto");
+    }
+  }
+
   function setSceneChoiceLoading(active, activeButton = null) {
     document.querySelectorAll("[data-scene-choice-id]").forEach((button) => {
       button.disabled = active;
@@ -651,6 +992,10 @@
         if (!uploaded) {
           throw new Error("\u8d08\u308a\u7269\u753b\u50cf\u306e\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002");
         }
+      } else if (!conversationModeActive && photoModeActive) {
+        await generatePhotoModeShoot(rawMessage);
+      } else if (!conversationModeActive && isCurrentLocationLccd()) {
+        await generateLccdCostume(rawMessage);
       } else {
         const result = await LiveChatApi.postMessage(sessionId, {
           message_text: rawMessage,
@@ -756,6 +1101,12 @@
     generateSessionImage,
   });
 
+  stageActionsHandle?.addEventListener("pointerdown", beginStageActionsDrag);
+  stageActionsHandle?.addEventListener("pointermove", moveStageActionsDrag);
+  stageActionsHandle?.addEventListener("pointerup", endStageActionsDrag);
+  stageActionsHandle?.addEventListener("pointercancel", endStageActionsDrag);
+  stageActionsHandle?.addEventListener("keydown", moveStageActionsByKeyboard);
+
   document.getElementById("liveChatRefreshContextButton")?.addEventListener("click", () => {
     loadContext().catch((error) => {
       NovelUI.toast(error.message || "\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
@@ -781,6 +1132,49 @@
     const button = event.target.closest("[data-location-move-id]");
     if (!button) return;
     await moveToLocation(Number(button.dataset.locationMoveId || 0), button);
+  });
+
+  toggleLccdButton?.addEventListener("click", () => {
+    if (!conversationModeActive && !photoModeActive && isCurrentLocationLccd()) {
+      composeForm?.message_text?.focus();
+      return;
+    }
+    setConversationModeActive(false);
+    setPhotoModeActive(false);
+    refreshModeBadge();
+    enterLccdRoom();
+  });
+
+  conversationModeButton?.addEventListener("click", () => {
+    setPhotoModeActive(false);
+    setConversationModeActive(true);
+    NovelUI.toast("会話モードです。通常どおり会話しながら進行します。");
+    composeForm?.message_text?.focus();
+  });
+
+  togglePhotoModeButton?.addEventListener("click", () => {
+    setConversationModeActive(false);
+    setPhotoModeActive(!photoModeActive);
+    if (!photoModeActive) {
+      setConversationModeActive(true);
+    }
+    refreshModeBadge();
+    NovelUI.toast(photoModeActive
+      ? "撮影モードです。ポーズや構図を書いて送信してください。"
+      : "撮影モードを解除しました。");
+    composeForm?.message_text?.focus();
+  });
+
+  lccdCloseButton?.addEventListener("click", () => {
+    lccdVisible = false;
+    renderLccdPanel();
+  });
+
+  lccdForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const promptText = lccdForm.prompt_text.value.trim();
+    await generateLccdCostume(promptText, lccdForm.pose_style.value);
+    lccdForm.prompt_text.value = "";
   });
 
   cameraToggleButton?.addEventListener("click", () => {
@@ -838,6 +1232,7 @@
   window.addEventListener("resize", () => {
     if (currentContext) {
       shell.renderSelectedImage(currentContext.selected_image, currentContext);
+      scheduleStageActionPosition();
       shell.renderNovel(currentContext.messages || [], currentContext);
     }
   });

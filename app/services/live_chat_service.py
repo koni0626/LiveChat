@@ -257,6 +257,12 @@ class LiveChatService:
     def move_to_location(self, session_id: int, location_id: int, payload: dict | None = None):
         return self._conversation_service.move_to_location(session_id, location_id, payload)
 
+    def enter_lccd_room(self, session_id: int, payload: dict | None = None):
+        return self._conversation_service.enter_lccd_room(session_id, payload)
+
+    def generate_lccd_photo_shoot(self, session_id: int, payload: dict | None = None):
+        return self._conversation_service.generate_lccd_photo_shoot(session_id, payload)
+
     def list_costumes(self, session_id: int):
         return self._media_service.list_costumes(session_id)
 
