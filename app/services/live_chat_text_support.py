@@ -264,6 +264,31 @@ def generate_choice_execution(text_ai_client, context: dict, choice: dict) -> di
         return {}
 
 
+def generate_photo_execution(text_ai_client, context: dict, instruction: str, pose_style: str = "") -> dict:
+    try:
+        prompt = prompt_support.build_photo_execution_prompt(context, instruction, pose_style)
+        result = text_ai_client.generate_text(
+            prompt,
+            temperature=0.35,
+            response_format={"type": "json_object"},
+            max_tokens=1000,
+        )
+        parsed = text_ai_client._try_parse_json(result.get("text")) or {}
+        if not isinstance(parsed, dict):
+            return {}
+        return {
+            "scene_instruction": str(parsed.get("scene_instruction") or "").strip()[:700],
+            "image_prompt_hint": str(parsed.get("image_prompt_hint") or "").strip()[:1000],
+            "reply_hint": str(parsed.get("reply_hint") or "").strip()[:500],
+            "location": str(parsed.get("location") or "").strip()[:160],
+            "background": str(parsed.get("background") or "").strip()[:300],
+            "emotional_effect": str(parsed.get("emotional_effect") or "").strip()[:260],
+            "pose_instruction": str(parsed.get("pose_instruction") or "").strip()[:500],
+        }
+    except Exception:
+        return {}
+
+
 def _costume_swimwear_terms() -> tuple[str, ...]:
     return (
         "水着",

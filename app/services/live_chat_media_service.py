@@ -219,11 +219,12 @@ class LiveChatMediaService:
         selected_costume = self._session_image_service.get_selected_costume(session_id)
         return self.serialize_session_image(selected_costume) if selected_costume else None
 
-    def _selected_scene_reference_asset(self, session_id: int):
+    def _selected_scene_reference_asset(self, session_id: int, *, exclude_image_types: set[str] | None = None):
+        exclude_image_types = exclude_image_types or set()
         scene_images = [
             item
             for item in self._session_image_service.list_session_images(session_id)
-            if item.image_type not in self.COSTUME_IMAGE_TYPES
+            if item.image_type not in self.COSTUME_IMAGE_TYPES and item.image_type not in exclude_image_types
         ]
         selected_scene = next((item for item in scene_images if item.is_selected), None)
         if not selected_scene and scene_images:
@@ -365,7 +366,11 @@ class LiveChatMediaService:
         else:
             reference_paths, reference_asset_ids = self.collect_session_reference_assets(session_id, active_characters, limit=2)
         if str(payload.get("use_selected_scene_as_reference") or "").strip().lower() in {"1", "true", "yes", "on"}:
-            scene_asset = self._selected_scene_reference_asset(session_id)
+            excluded_scene_types = set(payload.get("selected_scene_reference_exclude_types") or [])
+            scene_asset = self._selected_scene_reference_asset(
+                session_id,
+                exclude_image_types=excluded_scene_types,
+            )
             if scene_asset and getattr(scene_asset, "file_path", None) and scene_asset.id not in reference_asset_ids:
                 reference_paths.append(scene_asset.file_path)
                 reference_asset_ids.append(scene_asset.id)
@@ -405,6 +410,7 @@ class LiveChatMediaService:
                         "aspect_ratio": result.get("aspect_ratio"),
                         "revised_prompt": result.get("revised_prompt"),
                         "reference_asset_ids": reference_asset_ids,
+                        "input_fidelity": (payload.get("input_fidelity") or "high") if reference_paths else None,
                     }
                 ),
             },

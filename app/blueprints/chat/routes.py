@@ -365,6 +365,20 @@ def move_chat_session_location(session_id: int, location_id: int):
     return json_response(result, status=201)
 
 
+@chat_bp.route("/chat/sessions/<int:session_id>/location-services/<int:service_id>/select", methods=["POST"])
+def select_chat_location_service(session_id: int, service_id: int):
+    _chat_session, _project, user = _require_session(session_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_global_image_generation_settings(payload)
+    try:
+        result = live_chat_service.select_location_service(session_id, service_id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
 @chat_bp.route("/chat/sessions/<int:session_id>/lccd/photo-shoot", methods=["POST"])
 def generate_chat_lccd_photo_shoot(session_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)

@@ -31,6 +31,7 @@
   const closetPicker = document.getElementById("liveChatClosetPicker");
   const sceneChoicePanel = document.getElementById("liveChatSceneChoicePanel");
   const locationMovePanel = document.getElementById("liveChatLocationMovePanel");
+  const locationServicePanel = document.getElementById("liveChatLocationServicePanel");
   const toggleLocationMoveButton = document.getElementById("liveChatToggleLocationMoveButton");
   const lccdPanel = document.getElementById("liveChatLccdPanel");
   const toggleLccdButton = document.getElementById("liveChatToggleLccdButton");
@@ -76,7 +77,9 @@
   let cameraStream = null;
   let cameraBusy = false;
   let locationMoveVisible = false;
+  let selectedLocationMoveId = null;
   let locationMoveBusy = false;
+  let locationServiceBusy = false;
   let lccdVisible = false;
   let lccdBusy = false;
   let lccdEnterBusy = false;
@@ -286,6 +289,7 @@
     costumeRoomController?.render(context);
     renderSceneChoices(context);
     renderLocationMovePanel(context);
+    renderLocationServicePanel(context);
     renderLccdPanel();
     renderObjectiveNotes(context);
     renderPlayerReaction(context);
@@ -710,6 +714,30 @@
     return Number(location?.id || 0);
   }
 
+  function currentLocationServiceId(context) {
+    const service = context?.state?.state_json?.current_location_service;
+    return Number(service?.id || 0);
+  }
+
+  function currentLocationServices(context) {
+    const stateLocation = context?.state?.state_json?.current_location;
+    if (Array.isArray(stateLocation?.services)) return stateLocation.services;
+    const locationId = Number(stateLocation?.id || 0);
+    const locations = Array.isArray(context?.world_map?.locations) ? context.world_map.locations : [];
+    const location = locations.find((item) => Number(item.id) === locationId);
+    return Array.isArray(location?.services) ? location.services : [];
+  }
+
+  function locationServicesForLocation(location) {
+    return (Array.isArray(location?.services) ? location.services : []).filter((item) => item && item.status !== "archived");
+  }
+
+  function renderLocationServicePanel(context) {
+    if (!locationServicePanel) return;
+    locationServicePanel.classList.add("is-hidden");
+    locationServicePanel.innerHTML = "";
+  }
+
   function renderLocationMovePanel(context) {
     if (!locationMovePanel) return;
     const locations = Array.isArray(context?.world_map?.locations) ? context.world_map.locations : [];
@@ -723,27 +751,49 @@
       return;
     }
     const activeId = currentLocationId(context);
+    const selectedId = Number(selectedLocationMoveId || 0);
     locationMovePanel.innerHTML = `
       <div class="live-chat-location-head">
         <div>
           <div class="eyebrow">Move</div>
-          <h4>移動する</h4>
+          <h4>どこへ移動する？</h4>
         </div>
         <button class="btn btn-sm btn-outline-dark" type="button" data-location-move-close>閉じる</button>
       </div>
       <div class="live-chat-location-grid">
         ${locations.map((location) => {
           const isActive = Number(location.id) === activeId;
+          const isSelected = Number(location.id) === selectedId;
+          const services = locationServicesForLocation(location);
           const meta = [location.region, location.location_type, location.owner_character_name ? `${location.owner_character_name}関連` : ""]
             .filter(Boolean)
             .join(" / ");
           return `
-            <button class="live-chat-location-card${isActive ? " is-active" : ""}" type="button" data-location-move-id="${location.id}" ${locationMoveBusy ? "disabled" : ""}>
-              <span class="live-chat-location-card-title">${NovelUI.escape(location.name || "名称未設定")}</span>
-              <span class="live-chat-location-card-meta">${NovelUI.escape(meta || "施設")}</span>
-              <span class="live-chat-location-card-desc">${NovelUI.escape(NovelUI.truncateText(location.description || "説明未設定", 120))}</span>
-              ${isActive ? '<span class="live-chat-location-card-current">現在地</span>' : ""}
-            </button>
+            <div class="live-chat-location-entry${isSelected ? " is-selected" : ""}">
+              <button class="live-chat-location-card${isActive ? " is-active" : ""}${isSelected ? " is-selected" : ""}" type="button" data-location-select-id="${location.id}" ${locationMoveBusy || locationServiceBusy ? "disabled" : ""}>
+                <span class="live-chat-location-card-title">${NovelUI.escape(location.name || "名称未設定")}</span>
+                <span class="live-chat-location-card-meta">${NovelUI.escape(meta || "施設")}</span>
+                <span class="live-chat-location-card-desc">${NovelUI.escape(NovelUI.truncateText(location.description || "説明未設定", 120))}</span>
+                ${isActive ? '<span class="live-chat-location-card-current">現在地</span>' : ""}
+                <span class="live-chat-location-card-next">${isSelected ? "行き先を選択中" : "行き先を開く"}</span>
+              </button>
+              ${isSelected ? `
+                <div class="live-chat-location-destinations">
+                  <div class="live-chat-location-destinations-title">${NovelUI.escape(location.name || "施設")}のどこへ行く？</div>
+                  <button class="live-chat-location-destination-button" type="button" data-location-move-final-id="${location.id}" ${locationMoveBusy ? "disabled" : ""}>
+                    <span>施設全体へ移動</span>
+                    <small>入口・広場・全体の雰囲気で移動する</small>
+                  </button>
+                  ${services.length ? services.map((service) => `
+                    <button class="live-chat-location-destination-button" type="button" data-location-service-id="${service.id}" ${locationServiceBusy ? "disabled" : ""}>
+                      <span>${NovelUI.escape(service.name || "行き先")}</span>
+                      <small>${NovelUI.escape(service.service_type || "施設内")}</small>
+                      ${service.summary ? `<em>${NovelUI.escape(NovelUI.truncateText(service.summary, 78))}</em>` : ""}
+                    </button>
+                  `).join("") : '<div class="live-chat-location-destination-empty">施設内の行き先はまだありません。</div>'}
+                </div>
+              ` : ""}
+            </div>
           `;
         }).join("")}
       </div>
@@ -769,6 +819,8 @@
       } else {
         await loadContext();
       }
+      locationMoveVisible = false;
+      selectedLocationMoveId = null;
       await capturePlayerReactionIfEnabled();
       if (result?.image_generation_error) {
         NovelUI.toast(`移動しました。画像生成は失敗しました: ${result.image_generation_error}`, "warning");
@@ -786,6 +838,49 @@
       }
       shell.setImageLoading(false, "auto");
       renderLocationMovePanel(currentContext);
+      renderLocationServicePanel(currentContext);
+    }
+  }
+
+  async function selectLocationService(serviceId, button = null) {
+    if (!serviceId || locationServiceBusy) return;
+    locationServiceBusy = true;
+    const originalHtml = button?.innerHTML;
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>移動中...';
+    }
+    shell.setImageLoading(true, "auto");
+    try {
+      const result = await LiveChatApi.selectLocationService(sessionId, serviceId, {
+        size: imageForm?.size?.value || "1536x1024",
+        quality: imageForm?.quality?.value || "low",
+      });
+      if (result?.context) {
+        applyContext(result.context);
+      } else {
+        await loadContext();
+      }
+      locationMoveVisible = false;
+      selectedLocationMoveId = null;
+      await capturePlayerReactionIfEnabled();
+      if (result?.image_generation_error) {
+        NovelUI.toast(`サービスへ移動しました。画像生成は失敗しました: ${result.image_generation_error}`, "warning");
+      } else {
+        NovelUI.toast("サービスへ移動しました。");
+      }
+    } catch (error) {
+      NovelUI.toast(error.message || "サービス移動に失敗しました。", "danger");
+      await loadContext().catch(() => {});
+    } finally {
+      locationServiceBusy = false;
+      if (button && originalHtml) {
+        button.innerHTML = originalHtml;
+        button.disabled = false;
+      }
+      shell.setImageLoading(false, "auto");
+      renderLocationMovePanel(currentContext);
+      renderLocationServicePanel(currentContext);
     }
   }
 
@@ -796,8 +891,8 @@
   }
 
   function currentModeBadgeText() {
-    if (conversationModeActive) return "会話モード";
     if (photoModeActive) return "撮影モード";
+    if (conversationModeActive) return "会話モード";
     if (isCurrentLocationLccd()) return "お着替えモード";
     return "";
   }
@@ -904,6 +999,13 @@
 
   function setPhotoModeActive(active) {
     photoModeActive = active;
+    if (active) {
+      conversationModeActive = false;
+      conversationModeButton?.classList.toggle("is-active", false);
+      conversationModeButton?.setAttribute("aria-pressed", "false");
+      conversationModeButton?.setAttribute("title", "会話モード");
+      conversationModeButton?.setAttribute("aria-label", "会話モード");
+    }
     if (!togglePhotoModeButton) return;
     togglePhotoModeButton.classList.toggle("is-active", active);
     togglePhotoModeButton.setAttribute("aria-pressed", active ? "true" : "false");
@@ -914,6 +1016,13 @@
 
   function setConversationModeActive(active) {
     conversationModeActive = active;
+    if (active) {
+      photoModeActive = false;
+      togglePhotoModeButton?.classList.toggle("is-active", false);
+      togglePhotoModeButton?.setAttribute("aria-pressed", "false");
+      togglePhotoModeButton?.setAttribute("title", "撮影モード");
+      togglePhotoModeButton?.setAttribute("aria-label", "撮影モード");
+    }
     if (!conversationModeButton) return;
     conversationModeButton.classList.toggle("is-active", active);
     conversationModeButton.setAttribute("aria-pressed", active ? "true" : "false");
@@ -952,7 +1061,6 @@
       } else {
         await loadContext();
       }
-      NovelUI.toast("現在の背景と衣装のまま、撮影カットを生成しました。");
     } catch (error) {
       NovelUI.toast(error.message || "撮影に失敗しました。", "danger");
       await loadContext().catch(() => {});
@@ -979,6 +1087,7 @@
     event.preventDefault();
     clearIdleTalkTimer();
     const rawMessage = composeForm.message_text.value.trim();
+    let handledBySpecialMode = false;
     try {
       if (!rawMessage && !giftController?.hasSelectedGift()) {
         NovelUI.toast("送信するメッセージを入力するか、メッセージを作成ボタンで代理文を作成してください。", "warning");
@@ -992,10 +1101,12 @@
         if (!uploaded) {
           throw new Error("\u8d08\u308a\u7269\u753b\u50cf\u306e\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002");
         }
-      } else if (!conversationModeActive && photoModeActive) {
+      } else if (photoModeActive) {
         await generatePhotoModeShoot(rawMessage);
+        handledBySpecialMode = true;
       } else if (!conversationModeActive && isCurrentLocationLccd()) {
         await generateLccdCostume(rawMessage);
+        handledBySpecialMode = true;
       } else {
         const result = await LiveChatApi.postMessage(sessionId, {
           message_text: rawMessage,
@@ -1020,7 +1131,9 @@
       composeForm.message_text.value = "";
       idleTalksSincePlayerInput = 0;
       scheduleIdleTalk();
-      NovelUI.toast("\u30e1\u30c3\u30bb\u30fc\u30b8\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f\u3002");
+      if (!handledBySpecialMode) {
+        NovelUI.toast("\u30e1\u30c3\u30bb\u30fc\u30b8\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f\u3002");
+      }
     } catch (error) {
       NovelUI.toast(error.message || "\u30e1\u30c3\u30bb\u30fc\u30b8\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
     } finally {
@@ -1119,19 +1232,43 @@
 
   toggleLocationMoveButton?.addEventListener("click", () => {
     locationMoveVisible = !locationMoveVisible;
+    if (!locationMoveVisible) selectedLocationMoveId = null;
     renderLocationMovePanel(currentContext);
+    renderLocationServicePanel(currentContext);
   });
 
   locationMovePanel?.addEventListener("click", async (event) => {
     const closeButton = event.target.closest("[data-location-move-close]");
     if (closeButton) {
       locationMoveVisible = false;
+      selectedLocationMoveId = null;
       renderLocationMovePanel(currentContext);
+      renderLocationServicePanel(currentContext);
       return;
     }
-    const button = event.target.closest("[data-location-move-id]");
+    const selectButton = event.target.closest("[data-location-select-id]");
+    if (selectButton) {
+      const id = Number(selectButton.dataset.locationSelectId || 0);
+      selectedLocationMoveId = selectedLocationMoveId === id ? null : id;
+      renderLocationMovePanel(currentContext);
+      renderLocationServicePanel(currentContext);
+      return;
+    }
+    const finalButton = event.target.closest("[data-location-move-final-id]");
+    if (finalButton) {
+      await moveToLocation(Number(finalButton.dataset.locationMoveFinalId || 0), finalButton);
+      return;
+    }
+    const serviceButton = event.target.closest("[data-location-service-id]");
+    if (serviceButton) {
+      await selectLocationService(Number(serviceButton.dataset.locationServiceId || 0), serviceButton);
+    }
+  });
+
+  locationServicePanel?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-location-service-id]");
     if (!button) return;
-    await moveToLocation(Number(button.dataset.locationMoveId || 0), button);
+    await selectLocationService(Number(button.dataset.locationServiceId || 0), button);
   });
 
   toggleLccdButton?.addEventListener("click", () => {

@@ -21,6 +21,7 @@ from .character_user_memory_service import CharacterUserMemoryService
 from .character_memory_note_service import CharacterMemoryNoteService
 from .session_objective_note_service import SessionObjectiveNoteService
 from ..repositories.world_location_repository import WorldLocationRepository
+from ..repositories.world_location_service_repository import WorldLocationServiceRepository
 
 
 class LiveChatConversationService:
@@ -42,6 +43,7 @@ class LiveChatConversationService:
         character_memory_note_service: CharacterMemoryNoteService | None = None,
         session_objective_note_service: SessionObjectiveNoteService | None = None,
         world_location_repository: WorldLocationRepository | None = None,
+        world_location_service_repository: WorldLocationServiceRepository | None = None,
     ):
         self._chat_session_service = chat_session_service
         self._chat_message_service = chat_message_service
@@ -56,6 +58,7 @@ class LiveChatConversationService:
         self._character_memory_note_service = character_memory_note_service or CharacterMemoryNoteService()
         self._session_objective_note_service = session_objective_note_service or SessionObjectiveNoteService()
         self._world_location_repository = world_location_repository or WorldLocationRepository()
+        self._world_location_service_repository = world_location_service_repository or WorldLocationServiceRepository()
 
     def _update_character_user_memory(self, session, context: dict):
         if not session:
@@ -214,12 +217,19 @@ class LiveChatConversationService:
             f"画像ヒント: {choice.get('image_prompt_hint') or ''}\n"
             f"現在の場所: {state_json.get('location') or ''}\n"
             f"現在の背景: {state_json.get('background') or ''}\n"
+            f"現在の施設情報: {((state_json.get('current_location') or {}).get('description') if isinstance(state_json.get('current_location'), dict) else '') or ''}\n"
+            f"現在の施設内サービス: {((state_json.get('current_location_service') or {}).get('summary') if isinstance(state_json.get('current_location_service'), dict) else '') or ''}\n"
             f"登場キャラクター: {character_names}\n"
             "直近の会話:\n"
             + "\n".join(recent_lines)
-            + "\nプレイヤー1人称視点。プレイヤーは画像に描かない。"
-            "キャラクターだけを魅力的に表示し、選択した場面に移動したことが一目で分かる背景にする。"
-            "選択中の衣装画像と同じ顔、髪型、体型、衣装を維持する。"
+            + "\n参照画像がある場合、それはキャラクター資料。顔、髪型、体型、画風、現在選択中の衣装だけを維持する。"
+            "参照画像の背景、床、壁、照明、余白、スタジオ感、グレー背景、単色背景は完全に破棄する。"
+            "背景は参照画像ではなく、現在の場所、現在の背景、施設情報、画像ヒント、場面指示のテキストから新しく作る。"
+            "プレイヤー1人称視点。プレイヤーは画像に描かない。"
+            "キャラクターだけを魅力的に表示し、選択した場面に移ったことが一目で分かる背景にする。"
+            "キャラクターは棒立ち禁止。選択した行動に反応した自然で魅力的なポーズにする。"
+            "全身カタログ構図、正面直立、無表情、証明写真風は禁止。"
+            "背景とキャラクターが同じ空間にいるように、床、奥行き、照明、影、反射を合わせる。"
             "ノベルゲームのイベントCGとしてドラマチックにする。"
         )
         prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
@@ -475,6 +485,17 @@ class LiveChatConversationService:
             "owner_character_id": location.owner_character_id,
         }
 
+    def _serialize_location_service_for_state(self, service) -> dict:
+        return {
+            "id": service.id,
+            "location_id": service.location_id,
+            "name": service.name,
+            "service_type": service.service_type,
+            "summary": service.summary,
+            "chat_hook": service.chat_hook,
+            "visual_prompt": service.visual_prompt,
+        }
+
     def _build_location_move_prompt(self, context: dict, location) -> str:
         character_names = "、".join(character.get("name") or "" for character in context.get("characters") or [])
         recent_lines = []
@@ -547,11 +568,17 @@ class LiveChatConversationService:
         )
         prompt = "\n".join(
             [
-                "移動先背景と選択中衣装画像を使って、移動後の中間画像を作る。",
+                "移動先背景と選択中衣装画像を使って、ライブチャットのノベルゲーム用ワンシーン画像を作る。",
                 "参照画像が2枚ある場合、1枚目は移動先背景、2枚目はクローゼットで選択されているキャラクター衣装画像。",
-                "背景は必ず移動先背景を優先する。衣装画像のグレー背景や単色背景は使わない。",
+                "背景は必ず1枚目の移動先背景を最優先する。衣装画像のグレー背景、単色背景、スタジオ背景は絶対に使わない。",
+                "2枚目の衣装画像はキャラクター資料であり、背景資料ではない。2枚目の背景、床、照明、壁、余白は完全に破棄する。",
+                "1枚目の背景画像に存在する空間、床、壁、奥行き、照明、色、雰囲気を保ったまま、その中にキャラクターを配置する。",
+                "背景を新しく作り直さない。背景を無地、グレー、ぼかし、スタジオ風、ポートレート背景に変えない。",
                 "衣装画像からはキャラクターの顔、髪型、体型、画風、現在選択中の衣装だけを維持する。",
-                "まだ最終演出ではないため、自然な立ち姿でよい。背景とキャラクターが同じ空間にいるようにする。",
+                "キャラクターは棒立ち禁止。場所に反応している魅力的な会話シーンのポーズにする。",
+                "振り向く、歩き出す、手すりや展示物に軽く触れる、視線を向ける、案内する、少し身を乗り出すなど、施設に合った自然な動きを入れる。",
+                "全身カタログ構図、正面直立、無表情、証明写真風は禁止。",
+                "背景とキャラクターが同じ空間にいるように、床、奥行き、照明、影、反射を合わせる。",
                 "画像内に文字、ロゴ、字幕、吹き出し、UI、看板の可読文字を入れない。",
                 f"移動先施設: {location.name or ''}",
                 f"施設説明: {location.description or ''}",
@@ -564,16 +591,59 @@ class LiveChatConversationService:
         prompt = prompt_support.apply_visual_style(prompt, context)
         return prompt_support.forbid_text_in_image(prompt)
 
+    def _build_location_character_scene_prompt(self, context: dict, location, selected_costume_image: dict | None) -> str:
+        character_names = "、".join(character.get("name") or "" for character in context.get("characters") or [])
+        costume_state = (selected_costume_image or {}).get("state_json") or {}
+        costume_notes = "\n".join(
+            str(part or "").strip()
+            for part in [
+                costume_state.get("instruction") if isinstance(costume_state, dict) else "",
+                costume_state.get("rewritten_instruction") if isinstance(costume_state, dict) else "",
+                (selected_costume_image or {}).get("prompt_text"),
+            ]
+            if str(part or "").strip()
+        )
+        prompt = "\n".join(
+            [
+                "クローゼットで選択されているキャラクター画像をベースに、ライブチャットの場所移動イベントCGを作る。",
+                "参照画像はキャラクター資料。参照画像からは顔、髪型、体型、画風、現在選択中の衣装だけを維持する。",
+                "参照画像の背景、床、壁、照明、余白、スタジオ感、グレー背景、単色背景は完全に破棄する。",
+                "背景は参照画像ではなく、下記の移動先施設情報だけから新しく作る。",
+                "キャラクターがその施設に到着し、会話を始める直前のノベルゲーム用ワンシーンにする。",
+                "キャラクターは棒立ち禁止。施設に反応した自然で魅力的なポーズにする。",
+                "歩き出す、振り向く、案内する、景色を見上げる、展示物や手すりに軽く触れるなど、場所に合った動きを入れる。",
+                "全身カタログ構図、正面直立、無表情、証明写真風は禁止。",
+                "背景とキャラクターが同じ空間にいるように、床、奥行き、照明、影、反射を合わせる。",
+                "画像内に文字、ロゴ、字幕、吹き出し、UI、看板の可読文字を入れない。",
+                f"移動先施設: {location.name or ''}",
+                f"地域: {location.region or ''}",
+                f"施設タイプ: {location.location_type or ''}",
+                f"施設説明: {location.description or ''}",
+                f"施設画像方針: {location.image_prompt or ''}",
+                f"登場キャラクター: {character_names}",
+                f"選択中衣装メモ: {costume_notes[:1600]}",
+            ]
+        )
+        prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
+        prompt = prompt_support.apply_visual_style(prompt, context)
+        return prompt_support.forbid_text_in_image(prompt)
+
     def _build_location_scene_final_prompt(self, context: dict, location) -> str:
         character_names = "、".join(character.get("name") or "" for character in context.get("characters") or [])
         prompt = "\n".join(
             [
                 "提供された中間画像をベースに、ライブチャットのノベルゲーム用ワンシーン画像へ仕上げる。",
                 "同じキャラクター、同じ衣装、同じ移動先背景を維持する。",
+                "ただし中間画像の立ち姿やポーズは固定しない。参照画像は人物・衣装・背景の資料であり、ポーズ資料ではない。",
                 "変更するのは主にポーズ、表情、カメラ角度、構図、ライティング、空気感。",
                 "キャラクターが移動先で会話を始める直前の、魅力的なイベントCGにする。",
+                "キャラクターは棒立ち禁止。場所に反応している演技を必ず入れる。",
+                "例: 半身で振り返る、歩きながらこちらを見る、片手で案内する、展示物や手すりに軽く触れる、景色を見上げる、少し身を乗り出す、椅子やカウンターに自然にもたれる。",
+                "全身カタログ構図、正面直立、左右対称の棒立ち、無表情、証明写真風は禁止。",
+                "構図はノベルゲームの会話イベントCGらしく、バストアップから膝上程度でもよい。必ずしも全身を入れない。",
                 "背景をグレーや単色に戻さない。必ず移動先施設の背景を残す。",
                 "衣装カタログ画像ではなく、ノベルゲームの会話シーンとして自然に見せる。",
+                "背景とキャラクターが同じ空間にいるように、床、奥行き、照明、影、反射を合わせる。",
                 "画像内に文字、ロゴ、字幕、吹き出し、UI、看板の可読文字を入れない。",
                 f"移動先施設: {location.name or ''}",
                 f"施設説明: {location.description or ''}",
@@ -583,6 +653,41 @@ class LiveChatConversationService:
         prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
         prompt = prompt_support.apply_visual_style(prompt, context)
         return prompt_support.forbid_text_in_image(prompt)
+
+    def _refine_location_scene_pose(
+        self,
+        session_id: int,
+        context: dict,
+        location,
+        generated_image: dict | None,
+        payload: dict,
+        *,
+        image_type: str,
+    ):
+        if not generated_image:
+            return generated_image
+        asset_id = generated_image.get("asset_id") or ((generated_image.get("asset") or {}).get("id"))
+        if not asset_id:
+            return generated_image
+        prompt = self._build_location_scene_final_prompt(context, location)
+        try:
+            return self._media_service.generate_image(
+                session_id,
+                {
+                    "image_type": image_type,
+                    "prompt_text": prompt,
+                    "use_existing_prompt": True,
+                    "reference_asset_ids": [asset_id],
+                    "skip_character_references": True,
+                    "skip_outfit_prompt": True,
+                    "input_fidelity": "low",
+                    "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
+                    "quality": payload.get("quality") or "low",
+                },
+            )
+        except Exception:
+            current_app.logger.exception("location scene pose refinement failed")
+            return generated_image
 
     def move_to_location(self, session_id: int, location_id: int, payload: dict | None = None):
         payload = dict(payload or {})
@@ -597,6 +702,11 @@ class LiveChatConversationService:
         state_row = self._session_state_service.get_state(session_id)
         state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
         location_payload = self._serialize_location_for_state(location)
+        location_services = [
+            self._serialize_location_service_for_state(item)
+            for item in self._world_location_service_repository.list_by_location(location.id)
+        ]
+        location_payload["services"] = location_services
         focus_summary = f"{location.name}へ移動した。{(location.description or '')[:180]}"
         prompt = self._build_location_background_prompt_v2(context, location)
         scene_update = {
@@ -611,6 +721,7 @@ class LiveChatConversationService:
             "selected_location": location_payload,
         }
         state_json["current_location"] = location_payload
+        state_json.pop("current_location_service", None)
         state_json["location"] = location.name
         state_json["background"] = location.description or location.image_prompt or location.name
         state_json["scene_progression"] = scene_update
@@ -642,46 +753,16 @@ class LiveChatConversationService:
         generated_image = None
         image_generation_error = None
         try:
-            location_background_image = self._media_service.generate_image(
-                session_id,
-                {
-                    "image_type": "location_move_background",
-                    "prompt_text": prompt,
-                    "use_existing_prompt": True,
-                    "skip_character_references": True,
-                    "skip_outfit_prompt": True,
-                    "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
-                    "quality": payload.get("quality") or "low",
-                },
-            )
             selected_costume_image = self._media_service.selected_costume_image(session_id)
-            if selected_costume_image and location_background_image:
-                costume_scene_prompt = self._build_location_costume_scene_prompt(context, location, selected_costume_image)
-                costume_scene_image = self._media_service.generate_image(
-                    session_id,
-                    {
-                        "image_type": "location_costume_scene",
-                        "prompt_text": costume_scene_prompt,
-                        "use_existing_prompt": True,
-                        "reference_asset_ids": [
-                            location_background_image.get("asset_id"),
-                            selected_costume_image.get("asset_id"),
-                        ],
-                        "skip_character_references": True,
-                        "skip_outfit_prompt": True,
-                        "input_fidelity": "high",
-                        "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
-                        "quality": payload.get("quality") or "low",
-                    },
-                )
-                final_prompt = self._build_location_scene_final_prompt(context, location)
+            if selected_costume_image:
+                character_scene_prompt = self._build_location_character_scene_prompt(context, location, selected_costume_image)
                 generated_image = self._media_service.generate_image(
                     session_id,
                     {
                         "image_type": "location_move",
-                        "prompt_text": final_prompt,
+                        "prompt_text": character_scene_prompt,
                         "use_existing_prompt": True,
-                        "reference_asset_ids": [costume_scene_image.get("asset_id")],
+                        "reference_asset_ids": [selected_costume_image.get("asset_id")],
                         "skip_character_references": True,
                         "skip_outfit_prompt": True,
                         "input_fidelity": "low",
@@ -690,7 +771,26 @@ class LiveChatConversationService:
                     },
                 )
             else:
-                generated_image = location_background_image
+                generated_image = self._media_service.generate_image(
+                    session_id,
+                    {
+                        "image_type": "location_move",
+                        "prompt_text": prompt,
+                        "use_existing_prompt": True,
+                        "skip_character_references": False,
+                        "skip_outfit_prompt": False,
+                        "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
+                        "quality": payload.get("quality") or "low",
+                    },
+                )
+            generated_image = self._refine_location_scene_pose(
+                session_id,
+                context,
+                location,
+                generated_image,
+                payload,
+                image_type="location_move_event_cg",
+            )
         except Exception as exc:
             current_app.logger.exception("location move image generation failed")
             image_generation_error = str(exc)
@@ -731,6 +831,180 @@ class LiveChatConversationService:
         updated_context = self._context_provider(session_id)
         return {
             "location": location_payload,
+            "location_services": location_services,
+            "generated_image": generated_image,
+            "image_generation_error": image_generation_error,
+            "messages": [self._serialize_message(user_message), self._serialize_message(assistant_message)],
+            "context": updated_context,
+        }
+
+    def select_location_service(self, session_id: int, service_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return None
+        service = self._world_location_service_repository.get(service_id)
+        if not service or service.project_id != session.project_id or service.status != "published":
+            raise ValueError("service_id is invalid")
+        location = self._world_location_repository.get(service.location_id)
+        if not location or location.project_id != session.project_id:
+            raise ValueError("location_id is invalid")
+
+        context = self._context_provider(session_id)
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        location_payload = self._serialize_location_for_state(location)
+        service_payload = self._serialize_location_service_for_state(service)
+        location_payload["services"] = [
+            self._serialize_location_service_for_state(item)
+            for item in self._world_location_service_repository.list_by_location(location.id)
+        ]
+        prompt_location = SimpleNamespace(
+            id=location.id,
+            name=f"{location.name} / {service.name}",
+            region=location.region,
+            location_type=service.service_type or location.location_type,
+            description="\n".join(
+                item
+                for item in [
+                    location.description,
+                    f"施設内サービス: {service.name}",
+                    f"サービス概要: {service.summary}",
+                    f"会話フック: {service.chat_hook}",
+                ]
+                if item
+            ),
+            image_prompt=service.visual_prompt or location.image_prompt,
+            owner_character_id=location.owner_character_id,
+        )
+        focus_summary = f"{location.name}の「{service.name}」を選んだ。{(service.summary or '')[:180]}"
+        prompt = self._build_location_background_prompt_v2(context, prompt_location)
+        scene_update = {
+            "scene_phase": "location_service",
+            "location": location.name,
+            "location_service": service.name,
+            "background": service.summary or service.visual_prompt or location.description or location.name,
+            "focus_summary": focus_summary,
+            "next_topic": f"{service.name}で、そのサービスならではの体験・会話・小さな発見を出す",
+            "transition_occurred": True,
+            "character_reaction_hint": "選択された施設内サービスを理解し、案内・感想・誘い・事件の火種を自然に話す",
+            "image_focus": prompt,
+            "selected_location": location_payload,
+            "selected_location_service": service_payload,
+        }
+        state_json["current_location"] = location_payload
+        state_json["current_location_service"] = service_payload
+        state_json["location"] = location.name
+        state_json["background"] = service.summary or service.visual_prompt or location.description or location.name
+        state_json["scene_progression"] = scene_update
+        state_json["directed_scene"] = scene_update
+        state_json["visual_prompt_text"] = prompt
+        self._session_state_service.upsert_state(
+            session_id,
+            {
+                "state_json": state_json,
+                "narration_note": focus_summary,
+                "visual_prompt_text": prompt,
+            },
+        )
+
+        user_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "narration",
+                "speaker_name": "施設内サービス",
+                "message_text": f"{location.name}の「{service.name}」を選んだ。",
+                "message_role": "location_service",
+                "state_snapshot_json": {
+                    "location_move": location_payload,
+                    "location_service": service_payload,
+                    "directed_scene": scene_update,
+                },
+            },
+        )
+
+        generated_image = None
+        image_generation_error = None
+        try:
+            selected_costume_image = self._media_service.selected_costume_image(session_id)
+            if selected_costume_image:
+                character_scene_prompt = self._build_location_character_scene_prompt(context, prompt_location, selected_costume_image)
+                generated_image = self._media_service.generate_image(
+                    session_id,
+                    {
+                        "image_type": "location_service_scene",
+                        "prompt_text": character_scene_prompt,
+                        "use_existing_prompt": True,
+                        "reference_asset_ids": [selected_costume_image.get("asset_id")],
+                        "skip_character_references": True,
+                        "skip_outfit_prompt": True,
+                        "input_fidelity": "low",
+                        "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
+                        "quality": payload.get("quality") or "low",
+                    },
+                )
+            else:
+                generated_image = self._media_service.generate_image(
+                    session_id,
+                    {
+                        "image_type": "location_service_scene",
+                        "prompt_text": prompt,
+                        "use_existing_prompt": True,
+                        "skip_character_references": False,
+                        "skip_outfit_prompt": False,
+                        "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
+                        "quality": payload.get("quality") or "low",
+                    },
+                )
+            generated_image = self._refine_location_scene_pose(
+                session_id,
+                context,
+                prompt_location,
+                generated_image,
+                payload,
+                image_type="location_service_event_cg",
+            )
+        except Exception as exc:
+            current_app.logger.exception("location service image generation failed")
+            image_generation_error = str(exc)
+
+        updated_context = self._context_provider(session_id)
+        reply = text_support.generate_narration_reaction(
+            self._text_ai_client,
+            updated_context,
+            (
+                f"{location.name}の施設内サービス「{service.name}」を選んだ。"
+                f"概要: {service.summary or ''}\n"
+                f"会話フック: {service.chat_hook or ''}\n"
+                "キャラクターはこのサービスを理解して、その場に来た感じで話す。"
+            ),
+            scene_update,
+        )
+        assistant_message = self._chat_message_service.create_message(
+            session_id,
+            {
+                "sender_type": "character",
+                "speaker_name": reply["speaker_name"],
+                "message_text": reply["message_text"],
+                "message_role": "assistant",
+                "state_snapshot_json": {
+                    "location_move": location_payload,
+                    "location_service": service_payload,
+                    "directed_scene": scene_update,
+                },
+            },
+        )
+        updated_context = self._context_provider(session_id)
+        self.update_line_visual_note(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        self.update_session_memory(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        self.update_conversation_evaluation(session_id, updated_context)
+        updated_context = self._context_provider(session_id)
+        self._update_character_user_memory(session, updated_context)
+        return {
+            "location": location_payload,
+            "location_service": service_payload,
             "generated_image": generated_image,
             "image_generation_error": image_generation_error,
             "messages": [self._serialize_message(user_message), self._serialize_message(assistant_message)],
@@ -875,32 +1149,158 @@ class LiveChatConversationService:
         prompt = prompt_support.apply_visual_style(prompt, context)
         return prompt_support.forbid_text_in_image(prompt)
 
-    def _build_photo_mode_prompt(self, context: dict, instruction: str, pose_style: str) -> str:
+    def _build_photo_mode_prompt(
+        self,
+        context: dict,
+        instruction: str,
+        pose_style: str,
+        photo_execution: dict | None = None,
+    ) -> str:
+        photo_execution = photo_execution or {}
         characters = context.get("characters") or []
         character = characters[0] if characters else {}
         state_json = (context.get("state") or {}).get("state_json") or {}
         current_location = state_json.get("current_location") or {}
+        scene_progression = state_json.get("scene_progression") or {}
         displayed_observation = state_json.get("displayed_image_observation") or {}
+        background_observation = {}
+        if isinstance(displayed_observation, dict):
+            for key in ("location", "background", "mood", "time_of_day", "notable_objects", "short_summary"):
+                if displayed_observation.get(key):
+                    background_observation[key] = displayed_observation.get(key)
+        strict_pose_instruction = (
+            photo_execution.get("pose_instruction")
+            or self._strict_photo_pose_instruction(instruction, pose_style)
+        )
+        recent_lines = self._photo_recent_lines(context)
+        director_notes = self._photo_director_notes(context, instruction, strict_pose_instruction, background_observation)
         prompt = "\n".join(
             [
+                f"ユーザーが写真撮影モードで「{instruction}」と頼んだ。",
+                f"場面指示: {photo_execution.get('scene_instruction') or f'現在の場面と衣装を保ったまま、ユーザー指示「{instruction}」の撮影カットを作る。'}",
+                f"画像ヒント: {photo_execution.get('image_prompt_hint') or ''}",
                 "撮影モードのライブチャット表示用イベントCG。",
-                "現在表示されている画像を背景・場所・光・雰囲気の最優先リファレンスとして使う。",
+                "最重要: ユーザーの撮影指示を、キャラクターのポーズ・動作・構図として必ず反映する。",
+                f"最重要ポーズ指示: {strict_pose_instruction}",
+                "目的: ただ人物を置くのではなく、会話のシチュエーションに合った魅力的な一枚の写真にする。",
+                "ノベルゲームのスチル写真として、直前の会話の感情、距離感、場所の意味が一目で伝わるようにする。",
+                "背景参照画像は、場所・光・雰囲気だけの資料として使う。背景参照画像内の人物ポーズは絶対に真似しない。",
+                "過去画像の観察メモ、過去のvisual_state、過去のfocus_summary、過去のimage_promptに含まれるポーズは無視する。",
                 "衣装は現在選択中の衣装をそのまま維持する。衣装デザイン、色、素材、装飾を変更しない。",
                 "変更するのは主にキャラクターのポーズ、表情、立ち位置、カメラ距離、構図のみ。",
-                "背景を別の場所に変えない。現在の表示画像と同じ場所で撮影し直したように見せる。",
+                "背景を別の場所に変えない。現在の場所と同じ場面で撮影し直したように見せる。",
+                "写真演出: シネマティックなライティング、浅い被写界深度、自然な奥行き、瞳のキャッチライト、髪と衣装の縁に入るリムライトを入れる。",
+                "構図演出: 平凡な正面記録写真にしない。前景・背景・視線・余白を使い、会話相手がその場にいると感じられる一人称視点の構図にする。",
+                "表情演出: キャラクターの性格と直前の会話に合わせる。セラスなら、余裕、からかい、上品な色気、少しだけ本音が見える視線を入れる。",
+                "禁止: 証明写真、カタログ写真、棒立ち、無表情、背景だけが豪華で人物が退屈な構図。",
                 "画像内に文字、ロゴ、字幕、吹き出し、UI、看板の可読文字を入れない。",
                 f"キャラクター: {character.get('name') or ''}",
                 f"キャラクター外見: {character.get('appearance_summary') or ''}",
                 f"キャラクター性格: {character.get('personality') or ''}",
                 f"現在地: {current_location.get('name') or state_json.get('location') or ''}",
-                f"現在表示画像の観察メモ: {displayed_observation}",
+                f"現在場面: {photo_execution.get('scene_instruction') or scene_progression.get('focus_summary') or state_json.get('focus_summary') or ''}",
+                f"現在背景: {photo_execution.get('background') or state_json.get('background') or scene_progression.get('background') or ''}",
+                f"背景だけに使う観察メモ: {background_observation}",
+                "直前の会話:",
+                *recent_lines,
+                "撮影監督メモ:",
+                *director_notes,
                 f"ユーザーの撮影指示: {instruction}",
-                f"ポーズ・構図方針: {pose_style or 'ユーザー指示をもとに、キャラクターらしい魅力的なポーズと構図にする'}",
+                f"撮影後リアクション方針: {photo_execution.get('reply_hint') or ''}",
+                f"ポーズ・構図方針: {strict_pose_instruction}",
+                "再確認: キャラクターのポーズは必ず今回のユーザー撮影指示に従う。背景参照画像やDB上の過去ポーズを優先しない。",
             ]
         )
         prompt = prompt_support.normalize_first_person_visual_prompt(prompt)
         prompt = prompt_support.apply_visual_style(prompt, context)
         return prompt_support.forbid_text_in_image(prompt)
+
+    def _photo_recent_lines(self, context: dict, limit: int = 6) -> list[str]:
+        lines = []
+        for message in (context.get("messages") or [])[-limit:]:
+            speaker = message.get("speaker_name") or message.get("sender_type") or ""
+            text = str(message.get("message_text") or "").strip()
+            if not text:
+                continue
+            lines.append(f"{speaker}: {text[:180]}")
+        return lines or ["直前会話なし。現在地と撮影指示から自然な写真にする。"]
+
+    def _photo_director_notes(
+        self,
+        context: dict,
+        instruction: str,
+        strict_pose_instruction: str,
+        background_observation: dict,
+    ) -> list[str]:
+        state_json = (context.get("state") or {}).get("state_json") or {}
+        location = (
+            background_observation.get("location")
+            or ((state_json.get("current_location") or {}).get("name") if isinstance(state_json.get("current_location"), dict) else "")
+            or state_json.get("location")
+            or "現在の場所"
+        )
+        background = background_observation.get("background") or state_json.get("background") or ""
+        mood = background_observation.get("mood") or state_json.get("mood") or ""
+        time_of_day = background_observation.get("time_of_day") or state_json.get("time_of_day") or ""
+        notes = [
+            f"場所の使い方: {location} の特徴を背景として活かす。{background}",
+            f"空気感: {mood or '会話の余韻に合う自然な雰囲気'}。{time_of_day or ''}",
+            "カメラ: 会話相手が撮っている写真らしく、少し親密な距離。広すぎる記録写真ではなく、表情と姿勢が読める距離。",
+            "レンズ: 50mmから85mm相当の自然な圧縮感。背景は分かるが、主役の顔と目線に視線が集まる。",
+            "光: その場所の光を顔、髪、衣装に反射させる。瞳に小さなキャッチライトを入れ、肌と髪を綺麗に見せる。",
+            f"演技: {strict_pose_instruction}",
+        ]
+        if any(word in instruction for word in ("向かい", "座って", "座る", "席")):
+            notes.extend(
+                [
+                    "座席構図: キャラクターは向かい側の席に座る。プレイヤーは描かないが、向かい席から撮っている視点にする。",
+                    "前景にテーブル、座席の縁、窓枠、手すりなどを少し入れ、二人で向かい合っている距離感を出す。",
+                ]
+            )
+        if any(word in instruction for word in ("バストショット", "上半身", "胸上", "顔")):
+            notes.append("構図: バストショット。顔、目、肩、髪、衣装の上半身ディテールを美しく見せる。")
+        if any(word in instruction for word in ("膝", "ひざ")):
+            notes.append("構図: 膝をついた姿勢が分かるように、膝から上または全身寄りで自然にフレーミングする。")
+        return [item for item in notes if str(item or "").strip()]
+
+    def _strict_photo_pose_instruction(self, instruction: str, pose_style: str = "") -> str:
+        text = f"{instruction or ''} {pose_style or ''}".strip()
+        lowered = text.lower()
+        if any(word in text for word in ("向かい", "そっちに座", "座って", "座る")):
+            return (
+                "キャラクターは向かい側の席に自然に座る。プレイヤーは画像に描かない。"
+                "カメラはプレイヤーが向かいの席から見ている一人称視点。"
+                "上品に腰掛け、少しこちらへ視線を向ける。手は膝、座席、手すり、テーブルのいずれかに自然に置く。"
+            )
+        if any(word in text for word in ("気を付け", "気をつけ", "きをつけ")):
+            return (
+                "気を付けの直立姿勢。両足を揃える。背筋をまっすぐ伸ばす。"
+                "両腕を体の横に自然にまっすぐ下ろす。手は握りすぎず体側。"
+                "片脚を上げない、腕を広げない、手を前に出さない、戦闘ポーズにしない。"
+            )
+        if any(word in text for word in ("膝をつ", "ひざをつ", "膝つき", "跪")):
+            return (
+                "キャラクターが片膝または両膝をついたポーズ。姿勢は上品で魅力的。"
+                "顔と視線はカメラへ自然に向ける。手は膝、胸元、床、衣装の裾のいずれかに自然に置く。"
+                "倒れた姿勢や不自然な関節にしない。"
+            )
+        if any(word in text for word in ("バストショット", "上半身", "胸上")):
+            return (
+                "バストショット。顔から胸元・肩までを中心にした上半身構図。"
+                "目線、表情、髪、衣装上部のディテールを魅力的に見せる。全身を無理に入れない。"
+            )
+        if "波動拳" in text or "hadouken" in lowered or "hadoken" in lowered:
+            return (
+                "ストリートファイター風の波動拳ポーズ。片足を前に踏み込み、腰を落とし、"
+                "両手を胸元から前方へ突き出して青白いエネルギー球を放つ構え。"
+                "両手は前方に揃える。腕を上に振り上げない、片脚を高く上げない、ただ立つだけにしない。"
+            )
+        if "ラプラスらしい" in text:
+            return (
+                "ラプラスランドらしい幻想的で少し皮肉のある遊園地感を受け止め、"
+                "キャラクターが余裕のある微笑みでこちらを振り返る。場所の演出を楽しむ自然なポーズ。"
+            )
+        return pose_style or f"ユーザー指示「{instruction}」をキャラクターのポーズ・動作・構図として最優先で具体的に反映する。"
 
     def _generate_photo_finish_reply(
         self,
@@ -1093,15 +1493,23 @@ class LiveChatConversationService:
         state_row = self._session_state_service.get_state(session_id)
         state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
         if mode in {"photo", "photo_only", "shoot", "shoot_only"}:
+            photo_execution = text_support.generate_photo_execution(
+                self._text_ai_client,
+                context,
+                instruction,
+                pose_style,
+            )
             current_location = state_json.get("current_location") or {}
             scene_update = {
                 "scene_phase": "photo_mode_shoot",
-                "location": current_location.get("name") or state_json.get("location") or "",
-                "background": state_json.get("background") or current_location.get("description") or "",
-                "focus_summary": f"撮影モードで、現在のシーンを背景にポーズと構図を撮り直す。撮影指示: {instruction[:180]}",
-                "next_topic": "現在の場面と衣装を保ったまま、撮影カットの感想を話す",
+                "location": photo_execution.get("location") or current_location.get("name") or state_json.get("location") or "",
+                "background": photo_execution.get("background") or state_json.get("background") or current_location.get("description") or "",
+                "focus_summary": photo_execution.get("scene_instruction") or f"撮影モードで、現在のシーンを背景にポーズと構図を撮り直す。撮影指示: {instruction[:180]}",
+                "next_topic": photo_execution.get("reply_hint") or "現在の場面と衣装を保ったまま、撮影カットの感想を話す",
                 "transition_occurred": False,
-                "character_reaction_hint": "場所や衣装は変えず、今いるシーンで撮影し直す流れにする",
+                "character_reaction_hint": photo_execution.get("reply_hint") or "場所や衣装は変えず、今いるシーンで撮影し直す流れにする",
+                "image_prompt_hint": photo_execution.get("image_prompt_hint") or "",
+                "photo_execution": photo_execution,
             }
             state_json["scene_progression"] = scene_update
             state_json["directed_scene"] = scene_update
@@ -1142,14 +1550,18 @@ class LiveChatConversationService:
                 self._context_provider(session_id),
                 instruction,
                 pose_style,
+                photo_execution,
             )
             state_row = self._session_state_service.get_state(session_id)
             state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
             state_json["visual_prompt_text"] = photo_prompt
+            state_json["pose"] = photo_execution.get("pose_instruction") or self._strict_photo_pose_instruction(instruction, pose_style)
+            state_json["focus_summary"] = photo_execution.get("scene_instruction") or f"撮影モードで、ユーザー指示「{instruction[:180]}」のポーズを撮る。"
             state_json["photo_mode_shoot"] = {
                 "instruction": instruction,
                 "pose_style": pose_style,
                 "use_current_scene_as_background": True,
+                "photo_execution": photo_execution,
             }
             self._session_state_service.upsert_state(
                 session_id,
@@ -1165,8 +1577,13 @@ class LiveChatConversationService:
                     "prompt_text": photo_prompt,
                     "use_existing_prompt": True,
                     "use_selected_scene_as_reference": True,
+                    "selected_scene_reference_exclude_types": [
+                        "photo_mode_shoot",
+                        "dress_up_photo_shoot",
+                    ],
                     "size": payload.get("photo_size") or payload.get("size") or "1536x1024",
                     "quality": payload.get("photo_quality") or payload.get("quality") or "low",
+                    "input_fidelity": "low",
                     "model": payload.get("model") or payload.get("image_ai_model"),
                     "provider": payload.get("provider") or payload.get("image_ai_provider"),
                 },
@@ -1255,18 +1672,28 @@ class LiveChatConversationService:
         )
 
         if mode in {"photo", "photo_only", "shoot", "shoot_only"}:
-            photo_prompt = self._build_photo_mode_prompt(
+            photo_execution = text_support.generate_photo_execution(
+                self._text_ai_client,
                 self._context_provider(session_id),
                 instruction,
                 pose_style,
             )
+            photo_prompt = self._build_photo_mode_prompt(
+                self._context_provider(session_id),
+                instruction,
+                pose_style,
+                photo_execution,
+            )
             state_row = self._session_state_service.get_state(session_id)
             state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
             state_json["visual_prompt_text"] = photo_prompt
+            state_json["pose"] = photo_execution.get("pose_instruction") or self._strict_photo_pose_instruction(instruction, pose_style)
+            state_json["focus_summary"] = photo_execution.get("scene_instruction") or f"撮影モードで、ユーザー指示「{instruction[:180]}」のポーズを撮る。"
             state_json["photo_mode_shoot"] = {
                 "instruction": instruction,
                 "pose_style": pose_style,
                 "use_current_scene_as_background": True,
+                "photo_execution": photo_execution,
             }
             self._session_state_service.upsert_state(
                 session_id,
@@ -1282,8 +1709,13 @@ class LiveChatConversationService:
                     "prompt_text": photo_prompt,
                     "use_existing_prompt": True,
                     "use_selected_scene_as_reference": True,
+                    "selected_scene_reference_exclude_types": [
+                        "photo_mode_shoot",
+                        "dress_up_photo_shoot",
+                    ],
                     "size": payload.get("photo_size") or payload.get("size") or "1536x1024",
                     "quality": payload.get("photo_quality") or payload.get("quality") or "low",
+                    "input_fidelity": "low",
                     "model": payload.get("model") or payload.get("image_ai_model"),
                     "provider": payload.get("provider") or payload.get("image_ai_provider"),
                 },
@@ -1704,16 +2136,24 @@ class LiveChatConversationService:
                 "state_snapshot_json": {"scene_choice": directed_choice, "choice_execution": execution},
             },
         )
-        generated_image = self._media_service.generate_image(
-            session_id,
-            {
-                "image_type": "directed_scene",
-                "prompt_text": prompt,
-                "use_existing_prompt": True,
-                "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1024x1024"),
-                "quality": payload.get("quality") or "low",
-            },
-        )
+        selected_costume_image = self._media_service.selected_costume_image(session_id)
+        image_payload = {
+            "image_type": "directed_scene",
+            "prompt_text": prompt,
+            "use_existing_prompt": True,
+            "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1024x1024"),
+            "quality": payload.get("quality") or "low",
+        }
+        if selected_costume_image:
+            image_payload.update(
+                {
+                    "reference_asset_ids": [selected_costume_image.get("asset_id")],
+                    "skip_character_references": True,
+                    "skip_outfit_prompt": True,
+                    "input_fidelity": "low",
+                }
+            )
+        generated_image = self._media_service.generate_image(session_id, image_payload)
         updated_context = self._context_provider(session_id)
         reply = text_support.generate_narration_reaction(
             self._text_ai_client,

@@ -72,6 +72,13 @@
     });
   }
 
+  async function selectLocationService(sessionId, serviceId, body = {}) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/location-services/${serviceId}/select`, {
+      method: "POST",
+      body,
+    });
+  }
+
   async function generateLccdPhotoShoot(sessionId, body = {}) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/lccd/photo-shoot`, {
       method: "POST",
@@ -217,6 +224,7 @@
     deleteCostume,
     executeSceneChoice,
     moveToLocation,
+    selectLocationService,
     generateLccdPhotoShoot,
     generateLccdCostume,
     generatePhotoModeShoot,

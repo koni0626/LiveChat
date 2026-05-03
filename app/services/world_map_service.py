@@ -17,6 +17,7 @@ from ..models.story_session import StorySession
 from ..repositories.asset_repository import AssetRepository
 from ..repositories.character_repository import CharacterRepository
 from ..repositories.world_location_repository import WorldLocationRepository
+from ..repositories.world_location_service_repository import WorldLocationServiceRepository
 from ..repositories.world_map_repository import WorldMapRepository
 from ..utils import json_util
 from .asset_service import AssetService
@@ -28,6 +29,7 @@ class WorldMapService:
     def __init__(
         self,
         location_repository: WorldLocationRepository | None = None,
+        location_service_repository: WorldLocationServiceRepository | None = None,
         map_repository: WorldMapRepository | None = None,
         asset_service: AssetService | None = None,
         asset_repository: AssetRepository | None = None,
@@ -38,6 +40,7 @@ class WorldMapService:
         text_ai_client: TextAIClient | None = None,
     ):
         self._locations = location_repository or WorldLocationRepository()
+        self._location_services = location_service_repository or WorldLocationServiceRepository()
         self._maps = map_repository or WorldMapRepository()
         self._asset_service = asset_service or AssetService()
         self._asset_repository = asset_repository or AssetRepository()
@@ -95,15 +98,21 @@ class WorldMapService:
         normalized = self._normalize_location_payload(payload)
         if not normalized.get("name"):
             raise ValueError("施設名は必須です。")
-        return self._locations.create(project_id, normalized)
+        location = self._locations.create(project_id, normalized)
+        self.sync_location_services(location)
+        return location
 
     def update_location(self, location_id: int, payload: dict):
         normalized = self._normalize_location_payload(payload, partial=True)
         if "name" in normalized and not normalized.get("name"):
             raise ValueError("施設名は必須です。")
-        return self._locations.update(location_id, normalized)
+        location = self._locations.update(location_id, normalized)
+        if location:
+            self.sync_location_services(location)
+        return location
 
     def delete_location(self, location_id: int):
+        self._location_services.delete_by_location(location_id)
         return self._locations.delete(location_id)
 
     def upload_location_image(self, location_id: int, upload_file):
@@ -173,6 +182,77 @@ class WorldMapService:
             },
         )
         return self._locations.update(location.id, {"image_asset_id": asset.id})
+
+    def sync_location_services(self, location):
+        if not location:
+            return []
+        generated = self._generate_location_service_candidates(location)
+        if not generated:
+            self._location_services.archive_missing(location.id, set())
+            return []
+        existing = {
+            self._normalize_service_name(item.name): item
+            for item in self._location_services.list_by_location(location.id, include_archived=True)
+        }
+        kept_ids: set[int] = set()
+        synced = []
+        for index, item in enumerate(generated):
+            name = self._normalize_service_name(item.get("name"))
+            if not name:
+                continue
+            payload = {
+                "name": name[:255],
+                "service_type": str(item.get("service_type") or item.get("type") or "施設内サービス").strip()[:100],
+                "summary": self._shorten(str(item.get("summary") or "").strip(), 1800),
+                "chat_hook": self._shorten(str(item.get("chat_hook") or "").strip(), 1200),
+                "visual_prompt": self._shorten(str(item.get("visual_prompt") or "").strip(), 1600),
+                "status": "published",
+                "sort_order": index,
+            }
+            existing_row = existing.get(name)
+            if existing_row:
+                row = self._location_services.update(existing_row.id, payload)
+            else:
+                row = self._location_services.create(location.project_id, location.id, payload)
+            if row:
+                kept_ids.add(row.id)
+                synced.append(row)
+        self._location_services.archive_missing(location.id, kept_ids)
+        return synced
+
+    def _generate_location_service_candidates(self, location) -> list[dict]:
+        description = str(getattr(location, "description", "") or "").strip()
+        if len(description) < 80:
+            return []
+        prompt = (
+            "施設説明から、チャット中に選択できる施設内サービス・店舗・アトラクション・区画・イベントを抽出してください。\n"
+            "大きな施設そのものではなく、ユーザーがその施設内で次に選びたくなる具体的な行き先や体験に分解します。\n\n"
+            "重要ルール:\n"
+            "- 架空設定を勝手に増やしすぎず、説明文に根拠があるものを優先する。\n"
+            "- 名前は短く、ボタンに出して分かりやすいものにする。\n"
+            "- summary はキャラクターが理解するための概要。\n"
+            "- chat_hook は会話が盛り上がる使い方、感情、事件の火種を書く。\n"
+            "- visual_prompt は画像生成に使える視覚要素を日本語で具体的に書く。文字や看板の可読文字は要求しない。\n"
+            "- 最大8件。なければ空配列。\n"
+            "- JSONのみ返す。形式: {\"services\":[{\"name\":\"...\",\"service_type\":\"...\",\"summary\":\"...\",\"chat_hook\":\"...\",\"visual_prompt\":\"...\"}]}\n\n"
+            f"施設名: {getattr(location, 'name', '') or ''}\n"
+            f"施設種別: {getattr(location, 'location_type', '') or ''}\n"
+            f"地域: {getattr(location, 'region', '') or ''}\n"
+            f"施設説明:\n{description[:6000]}"
+        )
+        try:
+            result = self._text_ai_client.extract_state_json(prompt)
+            parsed = result.get("parsed_json") or {}
+        except Exception:
+            current_app.logger.exception("location service extraction failed")
+            return []
+        services = parsed.get("services") if isinstance(parsed, dict) else None
+        if not isinstance(services, list):
+            return []
+        return [item for item in services if isinstance(item, dict)][:8]
+
+    def _normalize_service_name(self, value) -> str:
+        return re.sub(r"\s+", " ", str(value or "").strip())
 
     def upload_map_image(self, project_id: int, upload_file, user_id: int | None = None):
         asset = self._asset_service.create_asset(
@@ -289,6 +369,20 @@ class WorldMapService:
             candidate.pop("_evidence", None)
         return sorted(prepared, key=lambda item: len(item["sources"]), reverse=True)[: max(1, min(int(limit or 24), 60))]
 
+    def generate_location_draft(self, project_id: int, payload: dict | None = None) -> dict:
+        payload = dict(payload or {})
+        current_location = payload.get("current_location") if isinstance(payload.get("current_location"), dict) else payload
+        prompt = self._build_location_draft_prompt(project_id, current_location)
+        result = self._text_ai_client.generate_text(
+            prompt,
+            temperature=0.75,
+            response_format={"type": "json_object"},
+        )
+        parsed = self._text_ai_client._try_parse_json(result.get("text"))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("location draft response is invalid")
+        return self._normalize_location_draft(parsed, current_location)
+
     def related_sources(self, location_id: int, limit: int = 20) -> dict:
         location = self._locations.get(location_id)
         if not location:
@@ -399,12 +493,34 @@ class WorldMapService:
             "owner_character_name": getattr(owner, "name", None),
             "image_asset_id": location.image_asset_id,
             "image_asset": self._serialize_asset(location.image_asset_id),
+            "services": [
+                self.serialize_location_service(item)
+                for item in self._location_services.list_by_location(location.id)
+            ],
             "source_type": location.source_type,
             "source_note": location.source_note,
             "status": location.status,
             "sort_order": location.sort_order,
             "created_at": location.created_at.isoformat() if location.created_at else None,
             "updated_at": location.updated_at.isoformat() if location.updated_at else None,
+        }
+
+    def serialize_location_service(self, service):
+        if not service:
+            return None
+        return {
+            "id": service.id,
+            "location_id": service.location_id,
+            "project_id": service.project_id,
+            "name": service.name,
+            "service_type": service.service_type,
+            "summary": service.summary,
+            "chat_hook": service.chat_hook,
+            "visual_prompt": service.visual_prompt,
+            "status": service.status,
+            "sort_order": service.sort_order,
+            "created_at": service.created_at.isoformat() if service.created_at else None,
+            "updated_at": service.updated_at.isoformat() if service.updated_at else None,
         }
 
     def serialize_map_image(self, image):
@@ -506,6 +622,105 @@ class WorldMapService:
     def _shorten(self, value, limit: int):
         text = str(value or "").strip().replace("\r\n", "\n")
         return text if len(text) <= limit else text[:limit].rstrip() + "..."
+
+    def _build_location_draft_prompt(self, project_id: int, current_location: dict | None = None) -> str:
+        current_location = current_location if isinstance(current_location, dict) else {}
+        project = self._project_service.get_project(project_id)
+        world = self._world_service.get_world(project_id)
+        existing_locations = self._locations.list_by_project(project_id)[:40]
+        characters = self._characters.list_by_project(project_id)[:60]
+        lines = [
+            "Return only JSON.",
+            "Create or improve one facility/location draft for a Japanese character live chat and novel-game tool.",
+            "The user may have typed only a rough idea. Preserve the user's intent and expand it into a concrete facility that characters can understand and act in.",
+            "Required JSON keys: name, region, location_type, tags_text, description, source_note.",
+            "All values must be Japanese strings. tags_text should be newline-separated short tags.",
+            "description must be detailed enough to support chat location movement, service extraction, and image generation.",
+            "In description, include the facility role, atmosphere, who visits it, what characters can do there, notable rooms/services/attractions, sensory details, and hooks for conversation.",
+            "Do not invent unrelated characters. If you mention characters, prefer the registered characters listed below.",
+            "Avoid generic filler. Make the facility specific, playable, and easy to turn into selectable services.",
+            "",
+            "Current form input:",
+        ]
+        for key in ("name", "location_type", "region", "owner_character_id", "tags_text", "description", "source_note"):
+            lines.append(f"{key}: {current_location.get(key) or ''}")
+        if project:
+            lines.extend(
+                [
+                    "",
+                    "Project:",
+                    f"title: {getattr(project, 'title', '') or ''}",
+                    f"summary: {getattr(project, 'summary', '') or ''}",
+                ]
+            )
+        if world:
+            lines.extend(
+                [
+                    "",
+                    "World setting:",
+                    f"name: {getattr(world, 'name', '') or ''}",
+                    f"tone: {getattr(world, 'tone', '') or ''}",
+                    f"era: {getattr(world, 'era_description', '') or ''}",
+                    f"overview: {getattr(world, 'overview', '') or ''}",
+                    f"technology: {getattr(world, 'technology_level', '') or ''}",
+                    f"social_structure: {getattr(world, 'social_structure', '') or ''}",
+                    f"important_facilities: {getattr(world, 'rules_json', '') or ''}",
+                    f"forbidden: {getattr(world, 'forbidden_json', '') or ''}",
+                ]
+            )
+        if characters:
+            lines.append("")
+            lines.append("Registered characters to prefer when relevant:")
+            for character in characters:
+                lines.append(
+                    "- "
+                    + " / ".join(
+                        [
+                            f"id: {character.id}",
+                            f"name: {character.name or ''}",
+                            f"nickname: {character.nickname or ''}",
+                            f"summary: {self._shorten(getattr(character, 'character_summary', '') or getattr(character, 'personality', ''), 180)}",
+                        ]
+                    )
+                )
+        if existing_locations:
+            lines.append("")
+            lines.append("Existing registered facilities. Avoid duplicating these unless the current input clearly edits one:")
+            for location in existing_locations:
+                lines.append(
+                    "- "
+                    + " / ".join(
+                        [
+                            f"name: {location.name or ''}",
+                            f"type: {location.location_type or ''}",
+                            f"region: {getattr(location, 'region', '') or ''}",
+                            f"description: {self._shorten(location.description, 180)}",
+                        ]
+                    )
+                )
+        return "\n".join(lines)
+
+    def _normalize_location_draft(self, parsed: dict, current_location: dict | None = None) -> dict:
+        current_location = current_location if isinstance(current_location, dict) else {}
+        defaults = {
+            "name": current_location.get("name") or "未設定の施設",
+            "region": current_location.get("region") or "",
+            "location_type": current_location.get("location_type") or "施設",
+            "tags_text": current_location.get("tags_text") or "",
+            "description": current_location.get("description") or "",
+            "source_note": current_location.get("source_note") or "AI補完",
+        }
+        draft = {}
+        for key, default in defaults.items():
+            value = parsed.get(key, default)
+            if key == "tags_text" and isinstance(value, list):
+                value = "\n".join(str(item).strip() for item in value if str(item or "").strip())
+            draft[key] = self._shorten(str(value or default).strip(), 5000 if key == "description" else 1200)
+        if current_location.get("owner_character_id") not in (None, ""):
+            draft["owner_character_id"] = current_location.get("owner_character_id")
+        if current_location.get("sort_order") not in (None, ""):
+            draft["sort_order"] = current_location.get("sort_order")
+        return draft
 
     def _normalize_tags(self, value) -> list[str]:
         if isinstance(value, list):

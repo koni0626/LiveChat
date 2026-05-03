@@ -92,6 +92,19 @@ def list_location_candidates(project_id: int):
     return json_response(world_map_service.extract_location_candidates(project_id))
 
 
+@world_maps_bp.route("/projects/<int:project_id>/locations/draft", methods=["POST"])
+def generate_location_draft(project_id: int):
+    require_project_manage(project_id)
+    payload = request.get_json(silent=True) or {}
+    try:
+        draft = world_map_service.generate_location_draft(project_id, payload)
+    except ValueError as exc:
+        return json_response({"message": str(exc)}, status=400)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    return json_response({"project_id": project_id, "draft": draft})
+
+
 @world_maps_bp.route("/projects/<int:project_id>/locations", methods=["POST"])
 def create_location(project_id: int):
     require_project_manage(project_id)

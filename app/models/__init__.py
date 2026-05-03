@@ -33,6 +33,7 @@ from .user import User
 from .user_setting import UserSetting
 from .world import World
 from .world_location import WorldLocation
+from .world_location_service import WorldLocationServiceItem
 from .world_map_image import WorldMapImage
 from .world_news_item import WorldNewsItem
 
@@ -71,6 +72,7 @@ __all__ = [
     "UserSetting",
     "World",
     "WorldLocation",
+    "WorldLocationServiceItem",
     "WorldMapImage",
     "WorldNewsItem",
 ]

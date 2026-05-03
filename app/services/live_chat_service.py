@@ -257,6 +257,9 @@ class LiveChatService:
     def move_to_location(self, session_id: int, location_id: int, payload: dict | None = None):
         return self._conversation_service.move_to_location(session_id, location_id, payload)
 
+    def select_location_service(self, session_id: int, service_id: int, payload: dict | None = None):
+        return self._conversation_service.select_location_service(session_id, service_id, payload)
+
     def enter_lccd_room(self, session_id: int, payload: dict | None = None):
         return self._conversation_service.enter_lccd_room(session_id, payload)
 

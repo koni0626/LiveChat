@@ -104,6 +104,10 @@ def build_choice_execution_prompt(context: dict, choice: dict) -> str:
     return text_prompt_support.build_choice_execution_prompt(context, choice)
 
 
+def build_photo_execution_prompt(context: dict, instruction: str, pose_style: str = "") -> str:
+    return text_prompt_support.build_photo_execution_prompt(context, instruction, pose_style)
+
+
 def build_costume_rewrite_prompt(context: dict, character: dict, instruction: str, costume_context: str) -> str:
     return text_prompt_support.build_costume_rewrite_prompt(context, character, instruction, costume_context)
 

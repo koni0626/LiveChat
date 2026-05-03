@@ -65,7 +65,7 @@ window.NovelUI = (() => {
     return data;
   }
 
-  function toast(message, tone = "success") {
+  function toast(message, tone = "success", options = {}) {
     const stack = document.getElementById("toastStack");
     if (!stack) return;
     const wrapper = document.createElement("div");
@@ -80,7 +80,8 @@ window.NovelUI = (() => {
       </div>
     `;
     stack.appendChild(wrapper);
-    const instance = new bootstrap.Toast(wrapper, { delay: 2800 });
+    const delay = Number(options.delay || options.duration || 5600);
+    const instance = new bootstrap.Toast(wrapper, { delay: Number.isFinite(delay) ? delay : 5600 });
     wrapper.addEventListener("hidden.bs.toast", () => wrapper.remove());
     instance.show();
   }

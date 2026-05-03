@@ -1379,6 +1379,57 @@ def build_choice_execution_prompt(context: dict, choice: dict) -> str:
     return "\n".join(lines)
 
 
+def build_photo_execution_prompt(context: dict, instruction: str, pose_style: str = "") -> str:
+    state_json = context["state"].get("state_json") or {}
+    displayed_image = state_json.get("displayed_image_observation") or {}
+    scene_progression = state_json.get("scene_progression") or {}
+    current_location = state_json.get("current_location") or {}
+    current_service = state_json.get("current_location_service") or {}
+    session_objective = get_session_objective(context)
+    lines = [
+        "あなたはビジュアルノベルの写真撮影ディレクターです。",
+        "The player is in photo shooting mode. Interpret the shooting request using the full conversation context.",
+        "固定テンプレートを使わないでください。ユーザーの撮影指示を、会話と画像生成のための具体的でドラマ性のある演出指示へ変換してください。",
+        "場所と衣装は原則として現在のまま維持します。移動や着替えを勝手に発生させないでください。",
+        "ただし、表情、ポーズ、距離感、カメラ、光、前景/背景の使い方は、魅力的な一枚になるように具体化してください。",
+        "JSONオブジェクトのみを返してください。",
+        "必須キー: scene_instruction, image_prompt_hint, reply_hint, location, background, emotional_effect, pose_instruction。",
+        "scene_instruction: 日本語で、プレイヤーがどんな撮影を頼み、キャラクターがどう応じる場面かを要約してください。",
+        "image_prompt_hint: 日本語の画像演出。抽象的な指示でも、見える演技、表情、距離、ポーズ、カメラ、ムード、背景の見せ方に変換してください。",
+        "pose_instruction: 日本語で、今回の撮影指示として必ず反映すべきポーズ・動作・構図を具体化してください。",
+        "reply_hint: 日本語で、撮影後にキャラクターがどう反応すると自然かを、性格と口調に合わせて書いてください。",
+        "location/background は現在の場所を保ちつつ、画像生成で使いやすい言葉に整理してください。",
+        "Keep it safe, character-consistent, and suitable for a romance/live-chat visual novel.",
+        f"Player shooting request: {instruction}",
+        f"Optional pose style: {pose_style or ''}",
+        f"Player name: {context['session'].get('player_name') or 'プレイヤー'}",
+        f"Session objective: {session_objective or 'none'}",
+        f"Current location: {state_json.get('location') or scene_progression.get('location') or (current_location.get('name') if isinstance(current_location, dict) else '') or ''}",
+        f"Current background: {state_json.get('background') or scene_progression.get('background') or (current_location.get('description') if isinstance(current_location, dict) else '') or ''}",
+        f"Current facility/service: {((current_location.get('description') if isinstance(current_location, dict) else '') or '')[:800]} / {((current_service.get('summary') if isinstance(current_service, dict) else '') or '')[:500]}",
+        f"Displayed image summary: {displayed_image.get('short_summary') or ''}",
+        f"Displayed image background: {displayed_image.get('background') or ''}",
+        "キャラクター:",
+    ]
+    for character in context["characters"]:
+        lines.append(
+            f"- {character.get('name')}: character_summary={character.get('character_summary') or ''}, appearance={character.get('appearance_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, likes={character.get('likes_text') or ''}, dislikes={character.get('dislikes_text') or ''}, ng_rules={character.get('ng_rules') or ''}"
+        )
+    lines.append("直近の会話:")
+    for message in context["messages"][-10:]:
+        lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
+    lines.extend(
+        [
+            "Examples of expected reasoning, not fixed output:",
+            "- If the request is 'そっちに座って。僕は向かいに。', make the character sit naturally opposite the player, with first-person intimate framing, without drawing the player.",
+            "- If the request is '波動拳', make the pose visibly an energetic two-handed forward action pose, while preserving the current scene and character elegance.",
+            "- If the request is 'バストショット', make the camera distance, gaze, light, and expression attractive, not a flat ID photo.",
+            "- If the request is abstract such as 'ラプラスらしいね', translate it into visible amusement, playful observation, park lighting, and a pose that reacts to the current place.",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def build_costume_rewrite_prompt(context: dict, character: dict, instruction: str, costume_context: str) -> str:
     lines = [
         "image-to-image のキャラクター参照生成用に、ユーザーの衣装リクエストを書き換えてください。",

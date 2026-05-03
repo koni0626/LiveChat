@@ -11,7 +11,12 @@
   const locationList = document.getElementById("worldLocationList");
   const locationForm = document.getElementById("worldLocationForm");
   const locationResetButton = document.getElementById("worldLocationResetButton");
+  const locationAiAssistButton = document.getElementById("worldLocationAiAssistButton");
+  const locationAiAssistLabel = document.getElementById("worldLocationAiAssistLabel");
+  const locationAiAssistSpinner = document.getElementById("worldLocationAiAssistSpinner");
   const locationSubmitLabel = document.getElementById("worldLocationSubmitLabel");
+  const locationSubmitSpinner = document.getElementById("worldLocationSubmitSpinner");
+  const locationSubmitButton = locationForm?.querySelector('button[type="submit"]');
   const ownerSelect = locationForm?.querySelector('[name="owner_character_id"]');
   const searchInput = document.getElementById("worldLocationSearchInput");
   const regionFilter = document.getElementById("worldLocationRegionFilter");
@@ -31,6 +36,8 @@
 
   let locations = [];
   let mapImages = [];
+  let locationSaveBusy = false;
+  let locationAiAssistBusy = false;
 
   function ensureImageFile(file) {
     if (!file) {
@@ -211,17 +218,72 @@
     if (locationSubmitLabel) locationSubmitLabel.textContent = "施設を追加";
   }
 
+  function setLocationSaveBusy(active) {
+    locationSaveBusy = active;
+    const locationId = locationForm?.querySelector('[name="location_id"]')?.value;
+    if (locationSubmitButton) locationSubmitButton.disabled = active;
+    if (locationResetButton) locationResetButton.disabled = active;
+    if (locationSubmitSpinner) locationSubmitSpinner.classList.toggle("d-none", !active);
+    if (locationSubmitLabel) {
+      locationSubmitLabel.textContent = active
+        ? "保存中..."
+        : (locationId ? "施設を更新" : "施設を追加");
+    }
+  }
+
+  function setLocationAiAssistBusy(active) {
+    locationAiAssistBusy = active;
+    if (locationAiAssistButton) locationAiAssistButton.disabled = active;
+    if (locationAiAssistSpinner) locationAiAssistSpinner.classList.toggle("d-none", !active);
+    if (locationAiAssistLabel) locationAiAssistLabel.textContent = active ? "AI補完中..." : "AI補完";
+  }
+
+  function applyLocationDraft(draft) {
+    if (!locationForm || !draft) return;
+    ["name", "region", "location_type", "owner_character_id", "tags_text", "description", "sort_order", "source_note"].forEach((key) => {
+      const field = locationForm.querySelector(`[name="${key}"]`);
+      if (!field || draft[key] === undefined || draft[key] === null) return;
+      field.value = Array.isArray(draft[key]) ? draft[key].join("\n") : draft[key];
+    });
+  }
+
+  async function assistLocation() {
+    if (locationAiAssistBusy || !locationForm) return;
+    setLocationAiAssistBusy(true);
+    try {
+      const payload = formPayload();
+      const locationId = payload.location_id;
+      delete payload.location_id;
+      const response = await NovelUI.api(`/api/v1/projects/${projectId}/locations/draft`, {
+        method: "POST",
+        body: { current_location: payload },
+      });
+      if (!response?.draft) throw new Error("AI補完の応答が不正です。");
+      applyLocationDraft(response.draft);
+      if (locationId) locationForm.querySelector('[name="location_id"]').value = locationId;
+      NovelUI.toast("施設情報をAI補完しました。");
+    } finally {
+      setLocationAiAssistBusy(false);
+    }
+  }
+
   async function saveLocation(event) {
     event.preventDefault();
+    if (locationSaveBusy) return;
     const payload = formPayload();
     const locationId = payload.location_id;
     delete payload.location_id;
     const url = locationId ? `/api/v1/locations/${locationId}` : `/api/v1/projects/${projectId}/locations`;
     const method = locationId ? "PATCH" : "POST";
-    await NovelUI.api(url, { method, body: payload });
-    NovelUI.toast(locationId ? "施設を更新しました。" : "施設を追加しました。");
-    resetForm();
-    await loadWorldMap();
+    setLocationSaveBusy(true);
+    try {
+      await NovelUI.api(url, { method, body: payload });
+      NovelUI.toast(locationId ? "施設を更新しました。" : "施設を追加しました。");
+      resetForm();
+      await loadWorldMap();
+    } finally {
+      setLocationSaveBusy(false);
+    }
   }
 
   function editLocation(locationId) {
@@ -384,6 +446,9 @@
 
   locationForm?.addEventListener("submit", (event) => {
     saveLocation(event).catch((error) => NovelUI.toast(error.message || "施設の保存に失敗しました。", "danger"));
+  });
+  locationAiAssistButton?.addEventListener("click", () => {
+    assistLocation().catch((error) => NovelUI.toast(error.message || "施設情報のAI補完に失敗しました。", "danger"));
   });
   locationResetButton?.addEventListener("click", resetForm);
   mapUploadInput?.addEventListener("change", () => {
