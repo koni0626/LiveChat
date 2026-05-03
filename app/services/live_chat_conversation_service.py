@@ -1215,6 +1215,12 @@ class LiveChatConversationService:
         prompt = prompt_support.apply_visual_style(prompt, context)
         return prompt_support.forbid_text_in_image(prompt)
 
+    def _photo_mode_image_options(self, payload: dict) -> dict:
+        return {
+            "model": payload.get("photo_model") or payload.get("photo_image_ai_model") or "gpt-image-2",
+            "provider": payload.get("photo_provider") or payload.get("photo_image_ai_provider") or "openai",
+        }
+
     def _photo_recent_lines(self, context: dict, limit: int = 6) -> list[str]:
         lines = []
         for message in (context.get("messages") or [])[-limit:]:
@@ -1493,6 +1499,7 @@ class LiveChatConversationService:
         state_row = self._session_state_service.get_state(session_id)
         state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
         if mode in {"photo", "photo_only", "shoot", "shoot_only"}:
+            photo_image_options = self._photo_mode_image_options(payload)
             photo_execution = text_support.generate_photo_execution(
                 self._text_ai_client,
                 context,
@@ -1584,8 +1591,8 @@ class LiveChatConversationService:
                     "size": payload.get("photo_size") or payload.get("size") or "1536x1024",
                     "quality": payload.get("photo_quality") or payload.get("quality") or "low",
                     "input_fidelity": "low",
-                    "model": payload.get("model") or payload.get("image_ai_model"),
-                    "provider": payload.get("provider") or payload.get("image_ai_provider"),
+                    "model": photo_image_options["model"],
+                    "provider": photo_image_options["provider"],
                 },
             )
             finish_reply = self._generate_photo_finish_reply(
@@ -1672,6 +1679,7 @@ class LiveChatConversationService:
         )
 
         if mode in {"photo", "photo_only", "shoot", "shoot_only"}:
+            photo_image_options = self._photo_mode_image_options(payload)
             photo_execution = text_support.generate_photo_execution(
                 self._text_ai_client,
                 self._context_provider(session_id),
@@ -1716,8 +1724,8 @@ class LiveChatConversationService:
                     "size": payload.get("photo_size") or payload.get("size") or "1536x1024",
                     "quality": payload.get("photo_quality") or payload.get("quality") or "low",
                     "input_fidelity": "low",
-                    "model": payload.get("model") or payload.get("image_ai_model"),
-                    "provider": payload.get("provider") or payload.get("image_ai_provider"),
+                    "model": photo_image_options["model"],
+                    "provider": photo_image_options["provider"],
                 },
             )
             finish_reply = self._generate_photo_finish_reply(
