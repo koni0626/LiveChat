@@ -372,7 +372,7 @@ class CharacterService:
             "Show exactly one character, full body from head to shoes, clear face, clear outfit, centered composition.",
             "Use a light natural standing pose, not a stiff straight reference-sheet stance: a gentle contrapposto, relaxed weight shift, one hand near the waist/hair/collar, or a small characterful gesture is ideal.",
             "Keep the body readable for future costume references. Do not crop the feet. Do not use extreme action, sitting, lying, jumping, heavy foreshortening, or a pose that hides the outfit.",
-            "No text, no words, no letters, no subtitles, no captions, no speech bubbles, no readable signs, no UI overlay, no watermark, no logo.",
+            "No text, no words, no letters, no subtitles, no captions, no speech bubbles, no UI overlay, no watermark, no logo.",
             "Make it attractive and polished like a collectible full-body character key visual, while still usable as the character's base reference.",
             f"Name: {character.name}",
         ]
@@ -489,7 +489,7 @@ class CharacterService:
             "This is a premium collectible profile image, not a plain ID icon. Make it visually striking, polished, and memorable.",
             "Show exactly one character. Use a vertical composition with the face clearly readable and the upper body or full figure attractively staged.",
             "Use cinematic lighting, a charming pose, expressive eyes, and a background motif that supports the character concept.",
-            "No text, no words, no letters, no subtitles, no captions, no speech bubbles, no readable signs, no UI overlay, no watermark, no logo.",
+            "No text, no words, no letters, no subtitles, no captions, no speech bubbles, no UI overlay, no watermark, no logo.",
             "Final image will be cropped to a 3:4 aspect ratio, so keep the character centered with safe margins around the head and body.",
             f"Name: {character.name}",
         ]

@@ -648,7 +648,7 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
             "Create a polished promotional Feed image for a character conversation app.",
             "Use the reference image as the primary source of character identity and art style.",
             "Keep the same face, hair, outfit design logic, linework, coloring, rendering quality, and mood.",
-            "No text, no captions, no speech bubbles, no readable signs, no UI, no logo, no watermark.",
+            "No text, no captions, no speech bubbles, no UI, no logo, no watermark.",
             "Show one character as the main subject. Do not show the player.",
             "Make it feel like an official character post image, daily snapshot, or visual novel event CG.",
             f"Feed post body: {post.body}",

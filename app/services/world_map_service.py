@@ -232,7 +232,7 @@ class WorldMapService:
             "- 名前は短く、ボタンに出して分かりやすいものにする。\n"
             "- summary はキャラクターが理解するための概要。\n"
             "- chat_hook は会話が盛り上がる使い方、感情、事件の火種を書く。\n"
-            "- visual_prompt は画像生成に使える視覚要素を日本語で具体的に書く。文字や看板の可読文字は要求しない。\n"
+            "- visual_prompt は画像生成に使える視覚要素を日本語で具体的に書く。文字は要求しない。\n"
             "- 最大8件。なければ空配列。\n"
             "- JSONのみ返す。形式: {\"services\":[{\"name\":\"...\",\"service_type\":\"...\",\"summary\":\"...\",\"chat_hook\":\"...\",\"visual_prompt\":\"...\"}]}\n\n"
             f"施設名: {getattr(location, 'name', '') or ''}\n"

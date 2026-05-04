@@ -142,7 +142,7 @@ class CharacterThumbnailService:
             "This is not a plain ID photo. Make it an appealing key portrait that clearly sells the character's personality.",
             "Show exactly one character, bust-up or close face portrait, expressive eyes, polished lighting, cinematic composition.",
             "Keep the face, hairstyle, age impression, colors, outfit direction, and art style consistent with the character settings.",
-            "No text, no words, no letters, no subtitles, no captions, no speech bubbles, no readable signs, no UI overlay, no watermark, no logo.",
+            "No text, no words, no letters, no subtitles, no captions, no speech bubbles, no UI overlay, no watermark, no logo.",
             "Avoid generic beauty. Prioritize a memorable expression, pose, lighting, and background motif that match the character concept.",
             f"Name: {character.name}",
         ]

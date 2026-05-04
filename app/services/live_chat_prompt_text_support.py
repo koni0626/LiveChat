@@ -937,7 +937,10 @@ def build_idle_character_message_prompt(context: dict) -> str:
                     f"- {name}: affection={metrics.get('affection', 0)}, interest={metrics.get('interest', 0)}, trust={metrics.get('trust', 0)}, tension={metrics.get('tension', 0)}"
                 )
     if session_memory.get("recent_topics"):
-        lines.append(f"Recent topics: {session_memory['recent_topics']}")
+        lines.append(
+            "Recent topic repetition history. Do not treat this as a topic to continue; use it to avoid repeating the same subject or phrasing:"
+        )
+        lines.append(str(session_memory["recent_topics"]))
     lines.append("キャラクター:")
     character_memories = session_memory.get("character_memories") or {}
     for character in context["characters"]:
@@ -1131,7 +1134,10 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     if session_memory.get("player_preferences"):
         lines.append(f"Player preference memo: {session_memory['player_preferences']}")
     if session_memory.get("recent_topics"):
-        lines.append(f"Recent topics: {session_memory['recent_topics']}")
+        lines.append(
+            "Recent topic repetition history. Do not treat this as a topic to continue; use it to avoid repeating the same subject or phrasing:"
+        )
+        lines.append(str(session_memory["recent_topics"]))
     character_memories = session_memory.get("character_memories") or {}
     if character_memories:
         lines.append("Character memory:")
@@ -1462,6 +1468,9 @@ def build_choice_execution_prompt(context: dict, choice: dict) -> str:
         "必須キー: scene_instruction, image_prompt_hint, reply_hint, location, background, emotional_effect。",
         "scene_instruction: Japanese summary of what the player did or chose.",
         "image_prompt_hint: Japanese visual direction. If the selected choice is abstract, convert it into visible acting, expression, distance, pose, camera, mood, and background changes.",
+        "image_prompt_hint must make the character's emotion visible. Always include facial expression, gaze direction, hand movement, shoulder/posture, distance, and the emotional shift caused by the selected choice.",
+        "Do not let image_prompt_hint be only background or location description. The character reaction is the main subject.",
+        "Use one or more context-fitting emotions such as joy, embarrassment, relief, hesitation, expectation, loneliness, curiosity, or tension, and express them through face and body acting.",
         "reply_hint: Japanese instruction for how the character should react next, matching personality and speech style.",
         "location/background may stay unchanged if the choice is emotional rather than a place move.",
         "Keep it safe, character-consistent, and suitable for a romance/live-chat visual novel.",
@@ -1770,21 +1779,23 @@ def build_session_memory(messages: list[dict], current_state_json: dict | None) 
         if isinstance(memory, dict)
     }
 
-    for message in messages[-8:]:
+    for message in messages[-40:]:
         text = (message.get("message_text") or "").strip()
         if not text:
             continue
         if message.get("sender_type") == "user":
-            recent_topics.append(text[:50])
+            speaker_name = str(message.get("speaker_name") or "user").strip() or "user"
+            recent_topics.append(f"{speaker_name}: {text[:80]}")
             lowered = text.lower()
             if any(keyword in text for keyword in ("好き", "嫌い", "欲しい", "詳しく", "興味", "趣味")) or any(
                 keyword in lowered for keyword in ("like", "dislike", "prefer", "want", "hobby")
             ):
                 player_preferences = text[:120]
         elif message.get("sender_type") == "character":
+            speaker_name = str(message.get("speaker_name") or "character").strip() or "character"
+            recent_topics.append(f"{speaker_name}: {text[:80]}")
             if any(keyword in text for keyword in ("好き", "嫌い", "苦手", "趣味", "嬉しい", "恋", "惹かれる")):
                 relationship_notes = text[:120]
-            speaker_name = str(message.get("speaker_name") or "").strip()
             if speaker_name:
                 memory_entry = _normalize_memory_profile(character_memories.get(speaker_name) or {})
                 memory_entry["likes"] = _merge_lists(memory_entry["likes"], _extract_likes(text))
@@ -1803,7 +1814,7 @@ def build_session_memory(messages: list[dict], current_state_json: dict | None) 
                 character_memories[speaker_name] = memory_entry
 
     memory = {
-        "recent_topics": " / ".join(recent_topics[-3:]) if recent_topics else previous_memory.get("recent_topics"),
+        "recent_topics": " / ".join(recent_topics[-20:]) if recent_topics else previous_memory.get("recent_topics"),
         "player_preferences": player_preferences,
         "relationship_notes": relationship_notes,
         "character_memories": {

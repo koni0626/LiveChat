@@ -136,10 +136,10 @@ def apply_visual_style(prompt: str, context: dict) -> str:
 def forbid_text_in_image(prompt: str) -> str:
     value = str(prompt or "").strip()
     rule = (
-        "画像内には文字を一切入れない。セリフ、字幕、吹き出し、看板の読める文字、UI、ロゴ、透かし、"
+        "画像内には文字を一切入れない。セリフ、字幕、吹き出し、UI、ロゴ、透かし、"
         "日本語・英語・記号・擬音文字を描かない。セリフは画像外のテキストボックスで表示するため、"
         "絵の中には文章や文字情報を絶対に描写しない。no text, no words, no letters, no subtitles, "
-        "no captions, no speech bubbles, no readable signs, no UI overlay, no watermark, no logo."
+        "no captions, no speech bubbles, no UI overlay, no watermark, no logo."
     )
     lowered = value.lower()
     if "no speech bubbles" in lowered and "画像内には文字を一切入れない" in value:

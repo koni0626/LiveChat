@@ -51,6 +51,8 @@
   const objectiveInitial = document.getElementById("liveChatObjectiveInitial");
   const objectiveList = document.getElementById("liveChatObjectiveList");
   const objectiveCount = document.getElementById("liveChatObjectiveDebugCount");
+  const characterGuide = document.getElementById("liveChatCharacterGuide");
+  const characterGuideList = document.getElementById("liveChatCharacterGuideList");
   const affinityCard = document.getElementById("liveChatAffinityCard");
   const affinityList = document.getElementById("liveChatAffinityList");
   const intelRail = document.getElementById("liveChatIntelRail");
@@ -314,6 +316,7 @@
     updateLccdAvailability(context);
     updatePhotoModeAvailability(context);
     renderObjectiveNotes(context);
+    renderCharacterGuide(context);
     renderCharacterAffinity(context);
     renderCharacterIntelRail(context);
     renderPlayerReaction(context);
@@ -642,7 +645,6 @@
       if (
         score >= 100
         && !reward.event_claimed
-        && (previous === undefined || previous < 100)
       ) {
         claimAffinityReward(characterId);
       }
@@ -709,6 +711,118 @@
       || character?.thumbnail_asset?.media_url
       || character?.base_asset?.media_url
       || "";
+  }
+
+  function compactCharacterGuideText(value, limit = 74) {
+    const text = String(value || "").replace(/\s+/g, " ").trim();
+    if (!text) return "";
+    return text.length > limit ? `${text.slice(0, limit - 1)}...` : text;
+  }
+
+  function normalizeCharacterGuideList(value) {
+    if (Array.isArray(value)) {
+      return value.map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") return item.name || item.label || item.text || item.title || "";
+        return "";
+      }).map((item) => String(item || "").trim()).filter(Boolean);
+    }
+    return String(value || "")
+      .split(/[\n,、/]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  function characterGuideFacts(character) {
+    const profile = character?.memory_profile && typeof character.memory_profile === "object"
+      ? character.memory_profile
+      : {};
+    const favoriteItems = normalizeCharacterGuideList(character?.favorite_items);
+    const likes = normalizeCharacterGuideList(profile.likes);
+    const hobbies = normalizeCharacterGuideList(profile.hobbies);
+    return [...favoriteItems, ...likes, ...hobbies].filter((item, index, array) => array.indexOf(item) === index).slice(0, 3);
+  }
+
+  function characterGuidePrompts(character) {
+    const name = character?.nickname || character?.name || "キャラクター";
+    const prompts = [
+      { icon: "bi-clock-history", text: `${name}、最近何してた？` },
+      { icon: "bi-chat-heart", text: `${name}は何の話が好き？` },
+      { icon: "bi-briefcase", text: `${name}のお仕事や普段の役目の話、聞かせて` },
+      { icon: "bi-emoji-smile", text: `${name}、今どんな気分？` },
+      { icon: "bi-geo-alt", text: `${name}はこの場所をどう思う？` },
+      { icon: "bi-stars", text: `${name}の好きなものを教えて` },
+    ];
+    return prompts;
+  }
+
+  function renderCharacterGuide(context) {
+    if (!characterGuide || !characterGuideList) return;
+    const characters = activeCharacters(context);
+    characterGuide.hidden = characters.length === 0;
+    if (!characters.length) {
+      characterGuideList.innerHTML = "";
+      return;
+    }
+    const memoryMap = context?.character_user_memories || {};
+    characterGuideList.innerHTML = characters.map((character, index) => {
+      const name = character.name || character.nickname || "Character";
+      const imageUrl = characterAssetUrl(character);
+      const intro = compactCharacterGuideText(
+        character.introduction_text
+          || character.character_summary
+          || character.feed_profile_text
+          || character.personality
+          || "",
+      );
+      const facts = characterGuideFacts(character);
+      const memory = memoryMap[String(character.id)] || {};
+      const affinityLabel = memory.affinity_label || "";
+      const prompts = characterGuidePrompts(character);
+      return `
+        <article class="live-chat-character-guide-item ${index === 0 ? "is-open" : ""}" data-character-guide-id="${Number(character.id || 0)}">
+          <button class="live-chat-character-guide-toggle" type="button" data-character-guide-toggle aria-expanded="${index === 0 ? "true" : "false"}">
+            <span class="live-chat-character-guide-avatar">
+              ${imageUrl ? `<img src="${NovelUI.escape(imageUrl)}" alt="${NovelUI.escape(name)}">` : '<i class="bi bi-person-heart" aria-hidden="true"></i>'}
+            </span>
+            <span class="live-chat-character-guide-summary">
+              <strong>${NovelUI.escape(name)}</strong>
+              <span>${NovelUI.escape(intro || affinityLabel || "話題を選んで話しかける")}</span>
+            </span>
+            <i class="bi bi-chevron-down live-chat-character-guide-caret" aria-hidden="true"></i>
+          </button>
+          <div class="live-chat-character-guide-body">
+            ${facts.length ? `<div class="live-chat-character-guide-facts">${facts.map((fact) => `<span>${NovelUI.escape(fact)}</span>`).join("")}</div>` : ""}
+            <div class="live-chat-character-guide-prompts">
+              ${prompts.map((prompt) => `
+                <button class="live-chat-character-guide-prompt" type="button" data-character-guide-prompt="${NovelUI.escape(prompt.text)}" title="${NovelUI.escape(prompt.text)}">
+                  <i class="bi ${NovelUI.escape(prompt.icon)}" aria-hidden="true"></i>
+                  <span>${NovelUI.escape(prompt.text)}</span>
+                </button>
+              `).join("")}
+            </div>
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  function sendCharacterGuidePrompt(messageText) {
+    const text = String(messageText || "").trim();
+    if (!text || !composeForm?.message_text) return;
+    if (shell.getState?.().replyLoading) {
+      NovelUI.toast("返信の処理が終わってから話しかけてください。", "warning");
+      return;
+    }
+    setPhotoModeActive(false);
+    setConversationModeActive(true);
+    composeForm.message_text.value = text;
+    idleTalksSincePlayerInput = 0;
+    if (typeof composeForm.requestSubmit === "function") {
+      composeForm.requestSubmit();
+    } else {
+      composeForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    }
   }
 
   function renderCharacterIntelRail(context) {
@@ -1679,6 +1793,21 @@
   });
 
   inventoryGenerateButton?.addEventListener("click", generateInventoryItem);
+
+  characterGuideList?.addEventListener("click", (event) => {
+    const promptButton = event.target.closest("[data-character-guide-prompt]");
+    if (promptButton) {
+      sendCharacterGuidePrompt(promptButton.dataset.characterGuidePrompt || "");
+      return;
+    }
+    const toggleButton = event.target.closest("[data-character-guide-toggle]");
+    if (!toggleButton) return;
+    const item = toggleButton.closest(".live-chat-character-guide-item");
+    if (!item) return;
+    const isOpen = !item.classList.contains("is-open");
+    item.classList.toggle("is-open", isOpen);
+    toggleButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  });
 
   intelRail?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-target-character-id]");
