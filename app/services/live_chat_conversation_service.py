@@ -15,6 +15,7 @@ from .chat_message_service import ChatMessageService
 from .chat_session_service import ChatSessionService
 from .letter_service import LetterService
 from .live_chat_media_service import LiveChatMediaService
+from .live_chat_player_intent_service import LiveChatPlayerIntentService
 from .session_state_service import SessionStateService
 from .user_setting_service import UserSettingService
 from .character_user_memory_service import CharacterUserMemoryService
@@ -49,6 +50,7 @@ class LiveChatConversationService:
         session_objective_note_service: SessionObjectiveNoteService | None = None,
         world_location_repository: WorldLocationRepository | None = None,
         world_location_service_repository: WorldLocationServiceRepository | None = None,
+        player_intent_service: LiveChatPlayerIntentService | None = None,
     ):
         self._chat_session_service = chat_session_service
         self._chat_message_service = chat_message_service
@@ -68,6 +70,7 @@ class LiveChatConversationService:
         self._session_objective_note_service = session_objective_note_service or SessionObjectiveNoteService()
         self._world_location_repository = world_location_repository or WorldLocationRepository()
         self._world_location_service_repository = world_location_service_repository or WorldLocationServiceRepository()
+        self._player_intent_service = player_intent_service or LiveChatPlayerIntentService()
 
     def _update_character_user_memory(self, session, context: dict):
         if not session:
@@ -1954,10 +1957,17 @@ class LiveChatConversationService:
             return None
         initial_context = self._context_provider(session_id)
         raw_message_text = str(payload.get("message_text") or "").strip()
-        player_proxy_generated = not raw_message_text
-        message_text = raw_message_text
+        player_intent = self._player_intent_service.normalize(payload, raw_message_text, initial_context)
+        message_text = self._player_intent_service.render_message_text(player_intent, raw_message_text)
+        player_proxy_generated = not message_text
         if player_proxy_generated:
             message_text = text_support.generate_player_proxy_message(self._text_ai_client, initial_context)
+            player_intent = self._player_intent_service.normalize(
+                {"player_intent": {"type": "message", "id": "proxy_generated", "label": "代理メッセージ"}},
+                message_text,
+                initial_context,
+            )
+        player_prompt_text = self._player_intent_service.prompt_text(player_intent, message_text)
         forced_intent = str(payload.get("input_intent") or "").strip()
         if forced_intent in {"dialogue", "narration", "visual_request"}:
             input_intent = {
@@ -1966,7 +1976,7 @@ class LiveChatConversationService:
                 "should_generate_image": forced_intent in {"narration", "visual_request"},
             }
         else:
-            input_intent = text_support.classify_user_input(self._text_ai_client, initial_context, message_text)
+            input_intent = text_support.classify_user_input(self._text_ai_client, initial_context, player_prompt_text)
         is_directed_scene = input_intent.get("intent") in {"narration", "visual_request"}
         user_message = self._chat_message_service.create_message(
             session_id,
@@ -1977,6 +1987,7 @@ class LiveChatConversationService:
                 "message_role": "narration" if is_directed_scene else "player",
                 "state_snapshot_json": {
                     "input_intent": input_intent,
+                    "player_intent": player_intent,
                     "player_proxy_generated": player_proxy_generated,
                 },
             },
@@ -1989,15 +2000,15 @@ class LiveChatConversationService:
         context_before_progression = self._context_provider(session_id)
         context = context_before_progression
         if not defer_post_processing:
-            self.update_scene_progression(session_id, context, user_message.message_text)
+            self.update_scene_progression(session_id, context, player_prompt_text)
             context = self._context_provider(session_id)
-            self.update_conversation_director(session_id, context, user_message.message_text)
+            self.update_conversation_director(session_id, context, player_prompt_text)
             context = self._context_provider(session_id)
         auto_reply = str(payload.get("auto_reply", "true")).lower() not in {"0", "false", "no", "off"}
         assistant_message = None
         reply_effect = None
         if auto_reply:
-            reply = text_support.generate_reply(self._text_ai_client, context, user_message.message_text)
+            reply = text_support.generate_reply(self._text_ai_client, context, player_prompt_text)
             reply_effect = reply.get("reply_effect") if isinstance(reply.get("reply_effect"), dict) else None
             assistant_message = self._chat_message_service.create_message(
                 session_id,
@@ -2033,7 +2044,7 @@ class LiveChatConversationService:
             deferred_processing = self._schedule_deferred_post_processing(
                 session_id,
                 assistant_payload,
-                user_message.message_text,
+                player_prompt_text,
             )
         else:
             self.update_line_visual_note(session_id, updated_context)
@@ -2059,6 +2070,7 @@ class LiveChatConversationService:
             "state": state,
             "session": updated_context["session"],
             "input_intent": input_intent,
+            "player_intent": player_intent,
             "generated_image": generated_image,
             "image_generation_error": image_generation_error,
             "auto_image_candidate": bool(auto_image_candidate),

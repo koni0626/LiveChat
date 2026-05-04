@@ -2,8 +2,22 @@
   const root = document.querySelector(".live-chat-shell[data-session-id]");
   if (!root) return;
 
-  const { LiveChatApi, LiveChatView, LiveChatActions, LiveChatShell, LiveChatCostumeRoom } = window;
-  if (!LiveChatApi || !LiveChatView || !LiveChatActions || !LiveChatShell || !LiveChatCostumeRoom) {
+  const {
+    LiveChatApi,
+    LiveChatView,
+    LiveChatActions,
+    LiveChatShell,
+    LiveChatCostumeRoom,
+    LiveChatEnding,
+    LiveChatShortStoryPanel,
+    LiveChatCharacterGuide,
+    LiveChatReplyEffects,
+    LiveChatInventory,
+    LiveChatLocation,
+    LiveChatPhotoMode,
+    LiveChatComposer,
+  } = window;
+  if (!LiveChatApi || !LiveChatView || !LiveChatActions || !LiveChatShell || !LiveChatCostumeRoom || !LiveChatEnding || !LiveChatShortStoryPanel || !LiveChatCharacterGuide || !LiveChatReplyEffects || !LiveChatInventory || !LiveChatLocation || !LiveChatPhotoMode || !LiveChatComposer) {
     throw new Error("LiveChat dependencies are not loaded");
   }
 
@@ -17,9 +31,6 @@
   const stageActionsHandle = document.getElementById("liveChatStageActionsHandle");
   const composeForm = document.getElementById("liveChatComposeForm");
   const composeInput = document.getElementById("liveChatComposeInput");
-  const composeShell = document.getElementById("liveChatComposeShell");
-  const toggleComposeButton = document.getElementById("liveChatToggleComposeButton");
-  const proxyMessageButton = document.getElementById("liveChatProxyMessageButton");
   const imageForm = document.getElementById("liveChatImageForm");
   const uploadForm = document.getElementById("liveChatImageUploadForm");
   const costumeForm = document.getElementById("liveChatCostumeForm");
@@ -30,29 +41,17 @@
   const closetSelectModalElement = document.getElementById("liveChatClosetSelectModal");
   const closetPicker = document.getElementById("liveChatClosetPicker");
   const sceneChoicePanel = document.getElementById("liveChatSceneChoicePanel");
-  const locationMovePanel = document.getElementById("liveChatLocationMovePanel");
-  const locationServicePanel = document.getElementById("liveChatLocationServicePanel");
-  const toggleLocationMoveButton = document.getElementById("liveChatToggleLocationMoveButton");
   const lccdPanel = document.getElementById("liveChatLccdPanel");
   const toggleLccdButton = document.getElementById("liveChatToggleLccdButton");
   const costumeTicketBadge = document.getElementById("liveChatCostumeTicketBadge");
   const costumeTicketCount = document.getElementById("liveChatCostumeTicketCount");
   const conversationModeButton = document.getElementById("liveChatConversationModeButton");
-  const togglePhotoModeButton = document.getElementById("liveChatTogglePhotoModeButton");
-  const toggleInventoryButton = document.getElementById("liveChatToggleInventoryButton");
-  const inventoryPanel = document.getElementById("liveChatInventoryPanel");
-  const inventoryList = document.getElementById("liveChatInventoryList");
-  const inventoryGenerateButton = document.getElementById("liveChatInventoryGenerateButton");
-  const inventoryCloseButton = document.getElementById("liveChatInventoryCloseButton");
-  const inventoryPromptInput = document.getElementById("liveChatInventoryPromptInput");
   const lccdCloseButton = document.getElementById("liveChatLccdCloseButton");
   const lccdForm = document.getElementById("liveChatLccdForm");
   const lccdGenerateButton = document.getElementById("liveChatLccdGenerateButton");
   const objectiveInitial = document.getElementById("liveChatObjectiveInitial");
   const objectiveList = document.getElementById("liveChatObjectiveList");
   const objectiveCount = document.getElementById("liveChatObjectiveDebugCount");
-  const characterGuide = document.getElementById("liveChatCharacterGuide");
-  const characterGuideList = document.getElementById("liveChatCharacterGuideList");
   const affinityCard = document.getElementById("liveChatAffinityCard");
   const affinityList = document.getElementById("liveChatAffinityList");
   const intelRail = document.getElementById("liveChatIntelRail");
@@ -65,55 +64,22 @@
   const galleryBody = document.getElementById("liveChatGalleryBody");
   const galleryToggleButton = document.getElementById("liveChatGalleryToggleButton");
   const galleryCount = document.getElementById("liveChatGalleryCount");
-  const shortStoryCard = document.getElementById("liveChatShortStoryCard");
-  const shortStoryBodyPanel = document.getElementById("liveChatShortStoryBodyPanel");
-  const shortStoryToggleButton = document.getElementById("liveChatShortStoryToggleButton");
-  const shortStoryCount = document.getElementById("liveChatShortStoryCount");
-  const shortStoryResult = document.getElementById("liveChatShortStoryResult");
-  const savedShortStories = document.getElementById("liveChatSavedShortStories");
-  const savedShortStoryList = document.getElementById("liveChatSavedShortStoryList");
-  const shortStoryMeta = document.getElementById("liveChatShortStoryMeta");
-  const shortStoryTitle = document.getElementById("liveChatShortStoryTitle");
-  const shortStorySynopsis = document.getElementById("liveChatShortStorySynopsis");
-  const shortStoryBody = document.getElementById("liveChatShortStoryBody");
-  const shortStoryAfterword = document.getElementById("liveChatShortStoryAfterword");
-  const shortStoryOpeningImageWrap = document.getElementById("liveChatShortStoryOpeningImageWrap");
-  const shortStoryOpeningImage = document.getElementById("liveChatShortStoryOpeningImage");
-  const shortStoryEndingImageWrap = document.getElementById("liveChatShortStoryEndingImageWrap");
-  const shortStoryEndingImage = document.getElementById("liveChatShortStoryEndingImage");
   const cameraFeatureEnabled = false;
 
   let currentContext = null;
   let costumeRoomController = null;
-  let composeVisible = true;
+  let composerController = null;
   let userDefaultImageSettings = {};
   let cameraEnabled = false;
   let cameraStream = null;
   let cameraBusy = false;
-  let locationMoveVisible = false;
-  let selectedLocationMoveId = null;
-  let locationMoveBusy = false;
-  let locationServiceBusy = false;
   let lccdVisible = false;
   let lccdBusy = false;
   let lccdEnterBusy = false;
   let conversationModeActive = true;
-  let photoModeActive = false;
-  let photoModeBusy = false;
-  let inventoryVisible = false;
-  let inventoryBusy = false;
-  let inventoryItems = [];
   let affinityScoresInitialized = false;
   const lastAffinityScores = new Map();
   const affinityRewardClaiming = new Set();
-  let currentShortStory = null;
-  const characterMoodState = new Map();
-  let latestReplyVisualMomentHint = "";
-  let replyEffectTimer = null;
-  const composePlaceholders = {
-    chat: "メッセージを入力。メッセージを作成ボタンで代理メッセージも作れます。",
-    photo: "例: ネオンの逆光を背に少し振り返り、こちらへ視線を向ける。背景を大きくぼかした縦構図で、Xで映える一枚にする。",
-  };
   let idleTalkTimer = null;
   let idleTalkBusy = false;
   let idleTalksSincePlayerInput = 0;
@@ -295,6 +261,84 @@
     onGiftInteractionChange: () => {},
   });
 
+  const endingController = LiveChatEnding.createEndingController({
+    selectedImagePanel,
+    shell,
+    applyContext,
+    getCurrentContext: () => currentContext,
+    scheduleStageActionPosition,
+  });
+  const shortStoryPanel = LiveChatShortStoryPanel.createShortStoryPanel({
+    getCurrentContext: () => currentContext,
+  });
+  const characterGuideController = LiveChatCharacterGuide.createCharacterGuideController({
+    getActiveCharacters: (context) => activeCharacters(context),
+    onPrompt: sendCharacterGuidePrompt,
+  });
+  const replyEffectsController = LiveChatReplyEffects.createReplyEffectsController({
+    selectedImagePanel,
+    imageForm,
+    generateSessionImage,
+    getActiveCharacters: () => activeCharacters(currentContext),
+    onMoodChange: (speakerName, mood) => characterGuideController.setMood(speakerName, mood),
+  });
+  const inventoryController = LiveChatInventory.createInventoryController({
+    api: LiveChatApi,
+    projectId,
+    sessionId,
+    shell,
+    selectedImagePanel,
+    getCurrentContext: () => currentContext,
+    getTargetCharacterId: () => activeCharacterId(currentContext),
+    loadContext,
+    playAffinityFeedback,
+  });
+  const locationController = LiveChatLocation.createLocationController({
+    api: LiveChatApi,
+    sessionId,
+    shell,
+    imageForm,
+    getCurrentContext: () => currentContext,
+    applyContext,
+    loadContext,
+    capturePlayerReaction: capturePlayerReactionIfEnabled,
+  });
+  const photoModeController = LiveChatPhotoMode.createPhotoModeController({
+    api: LiveChatApi,
+    sessionId,
+    shell,
+    imageForm,
+    iconHtml: stageActionIcons.photoMode,
+    getReward: (context) => activeAffinityReward(context || currentContext),
+    applyContext,
+    loadContext,
+    onDeactivateConversation: () => setConversationModeActive(false, { keepPhotoMode: true }),
+    onModeChanged: () => {
+      refreshModeBadge();
+      refreshComposePlaceholder();
+    },
+  });
+  composerController = LiveChatComposer.createComposerController({
+    api: LiveChatApi,
+    sessionId,
+    form: composeForm,
+    input: composeInput,
+    shell,
+    imageForm,
+    getCurrentContext: () => currentContext,
+    isPhotoModeActive: () => photoModeController.isActive(),
+    generatePhotoShoot: (promptText) => photoModeController.generateShoot(promptText),
+    loadContext,
+    capturePlayerReaction: capturePlayerReactionIfEnabled,
+    playAffinityFeedback,
+    triggerReplyEffect: (effect) => replyEffectsController.trigger(effect),
+    onActivity: () => {
+      idleTalksSincePlayerInput = 0;
+    },
+    clearIdleTalkTimer,
+    scheduleIdleTalk,
+  });
+
   function setPanelExpanded(card, body, button, expanded) {
     if (!card || !body || !button) return;
     card.classList.toggle("is-collapsed", !expanded);
@@ -312,13 +356,6 @@
     if (!galleryCount) return;
     const count = Array.isArray(images) ? images.length : 0;
     galleryCount.textContent = `${count}枚`;
-  }
-
-  function updateShortStoryCount(stories) {
-    if (!shortStoryCount) return;
-    const count = Array.isArray(stories) ? stories.length : 0;
-    shortStoryCount.textContent = count ? `${count}編 解放済み` : "未解放";
-    shortStoryCard?.classList.toggle("has-ending-bonus", count > 0);
   }
 
   function applyContext(context) {
@@ -342,18 +379,18 @@
     updateGalleryCount(context.images || []);
     costumeRoomController?.render(context);
     renderSceneChoices(context);
-    renderLocationMovePanel(context);
-    renderLocationServicePanel(context);
+    locationController.renderMovePanel(context);
+    locationController.renderServicePanel();
     renderLccdPanel();
     updateLccdAvailability(context);
-    updatePhotoModeAvailability(context);
+    photoModeController.updateAvailability(context);
     renderObjectiveNotes(context);
-    renderCharacterGuide(context);
+    characterGuideController.render(context);
     renderCharacterAffinity(context);
     renderCharacterIntelRail(context);
     renderPlayerReaction(context);
-    renderSavedShortStories(context);
-    renderInventoryPanel();
+    shortStoryPanel.renderSavedShortStories(context);
+    inventoryController.render();
   }
 
   function activeCharacterId(context = currentContext) {
@@ -406,10 +443,6 @@
     return filtered;
   }
 
-  function inventoryTargetCharacterId() {
-    return activeCharacterId(currentContext);
-  }
-
   function activeAffinityReward(context = currentContext) {
     const characterId = activeCharacterId(context);
     if (!characterId) return null;
@@ -418,11 +451,6 @@
 
   function canUseLccd(context = currentContext) {
     return false;
-  }
-
-  function canUsePhotoMode(context = currentContext) {
-    const reward = activeAffinityReward(context);
-    return Boolean(reward?.clear_unlocked || reward?.closet_unlocked || reward?.event_claimed);
   }
 
   function updateLccdAvailability(context = currentContext) {
@@ -452,121 +480,6 @@
     if (!available && lccdVisible) {
       lccdVisible = false;
       renderLccdPanel();
-    }
-  }
-
-  function updatePhotoModeAvailability(context = currentContext) {
-    if (!togglePhotoModeButton) return;
-    const available = canUsePhotoMode(context);
-    togglePhotoModeButton.hidden = !available;
-    togglePhotoModeButton.disabled = photoModeBusy || !available;
-    togglePhotoModeButton.classList.toggle("is-clear-unlocked", available);
-    togglePhotoModeButton.setAttribute(
-      "title",
-      available ? (photoModeActive ? "撮影モード中" : "撮影モード") : "好感度100で開放",
-    );
-    togglePhotoModeButton.setAttribute(
-      "aria-label",
-      available ? (photoModeActive ? "撮影モード中" : "撮影モード") : "撮影モードは好感度100で開放",
-    );
-    if (!available && photoModeActive) {
-      photoModeActive = false;
-      setConversationModeActive(true);
-    }
-  }
-
-  function setInventoryVisible(visible) {
-    inventoryVisible = Boolean(visible);
-    renderInventoryPanel();
-    if (inventoryVisible) {
-      loadInventoryItems();
-    }
-  }
-
-  function renderInventoryPanel() {
-    if (!inventoryPanel || !inventoryList) return;
-    inventoryPanel.classList.toggle("is-hidden", !inventoryVisible);
-    toggleInventoryButton?.setAttribute("aria-expanded", inventoryVisible ? "true" : "false");
-    toggleInventoryButton?.classList.toggle("is-active", inventoryVisible);
-    if (!inventoryVisible) return;
-    if (inventoryBusy) {
-      inventoryList.innerHTML = '<div class="live-chat-inventory-empty">Loading...</div>';
-      return;
-    }
-    if (!inventoryItems.length) {
-      inventoryList.innerHTML = '<div class="live-chat-inventory-empty">アイテムがありません。生成してからステージ画像へドラッグしてください。</div>';
-      return;
-    }
-    inventoryList.innerHTML = inventoryItems.map((item) => {
-      const imageUrl = item.asset?.media_url || "";
-      return `
-        <button class="live-chat-inventory-item" type="button" draggable="true" data-inventory-item-id="${item.id}" title="${NovelUI.escape(item.description || item.name || "")}">
-          ${imageUrl ? `<img src="${NovelUI.escape(imageUrl)}" alt="${NovelUI.escape(item.name || "item")}">` : '<i class="bi bi-gift"></i>'}
-          <span>${NovelUI.escape(item.name || "Item")}</span>
-        </button>
-      `;
-    }).join("");
-  }
-
-  async function loadInventoryItems() {
-    if (!projectId) return;
-    inventoryBusy = true;
-    renderInventoryPanel();
-    try {
-      const payload = await LiveChatApi.loadInventory(projectId);
-      inventoryItems = Array.isArray(payload?.items) ? payload.items : [];
-    } catch (error) {
-      NovelUI.toast(error.message || "インベントリーを読み込めませんでした。", "warning");
-    } finally {
-      inventoryBusy = false;
-      renderInventoryPanel();
-    }
-  }
-
-  async function generateInventoryItem() {
-    if (!projectId || inventoryBusy) return;
-    inventoryBusy = true;
-    inventoryGenerateButton.disabled = true;
-    renderInventoryPanel();
-    try {
-      const prompt = inventoryPromptInput?.value?.trim() || "";
-      const body = {
-        session_id: sessionId,
-        character_id: inventoryTargetCharacterId(),
-        size: "1024x1024",
-      };
-      if (prompt) body.prompt = prompt;
-      const result = await LiveChatApi.generateInventoryItem(projectId, body);
-      if (result?.points?.balance !== undefined) NovelUI.setPointsBalance(result.points.balance);
-      if (result?.item) inventoryItems = [result.item, ...inventoryItems.filter((item) => item.id !== result.item.id)];
-      NovelUI.toast("アイテムを生成しました。");
-    } catch (error) {
-      NovelUI.toast(error.message || "アイテム生成に失敗しました。", "danger");
-    } finally {
-      inventoryBusy = false;
-      inventoryGenerateButton.disabled = false;
-      renderInventoryPanel();
-    }
-  }
-
-  async function giveInventoryItem(itemId) {
-    if (!itemId || shell.getState().replyLoading) return;
-    const item = inventoryItems.find((entry) => Number(entry.id) === Number(itemId));
-    shell.setReplyLoading(true, currentContext);
-    try {
-      const result = await LiveChatApi.giveInventoryItem(sessionId, itemId, {
-        character_id: inventoryTargetCharacterId(),
-        message_text: item?.name ? `${item.name}を渡した。` : "アイテムを渡した。",
-      });
-      playAffinityFeedback(result?.affinity_feedback);
-      inventoryItems = inventoryItems.filter((entry) => Number(entry.id) !== Number(itemId));
-      NovelUI.toast("アイテムを渡しました。");
-      await loadContext();
-    } catch (error) {
-      NovelUI.toast(error.message || "アイテムを渡せませんでした。", "danger");
-    } finally {
-      shell.setReplyLoading(false, currentContext);
-      renderInventoryPanel();
     }
   }
 
@@ -603,347 +516,6 @@
     }
   }
 
-  function wait(ms) {
-    return new Promise((resolve) => window.setTimeout(resolve, ms));
-  }
-
-  function getImageCreatedAtValue(image) {
-    const candidates = [
-      image?.created_at,
-      image?.createdAt,
-      image?.asset?.created_at,
-      image?.asset?.createdAt,
-      image?.state_json?.created_at,
-    ];
-    for (const value of candidates) {
-      const time = Date.parse(value || "");
-      if (Number.isFinite(time)) return time;
-    }
-    const id = Number(image?.id || image?.asset_id || image?.asset?.id || 0);
-    return Number.isFinite(id) && id > 0 ? id : 0;
-  }
-
-  function getEndingStoryImageIds(story) {
-    return new Set(
-      ["opening", "ending"]
-        .map((key) => story?.images?.[key]?.id)
-        .filter(Boolean)
-        .map((id) => String(id))
-    );
-  }
-
-  function getEndingMemoryImages(context, eventImage, excludedImageIds = new Set()) {
-    const eventImageId = String(eventImage?.id || "");
-    const seen = new Set();
-    return (Array.isArray(context?.images) ? context.images : [])
-      .filter((image) => image?.asset?.media_url)
-      .filter((image) => {
-        const id = String(image?.id || image?.asset_id || image?.asset?.media_url || "");
-        if (!id || seen.has(id) || excludedImageIds.has(id) || (eventImageId && id === eventImageId)) return false;
-        seen.add(id);
-        return true;
-      })
-      .sort((left, right) => getImageCreatedAtValue(left) - getImageCreatedAtValue(right));
-  }
-
-  function removeEndingReel() {
-    selectedImagePanel?.querySelectorAll(".live-chat-ending-reel").forEach((item) => item.remove());
-  }
-
-  function removeStageFloatingHearts() {
-    selectedImagePanel?.closest(".live-chat-stage")?.querySelectorAll(".live-chat-affinity-heart").forEach((item) => item.remove());
-  }
-
-  function ensureEndingBlackout() {
-    if (!selectedImagePanel) return null;
-    let blackout = selectedImagePanel.querySelector(".live-chat-ending-blackout");
-    if (!blackout) {
-      blackout = document.createElement("div");
-      blackout.className = "live-chat-ending-blackout";
-      blackout.setAttribute("aria-hidden", "true");
-      selectedImagePanel.appendChild(blackout);
-    }
-    return blackout;
-  }
-
-  async function playEndingBlackoutIn() {
-    const blackout = ensureEndingBlackout();
-    if (!blackout) return null;
-    window.requestAnimationFrame(() => blackout.classList.add("is-visible"));
-    await wait(1350);
-    return blackout;
-  }
-
-  async function revealEndingBlackout(blackout) {
-    if (!blackout) return;
-    blackout.classList.add("is-revealing");
-    blackout.classList.remove("is-visible");
-    await wait(2400);
-    blackout.remove();
-  }
-
-  async function playEndingHeartbeat(blackout) {
-    const target = blackout || ensureEndingBlackout();
-    if (!target) return;
-    target.classList.add("is-visible", "is-heartbeat");
-    if (!target.querySelector(".live-chat-ending-heartbeat")) {
-      const heart = document.createElement("div");
-      heart.className = "live-chat-ending-heartbeat";
-      heart.innerHTML = '<i class="bi bi-heart-fill" aria-hidden="true"></i>';
-      target.appendChild(heart);
-    }
-    await wait(4200);
-    target.classList.remove("is-heartbeat");
-  }
-
-  function splitEndingStoryText(story) {
-    const body = String(story?.body || "").trim();
-    const paragraphs = body
-      .split(/\n{2,}|\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    return paragraphs.map((text) => ({ text }));
-  }
-
-  function splitEndingTextUnits(story) {
-    const paragraphs = String(story?.body || "")
-      .split(/\n{2,}|\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const units = [];
-    paragraphs.forEach((paragraph, paragraphIndex) => {
-      const sentences = paragraph.match(/[^。！？!?]+[。！？!?]?/g) || [paragraph];
-      sentences.forEach((sentence, sentenceIndex) => {
-        const text = String(sentence || "").trim();
-        if (text) units.push({ text, paragraphBreak: paragraphIndex > 0 && sentenceIndex === 0 });
-      });
-    });
-    return units;
-  }
-
-  function splitLongEndingUnit(unit, maxLength = 120) {
-    const text = String(unit?.text || "");
-    if (text.length <= maxLength) return [unit];
-    const chunks = [];
-    for (let index = 0; index < text.length; index += maxLength) {
-      chunks.push({
-        text: text.slice(index, index + maxLength),
-        paragraphBreak: index === 0 && Boolean(unit.paragraphBreak),
-      });
-    }
-    return chunks;
-  }
-
-  function paginateEndingStoryText(story, layer) {
-    const fallbackPages = splitEndingStoryText(story);
-    if (!layer || !fallbackPages.length) return fallbackPages;
-    const measure = document.createElement("section");
-    measure.className = "live-chat-ending-story-box is-measuring";
-    measure.innerHTML = "<p></p>";
-    layer.appendChild(measure);
-    const measureText = measure.querySelector("p");
-    const fits = (text) => {
-      measureText.textContent = text;
-      return measure.scrollHeight <= measure.clientHeight + 1;
-    };
-    const units = splitEndingTextUnits(story).flatMap((unit) => splitLongEndingUnit(unit));
-    const pages = [];
-    let current = "";
-    units.forEach((unit) => {
-      const separator = unit.paragraphBreak && current ? "\n\n" : "";
-      const next = current ? `${current}${separator}${unit.text}` : unit.text;
-      if (current && !fits(next)) {
-        pages.push({ text: current });
-        current = unit.text;
-      } else {
-        current = next;
-      }
-      if (current && !fits(current)) {
-        const chunks = splitLongEndingUnit({ text: current }, 80);
-        current = "";
-        chunks.forEach((chunk) => {
-          if (current && !fits(`${current}${chunk.text}`)) {
-            pages.push({ text: current });
-            current = chunk.text;
-          } else {
-            current = `${current}${chunk.text}`;
-          }
-        });
-      }
-    });
-    if (current) pages.push({ text: current });
-    measure.remove();
-    return pages.length ? pages : fallbackPages;
-  }
-
-  function storyImageForPage(story, index, total) {
-    const opening = story?.images?.opening?.asset?.media_url;
-    const ending = story?.images?.ending?.asset?.media_url;
-    if (index >= Math.max(1, Math.floor(total / 2)) && ending) return ending;
-    return opening || ending || "";
-  }
-
-  function waitForEndingStoryAdvance(layer, ms) {
-    return new Promise((resolve) => {
-      let done = false;
-      let timer = null;
-      const finish = () => {
-        if (done) return;
-        done = true;
-        window.clearTimeout(timer);
-        layer.removeEventListener("click", finish);
-        resolve();
-      };
-      layer.addEventListener("click", finish);
-      timer = window.setTimeout(finish, ms);
-    });
-  }
-
-  async function typeEndingStoryIntro(layer, title) {
-    const label = "ショートストーリー";
-    const storyTitle = String(title || "ふたりの記憶").trim();
-    layer.innerHTML = `
-      <div class="live-chat-ending-story-intro">
-        <div class="live-chat-ending-story-intro-label"></div>
-        <div class="live-chat-ending-story-intro-title"></div>
-      </div>
-    `;
-    const labelElement = layer.querySelector(".live-chat-ending-story-intro-label");
-    const titleElement = layer.querySelector(".live-chat-ending-story-intro-title");
-    for (let index = 0; index <= label.length; index += 1) {
-      labelElement.textContent = label.slice(0, index);
-      await wait(72);
-    }
-    await wait(260);
-    for (let index = 0; index <= storyTitle.length; index += 1) {
-      titleElement.textContent = storyTitle.slice(0, index);
-      await wait(54);
-    }
-    await waitForEndingStoryAdvance(layer, 1400);
-  }
-
-  async function playEndingShortStory(story) {
-    if (!selectedImagePanel || !story || story.error) return;
-    if (!String(story?.body || "").trim()) return;
-    const layer = document.createElement("div");
-    layer.className = "live-chat-ending-story";
-    layer.setAttribute("aria-hidden", "true");
-    selectedImagePanel.appendChild(layer);
-    const renderPage = (index) => {
-      const page = pages[index] || {};
-      const mediaUrl = storyImageForPage(story, index, pages.length);
-      layer.innerHTML = `
-        ${mediaUrl ? `<img class="live-chat-ending-story-image" src="${NovelUI.escape(mediaUrl)}" alt="">` : ""}
-        <div class="live-chat-ending-story-shade"></div>
-        <section class="live-chat-ending-story-box">
-          ${page.title ? `<h3>${NovelUI.escape(page.title)}</h3>` : ""}
-          ${page.text ? `<p>${NovelUI.escape(page.text)}</p>` : ""}
-        </section>
-      `;
-    };
-    await wait(80);
-    layer.classList.add("is-visible");
-    await typeEndingStoryIntro(layer, story?.title);
-    const pages = paginateEndingStoryText(story, layer);
-    if (!pages.length) {
-      layer.remove();
-      return;
-    }
-    const pageDuration = 60000;
-    for (let index = 0; index < pages.length; index += 1) {
-      renderPage(index);
-      await wait(80);
-      layer.classList.remove("is-turning");
-      await waitForEndingStoryAdvance(layer, pageDuration);
-      if (index < pages.length - 1) {
-        layer.classList.add("is-turning");
-        await wait(520);
-      }
-    }
-    layer.classList.add("is-leaving");
-    await wait(1200);
-    layer.remove();
-  }
-
-  function playEndingMemoryReel(context, eventImage, shortStory) {
-    const images = getEndingMemoryImages(context, eventImage, getEndingStoryImageIds(shortStory));
-    if (!selectedImagePanel || !images.length) {
-      return wait(900);
-    }
-    removeEndingReel();
-    removeStageFloatingHearts();
-    const reel = document.createElement("div");
-    reel.className = "live-chat-ending-reel";
-    reel.setAttribute("aria-hidden", "true");
-    reel.innerHTML = `
-      <div class="live-chat-ending-reel-vignette"></div>
-      <div class="live-chat-ending-reel-track">
-        ${images.map((image, index) => `
-          <figure class="live-chat-ending-memory" style="--memory-tilt: ${index % 2 ? "2.2deg" : "-2deg"}">
-            <img src="${NovelUI.escape(image.asset.media_url)}" alt="">
-          </figure>
-        `).join("")}
-      </div>
-    `;
-    selectedImagePanel.appendChild(reel);
-    return new Promise((resolve) => {
-      let finished = false;
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        reel.classList.add("is-ending-black");
-        window.setTimeout(() => {
-          reel.remove();
-          resolve();
-        }, 1600);
-      };
-      const track = reel.querySelector(".live-chat-ending-reel-track");
-      window.requestAnimationFrame(() => {
-        const stageHeight = Math.max(1, selectedImagePanel.getBoundingClientRect().height);
-        const trackHeight = Math.max(1, track?.scrollHeight || 0);
-        const pixelsPerSecond = 90;
-        const distance = trackHeight + stageHeight;
-        const duration = (distance / pixelsPerSecond) * 1000;
-        reel.style.setProperty("--ending-reel-distance", `${Math.round(distance)}px`);
-        reel.style.setProperty("--ending-reel-duration", `${Math.round(duration)}ms`);
-        reel.classList.add("is-visible");
-        track?.addEventListener("animationend", finish, { once: true });
-        window.setTimeout(finish, duration + 1300);
-      });
-    });
-  }
-
-  function renderEndingFinalImage(result) {
-    const context = result?.context || currentContext;
-    const shouldRestoreBlackout = Boolean(selectedImagePanel?.querySelector(".live-chat-ending-blackout.is-visible"));
-    if (context) applyContext(context);
-    if (result?.event_image) {
-      shell.renderSelectedImage(result.event_image, context || currentContext);
-      const frame = selectedImagePanel?.querySelector(".live-chat-stage-frame");
-      frame?.classList.add("is-ending-final");
-    }
-    shell.renderNovel((context || currentContext)?.messages || [], context || currentContext);
-    if (shouldRestoreBlackout) {
-      ensureEndingBlackout()?.classList.add("is-visible");
-    }
-    scheduleStageActionPosition();
-  }
-
-  async function playAffinityEndingSequence(result) {
-    const context = result?.context || currentContext;
-    shell.setImageLoading(false, "auto");
-    const blackout = await playEndingBlackoutIn();
-    await wait(350);
-    await playEndingMemoryReel(context, result?.event_image, result?.short_story);
-    await playEndingShortStory(result?.short_story);
-    const heartbeatBlackout = selectedImagePanel?.querySelector(".live-chat-ending-blackout.is-visible") || blackout;
-    await playEndingHeartbeat(heartbeatBlackout);
-    renderEndingFinalImage(result);
-    const finalBlackout = selectedImagePanel?.querySelector(".live-chat-ending-blackout.is-visible") || blackout;
-    await wait(180);
-    await revealEndingBlackout(finalBlackout);
-  }
-
   function playAffinityFeedback(feedback) {
     const events = Array.isArray(feedback) ? feedback : [];
     events.forEach((event) => {
@@ -966,7 +538,7 @@
     try {
       const result = await LiveChatApi.claimAffinityReward(sessionId, characterId);
       triggerAffinityMaxHeartBurst();
-      await playAffinityEndingSequence(result);
+      await endingController.playAffinityEndingSequence(result);
       if (result?.letter) NovelUI.refreshLetterBadge?.();
       NovelUI.toast("好感度100達成。衣装チケットを1枚獲得しました。");
     } catch (error) {
@@ -985,7 +557,7 @@
     try {
       const result = await LiveChatApi.debugAffinityClear(sessionId, { password });
       triggerAffinityMaxHeartBurst();
-      await playAffinityEndingSequence(result);
+      await endingController.playAffinityEndingSequence(result);
       if (result?.letter) NovelUI.refreshLetterBadge?.();
       NovelUI.toast("デバッグ: 好感度100クリアにしました。");
     } catch (error) {
@@ -1080,252 +652,16 @@
       || "";
   }
 
-  function compactCharacterGuideText(value, limit = 74) {
-    const text = String(value || "").replace(/\s+/g, " ").trim();
-    if (!text) return "";
-    return text.length > limit ? `${text.slice(0, limit - 1)}...` : text;
-  }
-
-  function normalizeCharacterGuideList(value) {
-    if (Array.isArray(value)) {
-      return value.map((item) => {
-        if (typeof item === "string") return item;
-        if (item && typeof item === "object") return item.name || item.label || item.text || item.title || "";
-        return "";
-      }).map((item) => String(item || "").trim()).filter(Boolean);
-    }
-    return String(value || "")
-      .split(/[\n,、/]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  function characterGuideFacts(character) {
-    const profile = character?.memory_profile && typeof character.memory_profile === "object"
-      ? character.memory_profile
-      : {};
-    const favoriteItems = normalizeCharacterGuideList(character?.favorite_items);
-    const likes = normalizeCharacterGuideList(profile.likes);
-    const hobbies = normalizeCharacterGuideList(profile.hobbies);
-    return [...favoriteItems, ...likes, ...hobbies].filter((item, index, array) => array.indexOf(item) === index).slice(0, 3);
-  }
-
-  function characterGuidePrompts(character) {
-    const name = character?.nickname || character?.name || "キャラクター";
-    const prompts = [
-      { icon: "bi-clock-history", text: `${name}、最近何してた？` },
-      { icon: "bi-chat-heart", text: `${name}は何の話が好き？` },
-      { icon: "bi-briefcase", text: `${name}のお仕事や普段の役目の話、聞かせて` },
-      { icon: "bi-emoji-smile", text: `${name}、今どんな気分？` },
-      { icon: "bi-geo-alt", text: `${name}はこの場所をどう思う？` },
-      { icon: "bi-stars", text: `${name}の好きなものを教えて` },
-    ];
-    return prompts;
-  }
-
-  function renderCharacterGuide(context) {
-    if (!characterGuide || !characterGuideList) return;
-    const characters = activeCharacters(context);
-    characterGuide.hidden = characters.length === 0;
-    if (!characters.length) {
-      characterGuideList.innerHTML = "";
-      return;
-    }
-    const memoryMap = context?.character_user_memories || {};
-    characterGuideList.innerHTML = characters.map((character, index) => {
-      const name = character.name || character.nickname || "Character";
-      const imageUrl = characterAssetUrl(character);
-      const intro = compactCharacterGuideText(
-        character.introduction_text
-          || character.character_summary
-          || character.feed_profile_text
-          || character.personality
-          || "",
-      );
-      const facts = characterGuideFacts(character);
-      const memory = memoryMap[String(character.id)] || {};
-      const affinityLabel = memory.affinity_label || "";
-      const mood = characterMoodState.get(name) || characterMoodState.get(character.nickname || "") || null;
-      const prompts = characterGuidePrompts(character);
-      return `
-        <article class="live-chat-character-guide-item ${index === 0 ? "is-open" : ""}" data-character-guide-id="${Number(character.id || 0)}">
-          <button class="live-chat-character-guide-toggle" type="button" data-character-guide-toggle aria-expanded="${index === 0 ? "true" : "false"}">
-            <span class="live-chat-character-guide-avatar">
-              ${imageUrl ? `<img src="${NovelUI.escape(imageUrl)}" alt="${NovelUI.escape(name)}">` : '<i class="bi bi-person-heart" aria-hidden="true"></i>'}
-            </span>
-            <span class="live-chat-character-guide-summary">
-              <strong>${NovelUI.escape(name)}</strong>
-              <span>${NovelUI.escape(intro || affinityLabel || "話題を選んで話しかける")}</span>
-            </span>
-            <i class="bi bi-chevron-down live-chat-character-guide-caret" aria-hidden="true"></i>
-          </button>
-          <div class="live-chat-character-guide-body">
-            ${mood ? `<div class="live-chat-character-guide-mood is-${NovelUI.escape(mood.emotion || "neutral")}"><i class="bi bi-activity" aria-hidden="true"></i><span>${NovelUI.escape(mood.label || "反応している")}</span></div>` : ""}
-            ${facts.length ? `<div class="live-chat-character-guide-facts">${facts.map((fact) => `<span>${NovelUI.escape(fact)}</span>`).join("")}</div>` : ""}
-            <div class="live-chat-character-guide-prompts">
-              ${prompts.map((prompt) => `
-                <button class="live-chat-character-guide-prompt" type="button" data-character-guide-prompt="${NovelUI.escape(prompt.text)}" title="${NovelUI.escape(prompt.text)}">
-                  <i class="bi ${NovelUI.escape(prompt.icon)}" aria-hidden="true"></i>
-                  <span>${NovelUI.escape(prompt.text)}</span>
-                </button>
-              `).join("")}
-            </div>
-          </div>
-        </article>
-      `;
-    }).join("");
-  }
-
   function sendCharacterGuidePrompt(messageText) {
     const text = String(messageText || "").trim();
-    if (!text || !composeForm?.message_text) return;
+    if (!text) return;
     if (shell.getState?.().replyLoading) {
       NovelUI.toast("返信の処理が終わってから話しかけてください。", "warning");
       return;
     }
-    setPhotoModeActive(false);
+    photoModeController.setActive(false, { silent: true });
     setConversationModeActive(true);
-    composeForm.message_text.value = text;
-    idleTalksSincePlayerInput = 0;
-    if (typeof composeForm.requestSubmit === "function") {
-      composeForm.requestSubmit();
-    } else {
-      composeForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    }
-  }
-
-  function normalizeReplyEffect(effect) {
-    if (!effect || typeof effect !== "object") return null;
-    const allowed = new Set(["neutral", "happy", "shy", "thinking", "surprised", "sad", "angry", "excited", "lonely", "relieved"]);
-    const emotion = allowed.has(String(effect.emotion || "").toLowerCase())
-      ? String(effect.emotion).toLowerCase()
-      : "neutral";
-    const intensity = Math.max(1, Math.min(5, Number(effect.reaction_intensity || 2)));
-    return {
-      speakerName: String(effect.speaker_name || "").trim(),
-      emotion,
-      intensity,
-      moodLabel: String(effect.mood_label || "").trim() || "反応している",
-      visualMomentHint: String(effect.visual_moment_hint || "").trim(),
-      showNovelSpotlight: Boolean(effect.show_novel_spotlight),
-      suggestImage: Boolean(effect.suggest_image),
-    };
-  }
-
-  function replyEffectIcon(emotion) {
-    return {
-      happy: "bi-stars",
-      shy: "bi-heart-fill",
-      thinking: "bi-three-dots",
-      surprised: "bi-exclamation-lg",
-      sad: "bi-cloud-drizzle",
-      angry: "bi-lightning-charge-fill",
-      excited: "bi-stars",
-      lonely: "bi-moon-stars",
-      relieved: "bi-brightness-alt-high",
-      neutral: "bi-chat-heart",
-    }[emotion] || "bi-chat-heart";
-  }
-
-  function ensureReplyEffectLayer() {
-    const stage = selectedImagePanel?.closest(".live-chat-stage");
-    if (!stage) return null;
-    let layer = stage.querySelector(".live-chat-reply-effect");
-    if (!layer) {
-      layer = document.createElement("div");
-      layer.className = "live-chat-reply-effect";
-      stage.appendChild(layer);
-    }
-    return layer;
-  }
-
-  function triggerReplyParticles(emotion, intensity) {
-    const stage = selectedImagePanel?.closest(".live-chat-stage");
-    if (!stage) return;
-    const count = Math.max(4, Math.min(14, intensity * 2 + 2));
-    for (let index = 0; index < count; index += 1) {
-      const particle = document.createElement("span");
-      particle.className = `live-chat-reply-particle is-${emotion}`;
-      particle.innerHTML = `<i class="bi ${replyEffectIcon(emotion)}" aria-hidden="true"></i>`;
-      particle.style.setProperty("--particle-x", `${Math.round((Math.random() - 0.5) * 260)}px`);
-      particle.style.setProperty("--particle-y", `${Math.round(50 + Math.random() * 160)}px`);
-      particle.style.setProperty("--particle-delay", `${index * 55}ms`);
-      particle.style.setProperty("--particle-scale", `${0.78 + Math.random() * 0.75}`);
-      stage.appendChild(particle);
-      window.setTimeout(() => particle.remove(), 1450 + index * 55);
-    }
-  }
-
-  function triggerReplyEffect(effect) {
-    const normalized = normalizeReplyEffect(effect);
-    if (!normalized) return;
-    const key = normalized.speakerName || activeCharacters()[0]?.name || "";
-    if (key) {
-      characterMoodState.set(key, {
-        emotion: normalized.emotion,
-        label: normalized.moodLabel,
-      });
-      renderCharacterGuide(currentContext);
-    }
-    const stage = selectedImagePanel?.closest(".live-chat-stage");
-    if (stage) {
-      stage.classList.remove(
-        "is-reply-happy",
-        "is-reply-shy",
-        "is-reply-thinking",
-        "is-reply-surprised",
-        "is-reply-sad",
-        "is-reply-angry",
-        "is-reply-excited",
-        "is-reply-lonely",
-        "is-reply-relieved",
-        "is-reply-neutral",
-      );
-      stage.classList.add(`is-reply-${normalized.emotion}`);
-      window.setTimeout(() => stage.classList.remove(`is-reply-${normalized.emotion}`), 1400 + normalized.intensity * 260);
-    }
-    const layer = ensureReplyEffectLayer();
-    if (layer) {
-      latestReplyVisualMomentHint = normalized.visualMomentHint;
-      layer.className = `live-chat-reply-effect is-visible is-${normalized.emotion}`;
-      layer.innerHTML = `
-        <div class="live-chat-reply-effect-badge">
-          <i class="bi ${replyEffectIcon(normalized.emotion)}" aria-hidden="true"></i>
-          <span>${NovelUI.escape(normalized.moodLabel)}</span>
-        </div>
-        ${normalized.suggestImage && normalized.visualMomentHint ? `
-          <button class="live-chat-reply-effect-image" type="button" data-reply-effect-image title="シャッターチャンス" aria-label="シャッターチャンス">
-            <i class="bi bi-camera-fill" aria-hidden="true"></i>
-          </button>
-        ` : ""}
-      `;
-      window.clearTimeout(replyEffectTimer);
-      replyEffectTimer = window.setTimeout(() => {
-        layer.classList.remove("is-visible");
-      }, normalized.suggestImage ? 9000 : 3600 + normalized.intensity * 400);
-    }
-    triggerReplyParticles(normalized.emotion, normalized.intensity);
-    if (normalized.showNovelSpotlight) {
-      const novelBox = document.getElementById("liveChatNovelBox");
-      novelBox?.classList.remove("is-reply-spotlight");
-      window.requestAnimationFrame(() => novelBox?.classList.add("is-reply-spotlight"));
-      window.setTimeout(() => novelBox?.classList.remove("is-reply-spotlight"), 1800);
-    }
-  }
-
-  async function generateReplyEffectImage() {
-    const prompt = String(latestReplyVisualMomentHint || "").trim();
-    if (!prompt) {
-      NovelUI.toast("画像化できる表情メモがありません。", "warning");
-      return;
-    }
-    imageForm.prompt_text.value = prompt;
-    try {
-      await generateSessionImage(false, "auto", { prompt_text: prompt });
-      NovelUI.toast("シャッターチャンスを撮影しました。");
-    } catch (error) {
-      NovelUI.toast(error.message || "今の表情の画像化に失敗しました。", "danger");
-    }
+    composerController?.submitText(text);
   }
 
   function renderCharacterIntelRail(context) {
@@ -1456,86 +792,6 @@
     }
   }
 
-  function renderShortStory(story) {
-    if (!shortStoryResult || !shortStoryTitle || !shortStoryBody) return;
-    currentShortStory = story;
-    const paragraphs = String(story?.body || "")
-      .split(/\n{2,}|\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    shortStoryTitle.textContent = story?.title || "チャットから生まれた短編";
-    if (shortStorySynopsis) {
-      shortStorySynopsis.textContent = "";
-      shortStorySynopsis.hidden = true;
-    }
-    shortStoryBody.innerHTML = paragraphs.length
-      ? paragraphs.map((line) => `<p>${NovelUI.escape(line)}</p>`).join("")
-      : '<p>本文を生成できませんでした。</p>';
-    if (shortStoryAfterword) {
-      shortStoryAfterword.textContent = story?.afterword || "";
-      shortStoryAfterword.hidden = !story?.afterword;
-    }
-    if (shortStoryMeta) {
-      const count = Number(story?.source_message_count || 0);
-      shortStoryMeta.textContent = count ? `${count}件のログから生成` : "チャットログから生成";
-    }
-    renderShortStoryImage(shortStoryOpeningImageWrap, shortStoryOpeningImage, story?.images?.opening);
-    renderShortStoryImage(shortStoryEndingImageWrap, shortStoryEndingImage, story?.images?.ending);
-    shortStoryResult.classList.remove("is-hidden");
-  }
-
-  function renderSavedShortStories(context) {
-    if (!savedShortStories || !savedShortStoryList) return;
-    const stories = context?.session?.settings_json?.saved_short_stories;
-    updateShortStoryCount(stories);
-    if (!Array.isArray(stories) || !stories.length) {
-      savedShortStories.classList.add("is-hidden");
-      savedShortStoryList.innerHTML = "";
-      shortStoryResult?.classList.add("is-hidden");
-      currentShortStory = null;
-      setPanelExpanded(shortStoryCard, shortStoryBodyPanel, shortStoryToggleButton, false);
-      return;
-    }
-    savedShortStories.classList.remove("is-hidden");
-    savedShortStoryList.innerHTML = stories.slice().reverse().map((story, index) => {
-      const title = story?.title || "無題の短編";
-      const count = Number(story?.source_message_count || 0);
-      const source = count ? `${count}件` : "保存済み";
-      return `
-        <button class="live-chat-saved-short-story" type="button" data-saved-short-story-index="${stories.length - 1 - index}">
-          <span>${NovelUI.escape(title)}</span>
-          <small>${NovelUI.escape(source)}</small>
-        </button>
-      `;
-    }).join("");
-    const latestStory = stories[stories.length - 1];
-    if (latestStory && currentShortStory?.id !== latestStory.id) {
-      renderShortStory(latestStory);
-      setPanelExpanded(shortStoryCard, shortStoryBodyPanel, shortStoryToggleButton, true);
-    }
-  }
-
-  function renderShortStoryImage(wrap, image, item) {
-    const mediaUrl = item?.asset?.media_url;
-    if (!wrap || !image) return;
-    if (!mediaUrl) {
-      image.removeAttribute("src");
-      wrap.classList.add("is-hidden");
-      return;
-    }
-    image.src = mediaUrl;
-    wrap.classList.remove("is-hidden");
-  }
-
-  function showSavedShortStory(event) {
-    const button = event.target.closest("[data-saved-short-story-index]");
-    if (!button || !currentContext) return;
-    const stories = currentContext.session?.settings_json?.saved_short_stories;
-    const index = Number(button.dataset.savedShortStoryIndex);
-    if (!Array.isArray(stories) || !stories[index]) return;
-    renderShortStory(stories[index]);
-  }
-
   async function setCameraEnabled(enabled) {
     if (!cameraFeatureEnabled) {
       cameraEnabled = false;
@@ -1627,7 +883,7 @@
   async function loadContext() {
     const context = await LiveChatApi.loadContext(sessionId);
     applyContext(context);
-    await loadInventoryItems();
+    await inventoryController.loadItems();
     scheduleIdleTalk();
   }
 
@@ -1643,7 +899,7 @@
   }
 
   function hasPendingPlayerText() {
-    return Boolean(composeForm?.message_text?.value?.trim());
+    return Boolean(composerController?.hasPendingText());
   }
 
   function canRunIdleTalk() {
@@ -1734,204 +990,10 @@
     }
   }
 
-  function setComposeVisible(visible) {
-    composeVisible = visible;
-    if (composeShell) {
-      composeShell.classList.toggle("is-collapsed", !visible);
-    }
-    if (toggleComposeButton) {
-      toggleComposeButton.textContent = visible ? "\u30e1\u30c3\u30bb\u30fc\u30b8\u6b04\u3092\u9589\u3058\u308b" : "\u30e1\u30c3\u30bb\u30fc\u30b8\u6b04\u3092\u958b\u304f";
-      toggleComposeButton.setAttribute("aria-expanded", visible ? "true" : "false");
-    }
-  }
-
   function renderSceneChoices(context) {
     if (!sceneChoicePanel) return;
     sceneChoicePanel.classList.add("is-hidden");
     sceneChoicePanel.innerHTML = "";
-  }
-
-  function currentLocationId(context) {
-    const location = context?.state?.state_json?.current_location;
-    return Number(location?.id || 0);
-  }
-
-  function currentLocationServiceId(context) {
-    const service = context?.state?.state_json?.current_location_service;
-    return Number(service?.id || 0);
-  }
-
-  function currentLocationServices(context) {
-    const stateLocation = context?.state?.state_json?.current_location;
-    if (Array.isArray(stateLocation?.services)) return stateLocation.services;
-    const locationId = Number(stateLocation?.id || 0);
-    const locations = Array.isArray(context?.world_map?.locations) ? context.world_map.locations : [];
-    const location = locations.find((item) => Number(item.id) === locationId);
-    return Array.isArray(location?.services) ? location.services : [];
-  }
-
-  function locationServicesForLocation(location) {
-    return (Array.isArray(location?.services) ? location.services : []).filter((item) => item && item.status !== "archived");
-  }
-
-  function renderLocationServicePanel(context) {
-    if (!locationServicePanel) return;
-    locationServicePanel.classList.add("is-hidden");
-    locationServicePanel.innerHTML = "";
-  }
-
-  function closeLocationMovePanel() {
-    if (!locationMoveVisible) return;
-    locationMoveVisible = false;
-    selectedLocationMoveId = null;
-    renderLocationMovePanel(currentContext);
-    renderLocationServicePanel(currentContext);
-  }
-
-  function renderLocationMovePanel(context) {
-    if (!locationMovePanel) return;
-    const locations = Array.isArray(context?.world_map?.locations) ? context.world_map.locations : [];
-    locationMovePanel.classList.toggle("is-hidden", !locationMoveVisible);
-    if (toggleLocationMoveButton) {
-      toggleLocationMoveButton.setAttribute("aria-expanded", locationMoveVisible ? "true" : "false");
-    }
-    if (!locationMoveVisible) return;
-    if (!locations.length) {
-      locationMovePanel.innerHTML = '<div class="empty-panel">登録済みの施設がありません。ワールドマップで施設を追加すると、ここに移動先として表示されます。</div>';
-      return;
-    }
-    const activeId = currentLocationId(context);
-    const selectedId = Number(selectedLocationMoveId || 0);
-    locationMovePanel.innerHTML = `
-      <div class="live-chat-location-head">
-        <div>
-          <div class="eyebrow">Move</div>
-          <h4>どこへ移動する？</h4>
-        </div>
-        <button class="btn btn-sm btn-outline-dark" type="button" data-location-move-close>閉じる</button>
-      </div>
-      <div class="live-chat-location-grid">
-        ${locations.map((location) => {
-          const isActive = Number(location.id) === activeId;
-          const isSelected = Number(location.id) === selectedId;
-          const services = locationServicesForLocation(location);
-          const meta = [location.region, location.location_type, location.owner_character_name ? `${location.owner_character_name}関連` : ""]
-            .filter(Boolean)
-            .join(" / ");
-          return `
-            <div class="live-chat-location-entry${isSelected ? " is-selected" : ""}">
-              <button class="live-chat-location-card${isActive ? " is-active" : ""}${isSelected ? " is-selected" : ""}" type="button" data-location-select-id="${location.id}" ${locationMoveBusy || locationServiceBusy ? "disabled" : ""}>
-                <span class="live-chat-location-card-title">${NovelUI.escape(location.name || "名称未設定")}</span>
-                <span class="live-chat-location-card-meta">${NovelUI.escape(meta || "施設")}</span>
-                <span class="live-chat-location-card-desc">${NovelUI.escape(NovelUI.truncateText(location.description || "説明未設定", 120))}</span>
-                ${isActive ? '<span class="live-chat-location-card-current">現在地</span>' : ""}
-                <span class="live-chat-location-card-next">${isSelected ? "行き先を選択中" : "行き先を開く"}</span>
-              </button>
-              ${isSelected ? `
-                <div class="live-chat-location-destinations">
-                  <div class="live-chat-location-destinations-title">${NovelUI.escape(location.name || "施設")}のどこへ行く？</div>
-                  <button class="live-chat-location-destination-button" type="button" data-location-move-final-id="${location.id}" ${locationMoveBusy ? "disabled" : ""}>
-                    <span>施設全体へ移動</span>
-                    <small>入口・広場・全体の雰囲気で移動する</small>
-                  </button>
-                  ${services.length ? services.map((service) => `
-                    <button class="live-chat-location-destination-button" type="button" data-location-service-id="${service.id}" ${locationServiceBusy ? "disabled" : ""}>
-                      <span>${NovelUI.escape(service.name || "行き先")}</span>
-                      <small>${NovelUI.escape(service.service_type || "施設内")}</small>
-                      ${service.summary ? `<em>${NovelUI.escape(NovelUI.truncateText(service.summary, 78))}</em>` : ""}
-                    </button>
-                  `).join("") : '<div class="live-chat-location-destination-empty">施設内の行き先はまだありません。</div>'}
-                </div>
-              ` : ""}
-            </div>
-          `;
-        }).join("")}
-      </div>
-    `;
-  }
-
-  async function moveToLocation(locationId, button = null) {
-    if (!locationId || locationMoveBusy) return;
-    locationMoveBusy = true;
-    const originalHtml = button?.innerHTML;
-    if (button) {
-      button.disabled = true;
-      button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>移動中...';
-    }
-    shell.setImageLoading(true, "auto");
-    try {
-      const result = await LiveChatApi.moveToLocation(sessionId, locationId, {
-        size: imageForm?.size?.value || "1536x1024",
-        quality: imageForm?.quality?.value || "low",
-      });
-      if (result?.context) {
-        applyContext(result.context);
-      } else {
-        await loadContext();
-      }
-      locationMoveVisible = false;
-      selectedLocationMoveId = null;
-      await capturePlayerReactionIfEnabled();
-      if (result?.image_generation_error) {
-        NovelUI.toast(`移動しました。画像生成は失敗しました: ${result.image_generation_error}`, "warning");
-      } else {
-        NovelUI.toast("移動しました。");
-      }
-    } catch (error) {
-      NovelUI.toast(error.message || "移動に失敗しました。", "danger");
-      await loadContext().catch(() => {});
-    } finally {
-      locationMoveBusy = false;
-      if (button && originalHtml) {
-        button.innerHTML = originalHtml;
-        button.disabled = false;
-      }
-      shell.setImageLoading(false, "auto");
-      renderLocationMovePanel(currentContext);
-      renderLocationServicePanel(currentContext);
-    }
-  }
-
-  async function selectLocationService(serviceId, button = null) {
-    if (!serviceId || locationServiceBusy) return;
-    locationServiceBusy = true;
-    const originalHtml = button?.innerHTML;
-    if (button) {
-      button.disabled = true;
-      button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>移動中...';
-    }
-    shell.setImageLoading(true, "auto");
-    try {
-      const result = await LiveChatApi.selectLocationService(sessionId, serviceId, {
-        size: imageForm?.size?.value || "1536x1024",
-        quality: imageForm?.quality?.value || "low",
-      });
-      if (result?.context) {
-        applyContext(result.context);
-      } else {
-        await loadContext();
-      }
-      locationMoveVisible = false;
-      selectedLocationMoveId = null;
-      await capturePlayerReactionIfEnabled();
-      if (result?.image_generation_error) {
-        NovelUI.toast(`サービスへ移動しました。画像生成は失敗しました: ${result.image_generation_error}`, "warning");
-      } else {
-        NovelUI.toast("サービスへ移動しました。");
-      }
-    } catch (error) {
-      NovelUI.toast(error.message || "サービス移動に失敗しました。", "danger");
-      await loadContext().catch(() => {});
-    } finally {
-      locationServiceBusy = false;
-      if (button && originalHtml) {
-        button.innerHTML = originalHtml;
-        button.disabled = false;
-      }
-      shell.setImageLoading(false, "auto");
-      renderLocationMovePanel(currentContext);
-      renderLocationServicePanel(currentContext);
-    }
   }
 
   function renderLccdPanel() {
@@ -1941,7 +1003,7 @@
   }
 
   function currentModeBadgeText() {
-    if (photoModeActive) return "撮影モード";
+    if (photoModeController.isActive()) return "撮影モード";
     if (conversationModeActive) return "会話モード";
     if (isCurrentLocationLccd()) return "お着替えモード";
     return "";
@@ -1952,8 +1014,7 @@
   }
 
   function refreshComposePlaceholder() {
-    if (!composeInput) return;
-    composeInput.placeholder = photoModeActive ? composePlaceholders.photo : composePlaceholders.chat;
+    composerController?.refreshPlaceholder();
   }
 
   function isCurrentLocationLccd() {
@@ -1988,40 +1049,10 @@
   async function generateLccdCostume() {
     NovelUI.toast("チャットルーム内での衣装生成は廃止されました。クローゼットで衣装を作成してください。", "warning");
   }
-  function setPhotoModeActive(active) {
-    if (active && !canUsePhotoMode()) {
-      photoModeActive = false;
-      updatePhotoModeAvailability(currentContext);
-      refreshComposePlaceholder();
-      NovelUI.toast("撮影モードは好感度100クリア後に開放されます。", "warning");
-      return;
-    }
-    photoModeActive = active;
-    if (active) {
-      conversationModeActive = false;
-      conversationModeButton?.classList.toggle("is-active", false);
-      conversationModeButton?.setAttribute("aria-pressed", "false");
-      conversationModeButton?.setAttribute("title", "会話モード");
-      conversationModeButton?.setAttribute("aria-label", "会話モード");
-    }
-    if (!togglePhotoModeButton) return;
-    togglePhotoModeButton.classList.toggle("is-active", active);
-    togglePhotoModeButton.setAttribute("aria-pressed", active ? "true" : "false");
-    togglePhotoModeButton.setAttribute("title", active ? "撮影モード中" : "撮影モード");
-    togglePhotoModeButton.setAttribute("aria-label", active ? "撮影モード中" : "撮影モード");
-    updatePhotoModeAvailability(currentContext);
-    refreshModeBadge();
-    refreshComposePlaceholder();
-  }
-
-  function setConversationModeActive(active) {
+  function setConversationModeActive(active, { keepPhotoMode = false } = {}) {
     conversationModeActive = active;
-    if (active) {
-      photoModeActive = false;
-      togglePhotoModeButton?.classList.toggle("is-active", false);
-      togglePhotoModeButton?.setAttribute("aria-pressed", "false");
-      togglePhotoModeButton?.setAttribute("title", "撮影モード");
-      togglePhotoModeButton?.setAttribute("aria-label", "撮影モード");
+    if (active && !keepPhotoMode) {
+      photoModeController.setActive(false, { silent: true });
     }
     if (!conversationModeButton) return;
     conversationModeButton.classList.toggle("is-active", active);
@@ -2030,50 +1061,6 @@
     conversationModeButton.setAttribute("aria-label", active ? "会話モード中" : "会話モード");
     refreshModeBadge();
     refreshComposePlaceholder();
-  }
-
-  function setPhotoModeLoading(active) {
-    photoModeBusy = active;
-    if (!togglePhotoModeButton) return;
-    togglePhotoModeButton.disabled = active || !canUsePhotoMode();
-    togglePhotoModeButton.innerHTML = active
-      ? '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>'
-      : stageActionIcons.photoMode;
-  }
-
-  async function generatePhotoModeShoot(promptText, poseStyle = "") {
-    if (photoModeBusy) return;
-    if (!canUsePhotoMode()) {
-      NovelUI.toast("撮影モードは好感度100クリア後に開放されます。", "warning");
-      setConversationModeActive(true);
-      return;
-    }
-    promptText = String(promptText || "").trim();
-    if (!promptText) {
-      NovelUI.toast("撮影したいポーズや構図を入力してください。", "warning");
-      return;
-    }
-    setPhotoModeLoading(true);
-    shell.setImageLoading(true, "auto");
-    try {
-      const result = await LiveChatApi.generatePhotoModeShoot(sessionId, {
-        prompt_text: promptText,
-        pose_style: poseStyle,
-        photo_size: imageForm?.size?.value || "1536x1024",
-        quality: imageForm?.quality?.value || "low",
-      });
-      if (result?.context) {
-        applyContext(result.context);
-      } else {
-        await loadContext();
-      }
-    } catch (error) {
-      NovelUI.toast(error.message || "撮影に失敗しました。", "danger");
-      await loadContext().catch(() => {});
-    } finally {
-      setPhotoModeLoading(false);
-      shell.setImageLoading(false, "auto");
-    }
   }
 
   function setSceneChoiceLoading(active, activeButton = null) {
@@ -2089,95 +1076,10 @@
     });
   }
 
-  composeForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    clearIdleTalkTimer();
-    const rawMessage = composeForm.message_text.value.trim();
-    let handledBySpecialMode = false;
-    try {
-      if (!rawMessage) {
-        NovelUI.toast("送信するメッセージを入力するか、メッセージを作成ボタンで代理文を作成してください。", "warning");
-        composeForm.message_text.focus();
-        scheduleIdleTalk();
-        return;
-      }
-      shell.setReplyLoading(true, currentContext);
-      if (photoModeActive) {
-        await generatePhotoModeShoot(rawMessage);
-        handledBySpecialMode = true;
-      } else {
-        const result = await LiveChatApi.postMessage(sessionId, {
-          message_text: rawMessage,
-          auto_reply: true,
-          size: imageForm?.size?.value || "1536x1024",
-          quality: imageForm?.quality?.value || "low",
-          skip_auto_image: true,
-        });
-        if (result?.new_letter) {
-          NovelUI.toast("\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304b\u3089\u30e1\u30fc\u30eb\u304c\u5c4a\u304d\u307e\u3057\u305f\u3002");
-          NovelUI.refreshLetterBadge?.();
-        }
-        playAffinityFeedback(result?.affinity_feedback);
-        shell.setReplyLoading(false, currentContext, { render: false });
-        await loadContext();
-        triggerReplyEffect(result?.reply_effect);
-        await capturePlayerReactionIfEnabled();
-        if (result?.deferred_processing) {
-          window.setTimeout(() => {
-            NovelUI.refreshLetterBadge?.();
-          }, 3500);
-        }
-      }
-      composeForm.message_text.value = "";
-      idleTalksSincePlayerInput = 0;
-      scheduleIdleTalk();
-      if (!handledBySpecialMode) {
-        NovelUI.toast("\u30e1\u30c3\u30bb\u30fc\u30b8\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f\u3002");
-      }
-    } catch (error) {
-      NovelUI.toast(error.message || "\u30e1\u30c3\u30bb\u30fc\u30b8\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
-    } finally {
-      shell.setReplyLoading(false, currentContext);
-    }
-  });
-
-  composeInput?.addEventListener("input", () => {
-    idleTalksSincePlayerInput = 0;
-    scheduleIdleTalk();
-  });
-
-  composeInput?.addEventListener("focus", () => {
-    scheduleIdleTalk();
-  });
-
-  proxyMessageButton?.addEventListener("click", async () => {
-    const originalText = proxyMessageButton.textContent;
-    try {
-      proxyMessageButton.disabled = true;
-      proxyMessageButton.textContent = "作成中...";
-      const proxy = await LiveChatApi.generateProxyPlayerMessage(sessionId, {
-        purpose: photoModeActive ? "photo_mode" : "chat",
-      });
-      composeForm.message_text.value = proxy?.message_text || "";
-      idleTalksSincePlayerInput = 0;
-      scheduleIdleTalk();
-      composeForm.message_text.focus();
-      NovelUI.toast(photoModeActive
-        ? "撮影用プロンプトを作成しました。内容を確認して送信してください。"
-        : "代理プレイヤーのメッセージを作成しました。内容を確認して送信してください。");
-    } catch (error) {
-      NovelUI.toast(error.message || "代理メッセージの作成に失敗しました。", "danger");
-    } finally {
-      proxyMessageButton.disabled = false;
-      proxyMessageButton.textContent = originalText;
-    }
-  });
-
   setPanelExpanded(galleryCard, galleryBody, galleryToggleButton, false);
-  setPanelExpanded(shortStoryCard, shortStoryBodyPanel, shortStoryToggleButton, false);
+  composerController.bind();
+  shortStoryPanel.bind();
   galleryToggleButton?.addEventListener("click", () => togglePanel(galleryCard, galleryBody, galleryToggleButton));
-  shortStoryToggleButton?.addEventListener("click", () => togglePanel(shortStoryCard, shortStoryBodyPanel, shortStoryToggleButton));
-  savedShortStoryList?.addEventListener("click", showSavedShortStory);
 
   costumeRoomController = LiveChatCostumeRoom.createCostumeRoomController({
     api: LiveChatApi,
@@ -2222,61 +1124,10 @@
     });
   });
 
-  toggleComposeButton?.addEventListener("click", () => {
-    setComposeVisible(!composeVisible);
-  });
-
-  toggleLocationMoveButton?.addEventListener("click", () => {
-    locationMoveVisible = !locationMoveVisible;
-    if (!locationMoveVisible) selectedLocationMoveId = null;
-    renderLocationMovePanel(currentContext);
-    renderLocationServicePanel(currentContext);
-  });
-
-  toggleInventoryButton?.addEventListener("click", (event) => {
-    event.stopPropagation();
-    setInventoryVisible(!inventoryVisible);
-  });
-
-  inventoryPanel?.addEventListener("click", (event) => {
-    if (event.target.closest("#liveChatInventoryCloseButton")) {
-      event.preventDefault();
-      event.stopPropagation();
-      setInventoryVisible(false);
-      return;
-    }
-    event.stopPropagation();
-  });
-
-  inventoryCloseButton?.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setInventoryVisible(false);
-  });
-
-  inventoryGenerateButton?.addEventListener("click", generateInventoryItem);
-
-  selectedImagePanel?.closest(".live-chat-stage")?.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-reply-effect-image]");
-    if (!button) return;
-    event.preventDefault();
-    generateReplyEffectImage();
-  });
-
-  characterGuideList?.addEventListener("click", (event) => {
-    const promptButton = event.target.closest("[data-character-guide-prompt]");
-    if (promptButton) {
-      sendCharacterGuidePrompt(promptButton.dataset.characterGuidePrompt || "");
-      return;
-    }
-    const toggleButton = event.target.closest("[data-character-guide-toggle]");
-    if (!toggleButton) return;
-    const item = toggleButton.closest(".live-chat-character-guide-item");
-    if (!item) return;
-    const isOpen = !item.classList.contains("is-open");
-    item.classList.toggle("is-open", isOpen);
-    toggleButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
-  });
+  characterGuideController.bind();
+  replyEffectsController.bind();
+  inventoryController.bind();
+  locationController.bind();
 
   intelRail?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-target-character-id]");
@@ -2284,101 +1135,25 @@
     revealCharacterIntelHint(button);
   });
 
-  inventoryList?.addEventListener("dragstart", (event) => {
-    const itemButton = event.target.closest("[data-inventory-item-id]");
-    if (!itemButton) return;
-    event.dataTransfer.setData("text/plain", itemButton.dataset.inventoryItemId);
-    event.dataTransfer.effectAllowed = "move";
-  });
-
-  selectedImagePanel?.addEventListener("dragover", (event) => {
-    if (!event.dataTransfer.types.includes("text/plain")) return;
-    event.preventDefault();
-    selectedImagePanel.classList.add("is-inventory-dragover");
-  });
-
-  selectedImagePanel?.addEventListener("dragleave", () => {
-    selectedImagePanel.classList.remove("is-inventory-dragover");
-  });
-
-  selectedImagePanel?.addEventListener("drop", async (event) => {
-    const itemId = Number(event.dataTransfer.getData("text/plain") || 0);
-    if (!itemId) return;
-    event.preventDefault();
-    selectedImagePanel.classList.remove("is-inventory-dragover");
-    await giveInventoryItem(itemId);
-  });
-
-  locationMovePanel?.addEventListener("click", async (event) => {
-    event.stopPropagation();
-    const closeButton = event.target.closest("[data-location-move-close]");
-    if (closeButton) {
-      locationMoveVisible = false;
-      selectedLocationMoveId = null;
-      renderLocationMovePanel(currentContext);
-      renderLocationServicePanel(currentContext);
-      return;
-    }
-    const selectButton = event.target.closest("[data-location-select-id]");
-    if (selectButton) {
-      const id = Number(selectButton.dataset.locationSelectId || 0);
-      selectedLocationMoveId = selectedLocationMoveId === id ? null : id;
-      renderLocationMovePanel(currentContext);
-      renderLocationServicePanel(currentContext);
-      return;
-    }
-    const finalButton = event.target.closest("[data-location-move-final-id]");
-    if (finalButton) {
-      await moveToLocation(Number(finalButton.dataset.locationMoveFinalId || 0), finalButton);
-      return;
-    }
-    const serviceButton = event.target.closest("[data-location-service-id]");
-    if (serviceButton) {
-      await selectLocationService(Number(serviceButton.dataset.locationServiceId || 0), serviceButton);
-    }
-  });
-
-  locationServicePanel?.addEventListener("click", async (event) => {
-    event.stopPropagation();
-    const button = event.target.closest("[data-location-service-id]");
-    if (!button) return;
-    await selectLocationService(Number(button.dataset.locationServiceId || 0), button);
-  });
-
   toggleLccdButton?.addEventListener("click", () => {
-    if (!conversationModeActive && !photoModeActive && isCurrentLocationLccd()) {
-      composeForm?.message_text?.focus();
+    if (!conversationModeActive && !photoModeController.isActive() && isCurrentLocationLccd()) {
+      composerController?.focus();
       return;
     }
     setConversationModeActive(false);
-    setPhotoModeActive(false);
+    photoModeController.setActive(false, { silent: true });
     refreshModeBadge();
     enterLccdRoom();
   });
 
   conversationModeButton?.addEventListener("click", () => {
-    setPhotoModeActive(false);
+    photoModeController.setActive(false, { silent: true });
     setConversationModeActive(true);
     NovelUI.toast("会話モードです。通常どおり会話しながら進行します。");
-    composeForm?.message_text?.focus();
+    composerController?.focus();
   });
 
-  togglePhotoModeButton?.addEventListener("click", () => {
-    if (!canUsePhotoMode()) {
-      NovelUI.toast("撮影モードは好感度100クリア後に開放されます。", "warning");
-      return;
-    }
-    setConversationModeActive(false);
-    setPhotoModeActive(!photoModeActive);
-    if (!photoModeActive) {
-      setConversationModeActive(true);
-    }
-    refreshModeBadge();
-    NovelUI.toast(photoModeActive
-      ? "撮影モードです。ポーズや構図を書いて送信してください。"
-      : "撮影モードを解除しました。");
-    composeForm?.message_text?.focus();
-  });
+  photoModeController.bind();
 
   lccdCloseButton?.addEventListener("click", () => {
     lccdVisible = false;
@@ -2437,16 +1212,7 @@
     }
   });
 
-  document.addEventListener("click", (event) => {
-    if (!locationMoveVisible) return;
-    const target = event.target;
-    if (locationMovePanel?.contains(target) || toggleLocationMoveButton?.contains(target)) return;
-    closeLocationMovePanel();
-  });
-
   shell.initialize();
-  setComposeVisible(true);
-  refreshComposePlaceholder();
 
   loadDefaultImageSettings().then(loadContext).catch((error) => {
     NovelUI.toast(error.message || "\u30e9\u30a4\u30d6\u30c1\u30e3\u30c3\u30c8\u753b\u9762\u306e\u521d\u671f\u5316\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
