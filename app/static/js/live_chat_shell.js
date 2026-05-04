@@ -68,8 +68,12 @@
     function setImageLoading(active, mode = "generate") {
       state.imageLoading = active;
       const loadingLabel = mode === "regenerate"
-        ? "\u3082\u3046\u4e00\u679a\u3001\u9b45\u305b\u5834\u3092\u4ed5\u7acb\u3066\u4e2d..."
-        : (mode === "auto" ? "\u6b21\u306e\u5834\u9762\u3092\u30c9\u30e9\u30de\u30c1\u30c3\u30af\u306b\u64ae\u5f71\u4e2d..." : "\u3068\u3063\u3066\u304a\u304d\u306e\u4e00\u679a\u3092\u751f\u6210\u4e2d...");
+        ? "\u3068\u304d\u3081\u304d\u518d\u30c1\u30e3\u30fc\u30b8\u4e2d..."
+        : (
+          mode === "ending"
+            ? "\u30a8\u30f3\u30c7\u30a3\u30f3\u30b0\u6e96\u5099\u4e2d..."
+            : (mode === "auto" ? "\u30b7\u30e3\u30c3\u30bf\u30fc\u30c1\u30e3\u30f3\u30b9\u63a5\u8fd1\u4e2d..." : "\u3068\u304d\u3081\u304d\u30c1\u30e3\u30fc\u30b8\u4e2d...")
+        );
       if (generateImageButton) {
         generateImageButton.disabled = active;
         generateImageButton.innerHTML = active
@@ -89,8 +93,10 @@
         frame.classList.toggle("is-loading", active);
         if (active) {
           frame.dataset.loadingLabel = loadingLabel;
+          frame.dataset.loadingMode = mode || "generate";
         } else {
           delete frame.dataset.loadingLabel;
+          delete frame.dataset.loadingMode;
         }
       }
     }

@@ -1995,8 +1995,10 @@ class LiveChatConversationService:
             context = self._context_provider(session_id)
         auto_reply = str(payload.get("auto_reply", "true")).lower() not in {"0", "false", "no", "off"}
         assistant_message = None
+        reply_effect = None
         if auto_reply:
             reply = text_support.generate_reply(self._text_ai_client, context, user_message.message_text)
+            reply_effect = reply.get("reply_effect") if isinstance(reply.get("reply_effect"), dict) else None
             assistant_message = self._chat_message_service.create_message(
                 session_id,
                 {
@@ -2064,6 +2066,7 @@ class LiveChatConversationService:
             "deferred_letter": deferred_letter if not defer_post_processing else False,
             "deferred_processing": deferred_processing,
             "affinity_feedback": evaluation_result.get("affinity_feedback") if isinstance(evaluation_result, dict) else [],
+            "reply_effect": reply_effect,
         }
 
     def generate_player_proxy_message(self, session_id: int, payload: dict | None = None):

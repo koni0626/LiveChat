@@ -61,12 +61,14 @@
   const cameraStatusText = document.getElementById("liveChatCameraStatusText");
   const cameraVideo = document.getElementById("liveChatCameraVideo");
   const cameraCanvas = document.getElementById("liveChatCameraCanvas");
-  const shortStoryButton = document.getElementById("liveChatGenerateShortStoryButton");
-  const shortStoryToneSelect = document.getElementById("liveChatShortStoryToneSelect");
-  const shortStoryLengthSelect = document.getElementById("liveChatShortStoryLengthSelect");
-  const shortStoryInstructionInput = document.getElementById("liveChatShortStoryInstructionInput");
-  const shortStoryImagesCheckbox = document.getElementById("liveChatShortStoryImagesCheckbox");
-  const saveShortStoryButton = document.getElementById("liveChatSaveShortStoryButton");
+  const galleryCard = document.getElementById("liveChatGalleryCard");
+  const galleryBody = document.getElementById("liveChatGalleryBody");
+  const galleryToggleButton = document.getElementById("liveChatGalleryToggleButton");
+  const galleryCount = document.getElementById("liveChatGalleryCount");
+  const shortStoryCard = document.getElementById("liveChatShortStoryCard");
+  const shortStoryBodyPanel = document.getElementById("liveChatShortStoryBodyPanel");
+  const shortStoryToggleButton = document.getElementById("liveChatShortStoryToggleButton");
+  const shortStoryCount = document.getElementById("liveChatShortStoryCount");
   const shortStoryResult = document.getElementById("liveChatShortStoryResult");
   const savedShortStories = document.getElementById("liveChatSavedShortStories");
   const savedShortStoryList = document.getElementById("liveChatSavedShortStoryList");
@@ -105,6 +107,9 @@
   const lastAffinityScores = new Map();
   const affinityRewardClaiming = new Set();
   let currentShortStory = null;
+  const characterMoodState = new Map();
+  let latestReplyVisualMomentHint = "";
+  let replyEffectTimer = null;
   const composePlaceholders = {
     chat: "メッセージを入力。メッセージを作成ボタンで代理メッセージも作れます。",
     photo: "例: ネオンの逆光を背に少し振り返り、こちらへ視線を向ける。背景を大きくぼかした縦構図で、Xで映える一枚にする。",
@@ -290,6 +295,32 @@
     onGiftInteractionChange: () => {},
   });
 
+  function setPanelExpanded(card, body, button, expanded) {
+    if (!card || !body || !button) return;
+    card.classList.toggle("is-collapsed", !expanded);
+    body.hidden = !expanded;
+    button.setAttribute("aria-expanded", expanded ? "true" : "false");
+    const label = button.querySelector("span");
+    if (label) label.textContent = expanded ? "閉じる" : "開く";
+  }
+
+  function togglePanel(card, body, button) {
+    setPanelExpanded(card, body, button, card?.classList.contains("is-collapsed"));
+  }
+
+  function updateGalleryCount(images) {
+    if (!galleryCount) return;
+    const count = Array.isArray(images) ? images.length : 0;
+    galleryCount.textContent = `${count}枚`;
+  }
+
+  function updateShortStoryCount(stories) {
+    if (!shortStoryCount) return;
+    const count = Array.isArray(stories) ? stories.length : 0;
+    shortStoryCount.textContent = count ? `${count}編 解放済み` : "未解放";
+    shortStoryCard?.classList.toggle("has-ending-bonus", count > 0);
+  }
+
   function applyContext(context) {
     currentContext = context;
     const title = context.session.title || "\u30e9\u30a4\u30d6\u30c1\u30e3\u30c3\u30c8";
@@ -308,6 +339,7 @@
     refreshModeBadge();
     shell.renderMessages(context.messages || [], context);
     shell.renderImageGrid(context.images || []);
+    updateGalleryCount(context.images || []);
     costumeRoomController?.render(context);
     renderSceneChoices(context);
     renderLocationMovePanel(context);
@@ -571,6 +603,347 @@
     }
   }
 
+  function wait(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  function getImageCreatedAtValue(image) {
+    const candidates = [
+      image?.created_at,
+      image?.createdAt,
+      image?.asset?.created_at,
+      image?.asset?.createdAt,
+      image?.state_json?.created_at,
+    ];
+    for (const value of candidates) {
+      const time = Date.parse(value || "");
+      if (Number.isFinite(time)) return time;
+    }
+    const id = Number(image?.id || image?.asset_id || image?.asset?.id || 0);
+    return Number.isFinite(id) && id > 0 ? id : 0;
+  }
+
+  function getEndingStoryImageIds(story) {
+    return new Set(
+      ["opening", "ending"]
+        .map((key) => story?.images?.[key]?.id)
+        .filter(Boolean)
+        .map((id) => String(id))
+    );
+  }
+
+  function getEndingMemoryImages(context, eventImage, excludedImageIds = new Set()) {
+    const eventImageId = String(eventImage?.id || "");
+    const seen = new Set();
+    return (Array.isArray(context?.images) ? context.images : [])
+      .filter((image) => image?.asset?.media_url)
+      .filter((image) => {
+        const id = String(image?.id || image?.asset_id || image?.asset?.media_url || "");
+        if (!id || seen.has(id) || excludedImageIds.has(id) || (eventImageId && id === eventImageId)) return false;
+        seen.add(id);
+        return true;
+      })
+      .sort((left, right) => getImageCreatedAtValue(left) - getImageCreatedAtValue(right));
+  }
+
+  function removeEndingReel() {
+    selectedImagePanel?.querySelectorAll(".live-chat-ending-reel").forEach((item) => item.remove());
+  }
+
+  function removeStageFloatingHearts() {
+    selectedImagePanel?.closest(".live-chat-stage")?.querySelectorAll(".live-chat-affinity-heart").forEach((item) => item.remove());
+  }
+
+  function ensureEndingBlackout() {
+    if (!selectedImagePanel) return null;
+    let blackout = selectedImagePanel.querySelector(".live-chat-ending-blackout");
+    if (!blackout) {
+      blackout = document.createElement("div");
+      blackout.className = "live-chat-ending-blackout";
+      blackout.setAttribute("aria-hidden", "true");
+      selectedImagePanel.appendChild(blackout);
+    }
+    return blackout;
+  }
+
+  async function playEndingBlackoutIn() {
+    const blackout = ensureEndingBlackout();
+    if (!blackout) return null;
+    window.requestAnimationFrame(() => blackout.classList.add("is-visible"));
+    await wait(1350);
+    return blackout;
+  }
+
+  async function revealEndingBlackout(blackout) {
+    if (!blackout) return;
+    blackout.classList.add("is-revealing");
+    blackout.classList.remove("is-visible");
+    await wait(2400);
+    blackout.remove();
+  }
+
+  async function playEndingHeartbeat(blackout) {
+    const target = blackout || ensureEndingBlackout();
+    if (!target) return;
+    target.classList.add("is-visible", "is-heartbeat");
+    if (!target.querySelector(".live-chat-ending-heartbeat")) {
+      const heart = document.createElement("div");
+      heart.className = "live-chat-ending-heartbeat";
+      heart.innerHTML = '<i class="bi bi-heart-fill" aria-hidden="true"></i>';
+      target.appendChild(heart);
+    }
+    await wait(4200);
+    target.classList.remove("is-heartbeat");
+  }
+
+  function splitEndingStoryText(story) {
+    const body = String(story?.body || "").trim();
+    const paragraphs = body
+      .split(/\n{2,}|\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return paragraphs.map((text) => ({ text }));
+  }
+
+  function splitEndingTextUnits(story) {
+    const paragraphs = String(story?.body || "")
+      .split(/\n{2,}|\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const units = [];
+    paragraphs.forEach((paragraph, paragraphIndex) => {
+      const sentences = paragraph.match(/[^。！？!?]+[。！？!?]?/g) || [paragraph];
+      sentences.forEach((sentence, sentenceIndex) => {
+        const text = String(sentence || "").trim();
+        if (text) units.push({ text, paragraphBreak: paragraphIndex > 0 && sentenceIndex === 0 });
+      });
+    });
+    return units;
+  }
+
+  function splitLongEndingUnit(unit, maxLength = 120) {
+    const text = String(unit?.text || "");
+    if (text.length <= maxLength) return [unit];
+    const chunks = [];
+    for (let index = 0; index < text.length; index += maxLength) {
+      chunks.push({
+        text: text.slice(index, index + maxLength),
+        paragraphBreak: index === 0 && Boolean(unit.paragraphBreak),
+      });
+    }
+    return chunks;
+  }
+
+  function paginateEndingStoryText(story, layer) {
+    const fallbackPages = splitEndingStoryText(story);
+    if (!layer || !fallbackPages.length) return fallbackPages;
+    const measure = document.createElement("section");
+    measure.className = "live-chat-ending-story-box is-measuring";
+    measure.innerHTML = "<p></p>";
+    layer.appendChild(measure);
+    const measureText = measure.querySelector("p");
+    const fits = (text) => {
+      measureText.textContent = text;
+      return measure.scrollHeight <= measure.clientHeight + 1;
+    };
+    const units = splitEndingTextUnits(story).flatMap((unit) => splitLongEndingUnit(unit));
+    const pages = [];
+    let current = "";
+    units.forEach((unit) => {
+      const separator = unit.paragraphBreak && current ? "\n\n" : "";
+      const next = current ? `${current}${separator}${unit.text}` : unit.text;
+      if (current && !fits(next)) {
+        pages.push({ text: current });
+        current = unit.text;
+      } else {
+        current = next;
+      }
+      if (current && !fits(current)) {
+        const chunks = splitLongEndingUnit({ text: current }, 80);
+        current = "";
+        chunks.forEach((chunk) => {
+          if (current && !fits(`${current}${chunk.text}`)) {
+            pages.push({ text: current });
+            current = chunk.text;
+          } else {
+            current = `${current}${chunk.text}`;
+          }
+        });
+      }
+    });
+    if (current) pages.push({ text: current });
+    measure.remove();
+    return pages.length ? pages : fallbackPages;
+  }
+
+  function storyImageForPage(story, index, total) {
+    const opening = story?.images?.opening?.asset?.media_url;
+    const ending = story?.images?.ending?.asset?.media_url;
+    if (index >= Math.max(1, Math.floor(total / 2)) && ending) return ending;
+    return opening || ending || "";
+  }
+
+  function waitForEndingStoryAdvance(layer, ms) {
+    return new Promise((resolve) => {
+      let done = false;
+      let timer = null;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timer);
+        layer.removeEventListener("click", finish);
+        resolve();
+      };
+      layer.addEventListener("click", finish);
+      timer = window.setTimeout(finish, ms);
+    });
+  }
+
+  async function typeEndingStoryIntro(layer, title) {
+    const label = "ショートストーリー";
+    const storyTitle = String(title || "ふたりの記憶").trim();
+    layer.innerHTML = `
+      <div class="live-chat-ending-story-intro">
+        <div class="live-chat-ending-story-intro-label"></div>
+        <div class="live-chat-ending-story-intro-title"></div>
+      </div>
+    `;
+    const labelElement = layer.querySelector(".live-chat-ending-story-intro-label");
+    const titleElement = layer.querySelector(".live-chat-ending-story-intro-title");
+    for (let index = 0; index <= label.length; index += 1) {
+      labelElement.textContent = label.slice(0, index);
+      await wait(72);
+    }
+    await wait(260);
+    for (let index = 0; index <= storyTitle.length; index += 1) {
+      titleElement.textContent = storyTitle.slice(0, index);
+      await wait(54);
+    }
+    await waitForEndingStoryAdvance(layer, 1400);
+  }
+
+  async function playEndingShortStory(story) {
+    if (!selectedImagePanel || !story || story.error) return;
+    if (!String(story?.body || "").trim()) return;
+    const layer = document.createElement("div");
+    layer.className = "live-chat-ending-story";
+    layer.setAttribute("aria-hidden", "true");
+    selectedImagePanel.appendChild(layer);
+    const renderPage = (index) => {
+      const page = pages[index] || {};
+      const mediaUrl = storyImageForPage(story, index, pages.length);
+      layer.innerHTML = `
+        ${mediaUrl ? `<img class="live-chat-ending-story-image" src="${NovelUI.escape(mediaUrl)}" alt="">` : ""}
+        <div class="live-chat-ending-story-shade"></div>
+        <section class="live-chat-ending-story-box">
+          ${page.title ? `<h3>${NovelUI.escape(page.title)}</h3>` : ""}
+          ${page.text ? `<p>${NovelUI.escape(page.text)}</p>` : ""}
+        </section>
+      `;
+    };
+    await wait(80);
+    layer.classList.add("is-visible");
+    await typeEndingStoryIntro(layer, story?.title);
+    const pages = paginateEndingStoryText(story, layer);
+    if (!pages.length) {
+      layer.remove();
+      return;
+    }
+    const pageDuration = 60000;
+    for (let index = 0; index < pages.length; index += 1) {
+      renderPage(index);
+      await wait(80);
+      layer.classList.remove("is-turning");
+      await waitForEndingStoryAdvance(layer, pageDuration);
+      if (index < pages.length - 1) {
+        layer.classList.add("is-turning");
+        await wait(520);
+      }
+    }
+    layer.classList.add("is-leaving");
+    await wait(1200);
+    layer.remove();
+  }
+
+  function playEndingMemoryReel(context, eventImage, shortStory) {
+    const images = getEndingMemoryImages(context, eventImage, getEndingStoryImageIds(shortStory));
+    if (!selectedImagePanel || !images.length) {
+      return wait(900);
+    }
+    removeEndingReel();
+    removeStageFloatingHearts();
+    const reel = document.createElement("div");
+    reel.className = "live-chat-ending-reel";
+    reel.setAttribute("aria-hidden", "true");
+    reel.innerHTML = `
+      <div class="live-chat-ending-reel-vignette"></div>
+      <div class="live-chat-ending-reel-track">
+        ${images.map((image, index) => `
+          <figure class="live-chat-ending-memory" style="--memory-tilt: ${index % 2 ? "2.2deg" : "-2deg"}">
+            <img src="${NovelUI.escape(image.asset.media_url)}" alt="">
+          </figure>
+        `).join("")}
+      </div>
+    `;
+    selectedImagePanel.appendChild(reel);
+    return new Promise((resolve) => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        reel.classList.add("is-ending-black");
+        window.setTimeout(() => {
+          reel.remove();
+          resolve();
+        }, 1600);
+      };
+      const track = reel.querySelector(".live-chat-ending-reel-track");
+      window.requestAnimationFrame(() => {
+        const stageHeight = Math.max(1, selectedImagePanel.getBoundingClientRect().height);
+        const trackHeight = Math.max(1, track?.scrollHeight || 0);
+        const pixelsPerSecond = 90;
+        const distance = trackHeight + stageHeight;
+        const duration = (distance / pixelsPerSecond) * 1000;
+        reel.style.setProperty("--ending-reel-distance", `${Math.round(distance)}px`);
+        reel.style.setProperty("--ending-reel-duration", `${Math.round(duration)}ms`);
+        reel.classList.add("is-visible");
+        track?.addEventListener("animationend", finish, { once: true });
+        window.setTimeout(finish, duration + 1300);
+      });
+    });
+  }
+
+  function renderEndingFinalImage(result) {
+    const context = result?.context || currentContext;
+    const shouldRestoreBlackout = Boolean(selectedImagePanel?.querySelector(".live-chat-ending-blackout.is-visible"));
+    if (context) applyContext(context);
+    if (result?.event_image) {
+      shell.renderSelectedImage(result.event_image, context || currentContext);
+      const frame = selectedImagePanel?.querySelector(".live-chat-stage-frame");
+      frame?.classList.add("is-ending-final");
+    }
+    shell.renderNovel((context || currentContext)?.messages || [], context || currentContext);
+    if (shouldRestoreBlackout) {
+      ensureEndingBlackout()?.classList.add("is-visible");
+    }
+    scheduleStageActionPosition();
+  }
+
+  async function playAffinityEndingSequence(result) {
+    const context = result?.context || currentContext;
+    shell.setImageLoading(false, "auto");
+    const blackout = await playEndingBlackoutIn();
+    await wait(350);
+    await playEndingMemoryReel(context, result?.event_image, result?.short_story);
+    await playEndingShortStory(result?.short_story);
+    const heartbeatBlackout = selectedImagePanel?.querySelector(".live-chat-ending-blackout.is-visible") || blackout;
+    await playEndingHeartbeat(heartbeatBlackout);
+    renderEndingFinalImage(result);
+    const finalBlackout = selectedImagePanel?.querySelector(".live-chat-ending-blackout.is-visible") || blackout;
+    await wait(180);
+    await revealEndingBlackout(finalBlackout);
+  }
+
   function playAffinityFeedback(feedback) {
     const events = Array.isArray(feedback) ? feedback : [];
     events.forEach((event) => {
@@ -589,20 +962,17 @@
     const key = String(characterId || "");
     if (!key || affinityRewardClaiming.has(key)) return;
     affinityRewardClaiming.add(key);
-    shell.setImageLoading(true, "auto");
+    shell.setImageLoading(true, "ending");
     try {
       const result = await LiveChatApi.claimAffinityReward(sessionId, characterId);
       triggerAffinityMaxHeartBurst();
-      window.setTimeout(() => {
-        if (result?.context) applyContext(result.context);
-        if (result?.event_image) shell.renderSelectedImage(result.event_image, result.context || currentContext);
-      }, 1250);
+      await playAffinityEndingSequence(result);
       if (result?.letter) NovelUI.refreshLetterBadge?.();
       NovelUI.toast("好感度100達成。衣装チケットを1枚獲得しました。");
     } catch (error) {
       NovelUI.toast(error.message || "好感度100報酬を受け取れませんでした。", "danger");
     } finally {
-      window.setTimeout(() => shell.setImageLoading(false, currentContext), 1300);
+      shell.setImageLoading(false, currentContext);
       affinityRewardClaiming.delete(key);
     }
   }
@@ -611,20 +981,17 @@
     if (!LiveChatApi.debugAffinityClear) return;
     const password = window.prompt("DEBUG password");
     if (!password) return;
-    shell.setImageLoading(true, "auto");
+    shell.setImageLoading(true, "ending");
     try {
       const result = await LiveChatApi.debugAffinityClear(sessionId, { password });
       triggerAffinityMaxHeartBurst();
-      window.setTimeout(() => {
-        if (result?.context) applyContext(result.context);
-        if (result?.event_image) shell.renderSelectedImage(result.event_image, result.context || currentContext);
-      }, 1250);
+      await playAffinityEndingSequence(result);
       if (result?.letter) NovelUI.refreshLetterBadge?.();
       NovelUI.toast("デバッグ: 好感度100クリアにしました。");
     } catch (error) {
       NovelUI.toast(error.message || "デバッグクリアに失敗しました。", "danger");
     } finally {
-      window.setTimeout(() => shell.setImageLoading(false, currentContext), 1300);
+      shell.setImageLoading(false, currentContext);
     }
   }
 
@@ -778,6 +1145,7 @@
       const facts = characterGuideFacts(character);
       const memory = memoryMap[String(character.id)] || {};
       const affinityLabel = memory.affinity_label || "";
+      const mood = characterMoodState.get(name) || characterMoodState.get(character.nickname || "") || null;
       const prompts = characterGuidePrompts(character);
       return `
         <article class="live-chat-character-guide-item ${index === 0 ? "is-open" : ""}" data-character-guide-id="${Number(character.id || 0)}">
@@ -792,6 +1160,7 @@
             <i class="bi bi-chevron-down live-chat-character-guide-caret" aria-hidden="true"></i>
           </button>
           <div class="live-chat-character-guide-body">
+            ${mood ? `<div class="live-chat-character-guide-mood is-${NovelUI.escape(mood.emotion || "neutral")}"><i class="bi bi-activity" aria-hidden="true"></i><span>${NovelUI.escape(mood.label || "反応している")}</span></div>` : ""}
             ${facts.length ? `<div class="live-chat-character-guide-facts">${facts.map((fact) => `<span>${NovelUI.escape(fact)}</span>`).join("")}</div>` : ""}
             <div class="live-chat-character-guide-prompts">
               ${prompts.map((prompt) => `
@@ -822,6 +1191,140 @@
       composeForm.requestSubmit();
     } else {
       composeForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    }
+  }
+
+  function normalizeReplyEffect(effect) {
+    if (!effect || typeof effect !== "object") return null;
+    const allowed = new Set(["neutral", "happy", "shy", "thinking", "surprised", "sad", "angry", "excited", "lonely", "relieved"]);
+    const emotion = allowed.has(String(effect.emotion || "").toLowerCase())
+      ? String(effect.emotion).toLowerCase()
+      : "neutral";
+    const intensity = Math.max(1, Math.min(5, Number(effect.reaction_intensity || 2)));
+    return {
+      speakerName: String(effect.speaker_name || "").trim(),
+      emotion,
+      intensity,
+      moodLabel: String(effect.mood_label || "").trim() || "反応している",
+      visualMomentHint: String(effect.visual_moment_hint || "").trim(),
+      showNovelSpotlight: Boolean(effect.show_novel_spotlight),
+      suggestImage: Boolean(effect.suggest_image),
+    };
+  }
+
+  function replyEffectIcon(emotion) {
+    return {
+      happy: "bi-stars",
+      shy: "bi-heart-fill",
+      thinking: "bi-three-dots",
+      surprised: "bi-exclamation-lg",
+      sad: "bi-cloud-drizzle",
+      angry: "bi-lightning-charge-fill",
+      excited: "bi-stars",
+      lonely: "bi-moon-stars",
+      relieved: "bi-brightness-alt-high",
+      neutral: "bi-chat-heart",
+    }[emotion] || "bi-chat-heart";
+  }
+
+  function ensureReplyEffectLayer() {
+    const stage = selectedImagePanel?.closest(".live-chat-stage");
+    if (!stage) return null;
+    let layer = stage.querySelector(".live-chat-reply-effect");
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.className = "live-chat-reply-effect";
+      stage.appendChild(layer);
+    }
+    return layer;
+  }
+
+  function triggerReplyParticles(emotion, intensity) {
+    const stage = selectedImagePanel?.closest(".live-chat-stage");
+    if (!stage) return;
+    const count = Math.max(4, Math.min(14, intensity * 2 + 2));
+    for (let index = 0; index < count; index += 1) {
+      const particle = document.createElement("span");
+      particle.className = `live-chat-reply-particle is-${emotion}`;
+      particle.innerHTML = `<i class="bi ${replyEffectIcon(emotion)}" aria-hidden="true"></i>`;
+      particle.style.setProperty("--particle-x", `${Math.round((Math.random() - 0.5) * 260)}px`);
+      particle.style.setProperty("--particle-y", `${Math.round(50 + Math.random() * 160)}px`);
+      particle.style.setProperty("--particle-delay", `${index * 55}ms`);
+      particle.style.setProperty("--particle-scale", `${0.78 + Math.random() * 0.75}`);
+      stage.appendChild(particle);
+      window.setTimeout(() => particle.remove(), 1450 + index * 55);
+    }
+  }
+
+  function triggerReplyEffect(effect) {
+    const normalized = normalizeReplyEffect(effect);
+    if (!normalized) return;
+    const key = normalized.speakerName || activeCharacters()[0]?.name || "";
+    if (key) {
+      characterMoodState.set(key, {
+        emotion: normalized.emotion,
+        label: normalized.moodLabel,
+      });
+      renderCharacterGuide(currentContext);
+    }
+    const stage = selectedImagePanel?.closest(".live-chat-stage");
+    if (stage) {
+      stage.classList.remove(
+        "is-reply-happy",
+        "is-reply-shy",
+        "is-reply-thinking",
+        "is-reply-surprised",
+        "is-reply-sad",
+        "is-reply-angry",
+        "is-reply-excited",
+        "is-reply-lonely",
+        "is-reply-relieved",
+        "is-reply-neutral",
+      );
+      stage.classList.add(`is-reply-${normalized.emotion}`);
+      window.setTimeout(() => stage.classList.remove(`is-reply-${normalized.emotion}`), 1400 + normalized.intensity * 260);
+    }
+    const layer = ensureReplyEffectLayer();
+    if (layer) {
+      latestReplyVisualMomentHint = normalized.visualMomentHint;
+      layer.className = `live-chat-reply-effect is-visible is-${normalized.emotion}`;
+      layer.innerHTML = `
+        <div class="live-chat-reply-effect-badge">
+          <i class="bi ${replyEffectIcon(normalized.emotion)}" aria-hidden="true"></i>
+          <span>${NovelUI.escape(normalized.moodLabel)}</span>
+        </div>
+        ${normalized.suggestImage && normalized.visualMomentHint ? `
+          <button class="live-chat-reply-effect-image" type="button" data-reply-effect-image title="シャッターチャンス" aria-label="シャッターチャンス">
+            <i class="bi bi-camera-fill" aria-hidden="true"></i>
+          </button>
+        ` : ""}
+      `;
+      window.clearTimeout(replyEffectTimer);
+      replyEffectTimer = window.setTimeout(() => {
+        layer.classList.remove("is-visible");
+      }, normalized.suggestImage ? 9000 : 3600 + normalized.intensity * 400);
+    }
+    triggerReplyParticles(normalized.emotion, normalized.intensity);
+    if (normalized.showNovelSpotlight) {
+      const novelBox = document.getElementById("liveChatNovelBox");
+      novelBox?.classList.remove("is-reply-spotlight");
+      window.requestAnimationFrame(() => novelBox?.classList.add("is-reply-spotlight"));
+      window.setTimeout(() => novelBox?.classList.remove("is-reply-spotlight"), 1800);
+    }
+  }
+
+  async function generateReplyEffectImage() {
+    const prompt = String(latestReplyVisualMomentHint || "").trim();
+    if (!prompt) {
+      NovelUI.toast("画像化できる表情メモがありません。", "warning");
+      return;
+    }
+    imageForm.prompt_text.value = prompt;
+    try {
+      await generateSessionImage(false, "auto", { prompt_text: prompt });
+      NovelUI.toast("シャッターチャンスを撮影しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "今の表情の画像化に失敗しました。", "danger");
     }
   }
 
@@ -962,8 +1465,8 @@
       .filter(Boolean);
     shortStoryTitle.textContent = story?.title || "チャットから生まれた短編";
     if (shortStorySynopsis) {
-      shortStorySynopsis.textContent = story?.synopsis || "";
-      shortStorySynopsis.hidden = !story?.synopsis;
+      shortStorySynopsis.textContent = "";
+      shortStorySynopsis.hidden = true;
     }
     shortStoryBody.innerHTML = paragraphs.length
       ? paragraphs.map((line) => `<p>${NovelUI.escape(line)}</p>`).join("")
@@ -978,19 +1481,19 @@
     }
     renderShortStoryImage(shortStoryOpeningImageWrap, shortStoryOpeningImage, story?.images?.opening);
     renderShortStoryImage(shortStoryEndingImageWrap, shortStoryEndingImage, story?.images?.ending);
-    if (saveShortStoryButton) {
-      saveShortStoryButton.disabled = Boolean(story?.saved_at);
-      saveShortStoryButton.textContent = story?.saved_at ? "保存済み" : "保存";
-    }
     shortStoryResult.classList.remove("is-hidden");
   }
 
   function renderSavedShortStories(context) {
     if (!savedShortStories || !savedShortStoryList) return;
     const stories = context?.session?.settings_json?.saved_short_stories;
+    updateShortStoryCount(stories);
     if (!Array.isArray(stories) || !stories.length) {
       savedShortStories.classList.add("is-hidden");
       savedShortStoryList.innerHTML = "";
+      shortStoryResult?.classList.add("is-hidden");
+      currentShortStory = null;
+      setPanelExpanded(shortStoryCard, shortStoryBodyPanel, shortStoryToggleButton, false);
       return;
     }
     savedShortStories.classList.remove("is-hidden");
@@ -1005,6 +1508,11 @@
         </button>
       `;
     }).join("");
+    const latestStory = stories[stories.length - 1];
+    if (latestStory && currentShortStory?.id !== latestStory.id) {
+      renderShortStory(latestStory);
+      setPanelExpanded(shortStoryCard, shortStoryBodyPanel, shortStoryToggleButton, true);
+    }
   }
 
   function renderShortStoryImage(wrap, image, item) {
@@ -1017,56 +1525,6 @@
     }
     image.src = mediaUrl;
     wrap.classList.remove("is-hidden");
-  }
-
-  async function generateShortStory() {
-    if (!shortStoryButton) return;
-    const originalText = shortStoryButton.textContent;
-    const payload = {
-      tone: shortStoryToneSelect?.value || "",
-      length: shortStoryLengthSelect?.value || "",
-      instruction: shortStoryInstructionInput?.value || "",
-      generate_images: shortStoryImagesCheckbox?.checked !== false,
-    };
-    try {
-      shortStoryButton.disabled = true;
-      if (saveShortStoryButton) saveShortStoryButton.disabled = true;
-      shortStoryButton.innerHTML = payload.generate_images
-        ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>本文と画像を作成中...'
-        : '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>作成中...';
-      const story = await LiveChatApi.generateShortStory(sessionId, payload);
-      renderShortStory(story);
-      NovelUI.toast("ショートストーリーを作成しました。");
-    } catch (error) {
-      NovelUI.toast(error.message || "ショートストーリーの作成に失敗しました。", "danger");
-    } finally {
-      shortStoryButton.disabled = false;
-      shortStoryButton.textContent = originalText;
-    }
-  }
-
-  async function saveShortStory() {
-    if (!saveShortStoryButton || !currentShortStory) return;
-    const originalText = saveShortStoryButton.textContent;
-    try {
-      saveShortStoryButton.disabled = true;
-      saveShortStoryButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>保存中...';
-      const result = await LiveChatApi.saveShortStory(sessionId, currentShortStory);
-      currentShortStory = result?.saved_story || currentShortStory;
-      saveShortStoryButton.textContent = "保存済み";
-      if (currentContext) {
-        const settings = currentContext.session.settings_json || {};
-        const saved = Array.isArray(settings.saved_short_stories) ? settings.saved_short_stories : [];
-        settings.saved_short_stories = [...saved, currentShortStory].slice(-20);
-        currentContext.session.settings_json = settings;
-        renderSavedShortStories(currentContext);
-      }
-      NovelUI.toast("ショートストーリーを保存しました。");
-    } catch (error) {
-      saveShortStoryButton.disabled = false;
-      saveShortStoryButton.textContent = originalText;
-      NovelUI.toast(error.message || "ショートストーリーの保存に失敗しました。", "danger");
-    }
   }
 
   function showSavedShortStory(event) {
@@ -1268,6 +1726,7 @@
         shell.renderSelectedImage(generatedImage, currentContext);
         scheduleStageActionPosition();
         shell.renderImageGrid(currentContext.images || []);
+        updateGalleryCount(currentContext.images || []);
       }
       await loadContext();
     } finally {
@@ -1661,6 +2120,7 @@
         playAffinityFeedback(result?.affinity_feedback);
         shell.setReplyLoading(false, currentContext, { render: false });
         await loadContext();
+        triggerReplyEffect(result?.reply_effect);
         await capturePlayerReactionIfEnabled();
         if (result?.deferred_processing) {
           window.setTimeout(() => {
@@ -1713,8 +2173,10 @@
     }
   });
 
-  shortStoryButton?.addEventListener("click", generateShortStory);
-  saveShortStoryButton?.addEventListener("click", saveShortStory);
+  setPanelExpanded(galleryCard, galleryBody, galleryToggleButton, false);
+  setPanelExpanded(shortStoryCard, shortStoryBodyPanel, shortStoryToggleButton, false);
+  galleryToggleButton?.addEventListener("click", () => togglePanel(galleryCard, galleryBody, galleryToggleButton));
+  shortStoryToggleButton?.addEventListener("click", () => togglePanel(shortStoryCard, shortStoryBodyPanel, shortStoryToggleButton));
   savedShortStoryList?.addEventListener("click", showSavedShortStory);
 
   costumeRoomController = LiveChatCostumeRoom.createCostumeRoomController({
@@ -1793,6 +2255,13 @@
   });
 
   inventoryGenerateButton?.addEventListener("click", generateInventoryItem);
+
+  selectedImagePanel?.closest(".live-chat-stage")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-reply-effect-image]");
+    if (!button) return;
+    event.preventDefault();
+    generateReplyEffectImage();
+  });
 
   characterGuideList?.addEventListener("click", (event) => {
     const promptButton = event.target.closest("[data-character-guide-prompt]");

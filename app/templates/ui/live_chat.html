@@ -4,6 +4,11 @@
   <section class="panel-card live-chat-main">
     <div class="panel-head">
       <h3 id="liveChatTitle">ライブチャット</h3>
+      <a class="live-chat-header-points" href="{{ url_for('ui.points_page') }}" title="ポイント購入">
+        <i class="bi bi-gem" aria-hidden="true"></i>
+        <span class="live-chat-header-points-value" data-points-balance>{{ current_user_points_balance if current_user_points_balance is not none else "—" }}</span>
+        <span class="live-chat-header-points-unit">pt</span>
+      </a>
     </div>
 
     <div class="live-chat-stage">
@@ -158,65 +163,62 @@
       </div>
     </section>
 
-    <section class="live-chat-short-story-card" id="liveChatShortStoryCard">
+    <section class="live-chat-gallery-card is-collapsed" id="liveChatGalleryCard">
+      <div class="live-chat-gallery-head">
+        <div>
+          <div class="eyebrow">Gallery</div>
+          <h4>生成画像</h4>
+        </div>
+        <div class="live-chat-gallery-actions">
+          <span class="live-chat-gallery-count" id="liveChatGalleryCount">0枚</span>
+          <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatReloadImagesButton">再読み込み</button>
+          <button class="live-chat-panel-toggle" type="button" id="liveChatGalleryToggleButton" aria-expanded="false" aria-controls="liveChatGalleryBody">
+            <span>開く</span>
+            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      <div class="live-chat-collapsible-body" id="liveChatGalleryBody">
+        <div class="live-chat-image-grid" id="liveChatImageGrid"></div>
+      </div>
+    </section>
+
+    <section class="live-chat-short-story-card is-collapsed" id="liveChatShortStoryCard">
       <div class="live-chat-short-story-head">
         <div>
+          <div class="live-chat-short-story-bonus">Ending Bonus</div>
           <h4>ショートストーリー</h4>
-          <p>作風や追加指示を指定して、現在のチャットログを読み切りの短編にします。</p>
+          <p>好感度100到達時に生成された回想短編を表示します。</p>
         </div>
-        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatGenerateShortStoryButton">短編を作成</button>
+        <div class="live-chat-short-story-actions-head">
+          <span class="live-chat-short-story-count" id="liveChatShortStoryCount">未解放</span>
+          <button class="live-chat-panel-toggle is-neon" type="button" id="liveChatShortStoryToggleButton" aria-expanded="false" aria-controls="liveChatShortStoryBodyPanel">
+            <span>開く</span>
+            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+          </button>
+        </div>
       </div>
-      <div class="live-chat-short-story-controls">
-        <div>
-          <label class="form-label" for="liveChatShortStoryToneSelect">作風</label>
-          <select class="form-select" id="liveChatShortStoryToneSelect">
-            <option value="余韻のあるビジュアルノベル調" selected>おまかせ</option>
-            <option value="会話のテンポがよいギャグ短編。オチや軽いツッコミを入れる">ギャグ</option>
-            <option value="甘さと距離感を大事にしたロマンス寄りの短編">ロマンス</option>
-            <option value="露骨な描写を避け、視線や間、余韻で読ませる官能小説寄りの短編">官能寄り</option>
-            <option value="緊張感と葛藤を強めたシリアスな短編">シリアス</option>
-            <option value="不穏さと余白を残すホラー寄りの短編">ホラー</option>
-          </select>
-        </div>
-        <div>
-          <label class="form-label" for="liveChatShortStoryLengthSelect">本文量</label>
-          <select class="form-select" id="liveChatShortStoryLengthSelect">
-            <option value="800〜1200字">短め</option>
-            <option value="1200〜1800字" selected>標準</option>
-            <option value="1800〜2600字">長め</option>
-          </select>
-        </div>
-        <div class="live-chat-short-story-instruction">
-          <label class="form-label" for="liveChatShortStoryInstructionInput">追加指示</label>
-          <textarea class="form-control" id="liveChatShortStoryInstructionInput" rows="2" placeholder="例: もっとギャグ強め、最後はしっとり終える、凛の照れ隠しを多めにする"></textarea>
-        </div>
-        <label class="live-chat-short-story-image-toggle" for="liveChatShortStoryImagesCheckbox">
-          <input class="form-check-input" id="liveChatShortStoryImagesCheckbox" type="checkbox" checked>
-          <span>オープニング画像とラスト画像も生成する</span>
-        </label>
+      <div class="live-chat-collapsible-body live-chat-short-story-body-panel" id="liveChatShortStoryBodyPanel">
+        <section class="live-chat-saved-short-stories is-hidden" id="liveChatSavedShortStories">
+          <div class="live-chat-saved-short-stories-head">保存済み短編</div>
+          <div class="live-chat-saved-short-story-list" id="liveChatSavedShortStoryList"></div>
+        </section>
+        <article class="live-chat-short-story-result is-hidden" id="liveChatShortStoryResult" aria-live="polite">
+          <div class="live-chat-short-story-meta" id="liveChatShortStoryMeta"></div>
+          <h5 id="liveChatShortStoryTitle"></h5>
+          <p class="live-chat-short-story-synopsis" id="liveChatShortStorySynopsis"></p>
+          <figure class="live-chat-short-story-image is-hidden" id="liveChatShortStoryOpeningImageWrap">
+            <img id="liveChatShortStoryOpeningImage" alt="ショートストーリーのオープニング画像">
+            <figcaption>オープニング画像</figcaption>
+          </figure>
+          <div class="live-chat-short-story-body" id="liveChatShortStoryBody"></div>
+          <figure class="live-chat-short-story-image is-hidden" id="liveChatShortStoryEndingImageWrap">
+            <img id="liveChatShortStoryEndingImage" alt="ショートストーリーのラスト画像">
+            <figcaption>ラスト画像</figcaption>
+          </figure>
+          <p class="live-chat-short-story-afterword" id="liveChatShortStoryAfterword"></p>
+        </article>
       </div>
-      <section class="live-chat-saved-short-stories is-hidden" id="liveChatSavedShortStories">
-        <div class="live-chat-saved-short-stories-head">保存済み短編</div>
-        <div class="live-chat-saved-short-story-list" id="liveChatSavedShortStoryList"></div>
-      </section>
-      <article class="live-chat-short-story-result is-hidden" id="liveChatShortStoryResult" aria-live="polite">
-        <div class="live-chat-short-story-meta" id="liveChatShortStoryMeta"></div>
-        <h5 id="liveChatShortStoryTitle"></h5>
-        <p class="live-chat-short-story-synopsis" id="liveChatShortStorySynopsis"></p>
-        <figure class="live-chat-short-story-image is-hidden" id="liveChatShortStoryOpeningImageWrap">
-          <img id="liveChatShortStoryOpeningImage" alt="ショートストーリーのオープニング画像">
-          <figcaption>オープニング画像</figcaption>
-        </figure>
-        <div class="live-chat-short-story-body" id="liveChatShortStoryBody"></div>
-        <figure class="live-chat-short-story-image is-hidden" id="liveChatShortStoryEndingImageWrap">
-          <img id="liveChatShortStoryEndingImage" alt="ショートストーリーのラスト画像">
-          <figcaption>ラスト画像</figcaption>
-        </figure>
-        <p class="live-chat-short-story-afterword" id="liveChatShortStoryAfterword"></p>
-        <div class="live-chat-short-story-actions">
-          <button class="btn btn-sm btn-dark" type="button" id="liveChatSaveShortStoryButton" disabled>保存</button>
-        </div>
-      </article>
     </section>
 
     <form class="live-chat-compose" id="liveChatComposeForm">
@@ -321,9 +323,7 @@
     </section>
     <div class="panel-head">
       <h3>画像設定</h3>
-      <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatReloadImagesButton">再読み込み</button>
     </div>
-
     <form class="vstack gap-2 mb-3" id="liveChatImageForm">
       <div>
         <label class="form-label" for="liveChatPromptInput">画像プロンプト</label>
@@ -359,8 +359,6 @@
       </div>
       <button class="btn btn-outline-dark" type="submit">画像をアップロード</button>
     </form>
-
-    <div class="live-chat-image-grid" id="liveChatImageGrid"></div>
   </aside>
 </section>
 

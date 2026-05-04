@@ -1023,6 +1023,12 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         "あなたはライブ形式のビジュアルノベル会話の返信生成担当です。",
         "JSONオブジェクトのみを返してください。",
         "必須キー: speaker_name, message_text。",
+        "Optional keys for UI staging: emotion, reaction_intensity, mood_label, visual_moment_hint, show_novel_spotlight, suggest_image.",
+        "emotion must be one of: neutral, happy, shy, thinking, surprised, sad, angry, excited, lonely, relieved.",
+        "reaction_intensity must be an integer from 1 to 5.",
+        "mood_label should be a short Japanese state shown in the UI, such as 照れている, 考え中, うれしそう.",
+        "visual_moment_hint should describe the character's visible expression, gaze, posture, hands, distance, and atmosphere for a possible image.",
+        "Set suggest_image true only when this reply has a visually memorable emotional beat.",
         "speaker_name はアクティブなキャラクターのいずれかにしてください。",
         "message_text はナレーションではなく、自然な発話1つにしてください。",
         "返信は能動的で、感情があり、キャラクター固有のものにしてください。",
@@ -1198,7 +1204,19 @@ def fallback_reply(context: dict, user_message_text: str) -> dict:
         message = f"{shortened}……それなら、わたしから一つ面白い話を出すね。ここから少し踏み込んでみよう。"
     else:
         message = f"{shortened}……うん、その話は気になる。もう少し聞かせて。"
-    return {"speaker_name": speaker, "message_text": message}
+    return {
+        "speaker_name": speaker,
+        "message_text": message,
+        "reply_effect": {
+            "speaker_name": speaker,
+            "emotion": "happy" if memory_match.get("matched") else "thinking",
+            "reaction_intensity": 3,
+            "mood_label": "うれしそう" if memory_match.get("matched") else "考え中",
+            "visual_moment_hint": f"{speaker}が会話に反応して表情を変える、視線と姿勢が見える印象的な一瞬",
+            "show_novel_spotlight": False,
+            "suggest_image": False,
+        },
+    }
 
 
 def build_input_intent_prompt(context: dict, user_message_text: str) -> str:

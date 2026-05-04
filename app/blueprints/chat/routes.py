@@ -1,10 +1,12 @@
 ﻿import json
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from flask import Blueprint, current_app, request, session
 
 from ...api import ForbiddenError, NotFoundError, UnauthorizedError, ValidationError, json_response
+from ...extensions import db
 from ...models import User
 from ...services.asset_service import AssetService
 from ...services.authorization_service import AuthorizationService
@@ -39,6 +41,42 @@ session_state_service = SessionStateService()
 authorization_service = AuthorizationService()
 user_setting_service = UserSettingService()
 point_billing_service = PointBillingService()
+
+
+def _run_with_app_context(app, callback, *args, **kwargs):
+    with app.app_context():
+        return callback(*args, **kwargs)
+
+
+def _generate_affinity_100_event_image(session_id: int, context: dict, character_id: int):
+    return live_chat_service.generate_image(
+        session_id,
+        {
+            "image_type": "affinity_100_event",
+            "prompt_text": _event_image_prompt(context, character_id),
+            "use_existing_prompt": True,
+            "size": "1536x1024",
+            "quality": "medium",
+        },
+    )
+
+
+def _generate_affinity_100_short_story(session_id: int):
+    short_story = live_chat_service.generate_short_story(
+        session_id,
+        {
+            "tone": "余韻のあるビジュアルノベル調",
+            "length": "900〜1300字",
+            "instruction": "好感度100到達のエンディング直前に流す、二人の関係を振り返る短い回想章としてまとめる。最後の告白台詞と重複しすぎないよう、余韻を残して終える。",
+            "generate_images": True,
+            "image_quality": "medium",
+            "image_size": "1536x1024",
+        },
+    )
+    if short_story and not short_story.get("error"):
+        saved = live_chat_service.save_short_story(session_id, {"story": short_story})
+        return (saved or {}).get("saved_story") or short_story
+    return short_story
 
 
 def _current_user():
@@ -577,10 +615,18 @@ def generate_chat_photo_mode_shoot(session_id: int):
     )
     return json_response(result, status=201)
 
-def _claim_affinity_reward_payload(chat_session, project, user, context: dict, character_id: int):
+def _claim_affinity_reward_payload(
+    chat_session,
+    project,
+    user,
+    context: dict,
+    character_id: int,
+    *,
+    force_debug_replay: bool = False,
+):
     session_id = chat_session.id
     existing = character_affinity_reward_service.get_reward(user.id, character_id)
-    if existing and existing.event_claimed_at:
+    if existing and existing.event_claimed_at and not force_debug_replay:
         return (
             {
                 "claimed": False,
@@ -591,29 +637,46 @@ def _claim_affinity_reward_payload(chat_session, project, user, context: dict, c
             },
             200,
         )
-    event_image = None
-    try:
-        event_image = live_chat_service.generate_image(
+    app = current_app._get_current_object()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        event_image_future = executor.submit(
+            _run_with_app_context,
+            app,
+            _generate_affinity_100_event_image,
             chat_session.id,
-            {
-                "image_type": "affinity_100_event",
-                "prompt_text": _event_image_prompt(context, character_id),
-                "use_existing_prompt": True,
-                "size": "1536x1024",
-                "quality": "medium",
-            },
+            context,
+            character_id,
         )
-    except Exception as exc:
-        current_app.logger.exception("affinity 100 event image generation failed")
-        raise ValidationError(f"好感度100イベント画像の生成に失敗しました: {exc}")
-    reward, claimed = character_affinity_reward_service.claim_affinity_100_reward(
-        user_id=user.id,
-        project_id=project.id,
-        character_id=character_id,
-        event_image_id=(event_image or {}).get("id"),
-    )
+        short_story_future = executor.submit(
+            _run_with_app_context,
+            app,
+            _generate_affinity_100_short_story,
+            session_id,
+        )
+        event_image = None
+        try:
+            event_image = event_image_future.result()
+        except Exception as exc:
+            short_story_future.cancel()
+            current_app.logger.exception("affinity 100 event image generation failed")
+            raise ValidationError(f"好感度100イベント画像の生成に失敗しました: {exc}")
+    is_debug_replay = bool(force_debug_replay and existing and existing.event_claimed_at)
+    if is_debug_replay:
+        reward = existing
+        reward.event_image_id = (event_image or {}).get("id")
+        db.session.add(reward)
+        db.session.commit()
+        claimed = True
+    else:
+        reward, claimed = character_affinity_reward_service.claim_affinity_100_reward(
+            user_id=user.id,
+            project_id=project.id,
+            character_id=character_id,
+            event_image_id=(event_image or {}).get("id"),
+        )
     letter = None
     clear_message = None
+    short_story = None
     if claimed:
         speaker_name, message_text = _affinity_100_clear_line(context, character_id)
         clear_message = chat_message_service.create_message(
@@ -630,6 +693,11 @@ def _claim_affinity_reward_payload(chat_session, project, user, context: dict, c
                 },
             },
         )
+        try:
+            short_story = short_story_future.result()
+        except Exception as exc:
+            current_app.logger.exception("affinity 100 short story generation failed")
+            short_story = {"error": str(exc)}
         letter = letter_service.create_affinity_100_letter(
             chat_session,
             context,
@@ -642,8 +710,10 @@ def _claim_affinity_reward_payload(chat_session, project, user, context: dict, c
             "reward": character_affinity_reward_service.serialize_reward(reward, session_id=session_id),
             "event_image": event_image,
             "letter": letter,
+            "short_story": short_story,
             "message": live_chat_service._serialize_message(clear_message) if clear_message else None,
             "context": live_chat_service.get_session_context(session_id),
+            "debug_replay": is_debug_replay,
         },
         201 if claimed else 200,
     )
@@ -684,8 +754,20 @@ def debug_clear_chat_affinity(session_id: int):
         reason="debug shortcut clear",
     )
     context = live_chat_service.get_session_context(session_id)
-    response_payload, status = _claim_affinity_reward_payload(chat_session, project, user, context, character_id)
-    response_payload["debug"] = {"affinity_forced": True, "character_id": character_id}
+    response_payload, status = _claim_affinity_reward_payload(
+        chat_session,
+        project,
+        user,
+        context,
+        character_id,
+        force_debug_replay=True,
+    )
+    response_payload["debug"] = {
+        "affinity_forced": True,
+        "character_id": character_id,
+        "replay_allowed": True,
+        "debug_replay": bool(response_payload.get("debug_replay")),
+    }
     return json_response(response_payload, status=status)
 
 @chat_bp.route("/chat/sessions/<int:session_id>/state", methods=["GET"])

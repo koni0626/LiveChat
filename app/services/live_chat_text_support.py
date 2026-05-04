@@ -2,6 +2,92 @@ from __future__ import annotations
 
 from . import live_chat_prompt_support as prompt_support
 
+REPLY_EFFECT_EMOTIONS = {
+    "neutral",
+    "happy",
+    "shy",
+    "thinking",
+    "surprised",
+    "sad",
+    "angry",
+    "excited",
+    "lonely",
+    "relieved",
+}
+
+
+def normalize_reply_effect(parsed: dict, *, speaker_name: str, message_text: str) -> dict:
+    def as_bool(value, default=False):
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        text = str(value).strip().lower()
+        if text in {"1", "true", "yes", "on"}:
+            return True
+        if text in {"0", "false", "no", "off"}:
+            return False
+        return default
+
+    emotion = str(parsed.get("emotion") or parsed.get("reply_emotion") or "").strip().lower()
+    if emotion not in REPLY_EFFECT_EMOTIONS:
+        text = message_text.lower()
+        if any(token in message_text for token in ("照", "恥", "赤く", "ドキ")):
+            emotion = "shy"
+        elif any(token in message_text for token in ("嬉", "楽", "好き", "ありがとう", "いいね")):
+            emotion = "happy"
+        elif any(token in message_text for token in ("えっ", "本当", "まさか", "!?")):
+            emotion = "surprised"
+        elif any(token in message_text for token in ("考", "迷", "うーん", "……")):
+            emotion = "thinking"
+        elif any(token in message_text for token in ("寂", "不安", "つら", "悲")):
+            emotion = "lonely"
+        elif any(token in text for token in ("angry", "mad")) or any(token in message_text for token in ("怒", "許さ")):
+            emotion = "angry"
+        else:
+            emotion = "neutral"
+    try:
+        intensity = int(parsed.get("reaction_intensity") or parsed.get("intensity") or 2)
+    except (TypeError, ValueError):
+        intensity = 2
+    intensity = max(1, min(5, intensity))
+    mood_label = str(parsed.get("mood_label") or parsed.get("emotion_label") or "").strip()
+    if not mood_label:
+        mood_label = {
+            "happy": "うれしそう",
+            "shy": "照れている",
+            "thinking": "考え中",
+            "surprised": "驚いている",
+            "sad": "しょんぼり",
+            "angry": "むっとしている",
+            "excited": "乗り気",
+            "lonely": "少し寂しそう",
+            "relieved": "ほっとしている",
+            "neutral": "落ち着いている",
+        }.get(emotion, "反応している")
+    visual_moment_hint = str(parsed.get("visual_moment_hint") or "").strip()
+    if not visual_moment_hint:
+        visual_moment_hint = f"{speaker_name}の{mood_label}表情が見える、会話直後の印象的な一瞬"
+    show_novel_spotlight = as_bool(
+        parsed.get("show_novel_spotlight"),
+        intensity >= 4 or emotion in {"shy", "surprised", "excited", "lonely"},
+    )
+    suggest_image = as_bool(
+        parsed.get("suggest_image"),
+        intensity >= 4 or emotion in {"shy", "surprised", "excited"},
+    )
+    return {
+        "speaker_name": speaker_name,
+        "emotion": emotion,
+        "reaction_intensity": intensity,
+        "mood_label": mood_label[:40],
+        "visual_moment_hint": visual_moment_hint[:240],
+        "show_novel_spotlight": show_novel_spotlight,
+        "suggest_image": suggest_image,
+    }
+
 
 def generate_opening_message(text_ai_client, context: dict) -> dict:
     try:
@@ -65,7 +151,11 @@ def generate_reply(text_ai_client, context: dict, user_message_text: str) -> dic
         if not message_text:
             raise RuntimeError("reply message is empty")
         message_text = enforce_character_voice(context, speaker_name, message_text)
-        return {"speaker_name": speaker_name, "message_text": message_text}
+        return {
+            "speaker_name": speaker_name,
+            "message_text": message_text,
+            "reply_effect": normalize_reply_effect(parsed, speaker_name=speaker_name, message_text=message_text),
+        }
     except Exception:
         return prompt_support.fallback_reply(context, user_message_text)
 

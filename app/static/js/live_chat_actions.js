@@ -52,14 +52,17 @@
     });
 
     imageGrid?.addEventListener("click", async (event) => {
+      if (event.target.closest(".live-chat-thumb-download")) return;
       const button = event.target.closest("[data-image-id]");
       if (!button) return;
-      try {
-        await api.selectImage(getSessionId(), button.dataset.imageId);
-        await loadContext();
-        NovelUI.toast("\u8868\u793a\u753b\u50cf\u3092\u5207\u308a\u66ff\u3048\u307e\u3057\u305f\u3002");
-      } catch (error) {
-        NovelUI.toast(error.message || "\u753b\u50cf\u9078\u629e\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
+      const src = button.dataset.imageUrl || button.querySelector("img")?.getAttribute("src") || "";
+      const lightbox = document.getElementById("liveChatImageLightbox");
+      const lightboxImage = document.getElementById("liveChatImageLightboxImage");
+      if (src && lightbox && lightboxImage) {
+        lightboxImage.src = src;
+        lightbox.classList.remove("is-hidden");
+        lightbox.setAttribute("aria-hidden", "false");
+        document.body.classList.add("live-chat-lightbox-open");
       }
     });
 
