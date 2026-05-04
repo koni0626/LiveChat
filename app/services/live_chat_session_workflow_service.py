@@ -67,17 +67,70 @@ class LiveChatSessionWorkflowService:
             normalized.append(character_id)
         return normalized
 
+    def selected_character_ids_from_state(self, session_id: int) -> list[int]:
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._serializer.load_json(getattr(state_row, "state_json", None)) or {}
+        if not isinstance(state_json, dict):
+            return []
+        raw_value = state_json.get("active_character_ids")
+        if not isinstance(raw_value, list):
+            return []
+        normalized = []
+        seen = set()
+        for item in raw_value:
+            try:
+                character_id = int(item)
+            except (TypeError, ValueError):
+                continue
+            if character_id <= 0 or character_id in seen:
+                continue
+            seen.add(character_id)
+            normalized.append(character_id)
+        return normalized
+
+    def _snapshot_character_names(self, session) -> set[str]:
+        room_snapshot = self._serializer.load_json(getattr(session, "room_snapshot_json", None)) or {}
+        if not isinstance(room_snapshot, dict):
+            return set()
+        names = {
+            str(room_snapshot.get("character_name") or "").strip(),
+            str(room_snapshot.get("name") or "").strip(),
+            str(room_snapshot.get("nickname") or "").strip(),
+        }
+        return {name for name in names if name}
+
+    def _replacement_characters_for_snapshot(self, session, active_characters: list):
+        names = self._snapshot_character_names(session)
+        if not names:
+            return []
+        return [
+            character for character in active_characters
+            if str(getattr(character, "name", "") or "").strip() in names
+            or str(getattr(character, "nickname", "") or "").strip() in names
+        ]
+
     def select_characters(self, session_id: int):
         session = self._chat_session_service.get_session(session_id)
         if not session:
             return []
         all_characters = self._character_service.list_characters(session.project_id)
-        selected_ids = set(self.selected_character_ids_from_session(session))
+        selected_ids = set(
+            self.selected_character_ids_from_session(session)
+            or self.selected_character_ids_from_state(session_id)
+        )
         scoped_characters = [
             character for character in all_characters
             if not selected_ids or character.id in selected_ids
         ]
-        target_characters = scoped_characters or all_characters
+        if selected_ids and not scoped_characters:
+            scoped_characters = self._replacement_characters_for_snapshot(session, all_characters)
+        if selected_ids and not scoped_characters:
+            deleted_candidates = self._character_service.list_characters(session.project_id, include_deleted=True)
+            scoped_characters = [
+                character for character in deleted_candidates
+                if character.id in selected_ids
+            ]
+        target_characters = scoped_characters if selected_ids else all_characters
         return [self._serializer.serialize_character(character) for character in target_characters]
 
     def create_session(self, project_id: int, payload: dict | None = None, owner_user_id: int | None = None):

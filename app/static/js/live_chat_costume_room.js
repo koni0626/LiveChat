@@ -12,25 +12,48 @@
       closetPicker,
       loadContext,
     } = options;
+
     const closetSelectModal = closetSelectModalElement ? new bootstrap.Modal(closetSelectModalElement) : null;
     if (closetSelectModalElement) {
       document.body.appendChild(closetSelectModalElement);
     }
 
     function render(context) {
-      const costumes = context.costumes || [];
-      const selectedCostume = context.selected_costume || costumes.find((item) => item.is_selected) || costumes[0] || null;
+      const costumes = context?.costumes || [];
+      const selectedCostume = context?.selected_costume || costumes.find((item) => item.is_selected) || costumes[0] || null;
+      const closetPayload = context?.closet_outfits || {};
+      const closetLocked = Boolean(closetPayload.locked);
+      const closetOutfits = Array.isArray(closetPayload.outfits) ? closetPayload.outfits : [];
+      const selectedOutfit = closetOutfits.find((outfit) => outfit.is_selected_for_session) || null;
+      const selectedMediaUrl = selectedOutfit?.thumbnail_asset?.media_url
+        || selectedOutfit?.asset?.media_url
+        || selectedCostume?.asset?.media_url
+        || "";
+      const selectedLabel = selectedOutfit?.name
+        || (selectedCostume?.image_type === "costume_initial" ? "基準画像" : "選択中");
+
+      closetSelectButton?.setAttribute("hidden", "hidden");
+
       if (costumePreview) {
-        const mediaUrl = selectedCostume?.asset?.media_url;
-        costumePreview.innerHTML = mediaUrl
-          ? `
-            <button class="live-chat-costume-preview-button" type="button" data-costume-id="${selectedCostume.id}">
-              <img src="${mediaUrl}" alt="selected costume reference">
-              <span>現在の衣装基準</span>
+        costumePreview.classList.toggle("is-clear-unlocked", !closetLocked);
+        if (closetLocked) {
+          costumePreview.innerHTML = `
+            <div class="live-chat-costume-slider is-locked">
+              ${selectedMediaUrl ? `<img src="${NovelUI.escape(selectedMediaUrl)}" alt="costume reference">` : '<i class="bi bi-lock-fill" aria-hidden="true"></i>'}
+              <div class="live-chat-costume-lock-label">好感度100で開放</div>
+            </div>
+          `;
+        } else {
+          costumePreview.innerHTML = `
+            <button class="live-chat-costume-preview-button" type="button" data-open-closet-picker="true">
+              ${selectedMediaUrl ? `<img src="${NovelUI.escape(selectedMediaUrl)}" alt="${NovelUI.escape(selectedLabel || "costume")}">` : "<span>No Image</span>"}
+              <span class="live-chat-costume-card-label">${NovelUI.escape(selectedLabel || "選択中")}</span>
+              <small>クリックして作成済み衣装から選択</small>
             </button>
-          `
-          : '<div class="empty-panel">衣装の基準画像がありません。</div>';
+          `;
+        }
       }
+
       if (!costumeGrid || costumeGrid.hidden) return;
       if (!costumes.length) {
         costumeGrid.innerHTML = '<div class="empty-panel">衣装候補がありません。</div>';
@@ -41,8 +64,8 @@
         const label = item.image_type === "costume_initial" ? "初期衣装" : "衣装";
         return `
           <div class="live-chat-costume-card ${item.is_selected ? "selected" : ""}">
-            <button class="live-chat-costume-select" type="button" data-costume-id="${item.id}">
-              ${mediaUrl ? `<img src="${mediaUrl}" alt="${label}">` : "<span>No Image</span>"}
+            <button class="live-chat-costume-select" type="button" data-costume-id="${NovelUI.escape(item.id)}">
+              ${mediaUrl ? `<img src="${NovelUI.escape(mediaUrl)}" alt="${NovelUI.escape(label)}">` : "<span>No Image</span>"}
               <span class="live-chat-costume-card-label">${item.is_selected ? "選択中" : label}</span>
             </button>
           </div>
@@ -61,6 +84,10 @@
     function renderClosetPicker(payload) {
       if (!closetPicker) return;
       const outfits = payload?.outfits || [];
+      if (payload?.locked) {
+        closetPicker.innerHTML = '<div class="empty-panel">クローゼット選択は好感度100で開放されます。</div>';
+        return;
+      }
       if (!outfits.length) {
         closetPicker.innerHTML = '<div class="empty-panel">このキャラクターのクローゼット衣装がありません。</div>';
         return;
@@ -69,7 +96,11 @@
         const mediaUrl = outfit.thumbnail_asset?.media_url || outfit.asset?.media_url || "";
         const tags = Array.isArray(outfit.tags) ? outfit.tags.slice(0, 3) : [];
         return `
-          <article class="live-chat-closet-card ${outfit.is_selected_for_session ? "selected" : ""}">
+          <article class="live-chat-closet-card ${outfit.is_selected_for_session ? "selected" : ""}"
+            role="button"
+            tabindex="0"
+            data-closet-outfit-id="${NovelUI.escape(outfit.id)}"
+            aria-label="${NovelUI.escape(outfit.name || "costume")}">
             <div class="live-chat-closet-image">
               ${mediaUrl ? `<img src="${NovelUI.escape(mediaUrl)}" alt="">` : "<span>No Image</span>"}
               ${outfit.is_selected_for_session ? '<span class="live-chat-closet-selected">選択中</span>' : ""}
@@ -80,15 +111,12 @@
               </div>
               <h4>${NovelUI.escape(outfit.name || "衣装")}</h4>
               <details>
-                <summary>説明を表示</summary>
+                <summary>説明</summary>
                 <p>${NovelUI.escape(outfit.description || "説明はありません。")}</p>
               </details>
               <div class="live-chat-closet-tags">
                 ${tags.map((tag) => `<span>${NovelUI.escape(tag)}</span>`).join("")}
               </div>
-              <button class="btn btn-sunrise btn-sm w-100" type="button" data-closet-outfit-id="${NovelUI.escape(outfit.id)}" ${outfit.is_selected_for_session ? "disabled" : ""}>
-                ${outfit.is_selected_for_session ? "選択中" : "この衣装を使う"}
-              </button>
             </div>
           </article>
         `;
@@ -107,21 +135,20 @@
       }
     }
 
-    async function selectClosetOutfit(event) {
-      const button = event.target.closest("[data-closet-outfit-id]");
+    async function selectClosetOutfit(button) {
       if (!button) return;
-      const originalText = button.textContent;
-      button.disabled = true;
-      button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>選択中...';
+      if (button.classList.contains("selected") || button.dataset.loading === "true") return;
+      button.dataset.loading = "true";
+      button.classList.add("is-loading");
       try {
         await api.selectClosetOutfit(getSessionId(), button.dataset.closetOutfitId);
         await loadContext();
-        closetSelectModal?.hide();
+        renderClosetPicker(await api.loadClosetOutfits(getSessionId()));
         NovelUI.toast("クローゼット衣装をこのルームの基準にしました。");
       } catch (error) {
-        button.disabled = false;
-        button.textContent = originalText;
-        NovelUI.toast(error.message || "衣装の選択に失敗しました。", "danger");
+        delete button.dataset.loading;
+        button.classList.remove("is-loading");
+        NovelUI.toast(error.message || "クローゼット衣装の選択に失敗しました。", "danger");
       }
     }
 
@@ -150,6 +177,15 @@
 
     async function selectCostume(event) {
       if (event.target.closest("[data-delete-costume-id]")) return;
+      if (event.target.closest("[data-open-closet-picker]")) {
+        await openClosetPicker();
+        return;
+      }
+      const closetButton = event.target.closest("[data-closet-outfit-id]");
+      if (closetButton) {
+        await selectClosetOutfit(closetButton);
+        return;
+      }
       const button = event.target.closest("[data-costume-id]");
       if (!button) return;
       try {
@@ -177,7 +213,14 @@
       }
       costumePreview?.addEventListener("click", selectCostume);
       closetSelectButton?.addEventListener("click", openClosetPicker);
-      closetPicker?.addEventListener("click", selectClosetOutfit);
+      closetPicker?.addEventListener("click", (event) => selectClosetOutfit(event.target.closest("[data-closet-outfit-id]")));
+      closetPicker?.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const card = event.target.closest("[data-closet-outfit-id]");
+        if (!card) return;
+        event.preventDefault();
+        selectClosetOutfit(card);
+      });
     }
 
     return {

@@ -66,6 +66,22 @@ class LetterRepository:
                 return row
         return None
 
+    def find_for_session_trigger(
+        self,
+        *,
+        session_id: int,
+        recipient_user_id: int,
+        sender_character_id: int,
+        trigger_type: str,
+    ):
+        return Letter.query.filter(
+            Letter.session_id == session_id,
+            Letter.recipient_user_id == recipient_user_id,
+            Letter.sender_character_id == sender_character_id,
+            Letter.trigger_type == trigger_type,
+            Letter.deleted_at.is_(None),
+        ).order_by(Letter.created_at.desc(), Letter.id.desc()).first()
+
     def get(self, letter_id: int):
         return Letter.query.get(letter_id)
 

@@ -92,6 +92,28 @@ def generate_player_proxy_message(text_ai_client, context: dict) -> str:
         return prompt_support.fallback_player_proxy_message(context)
 
 
+def generate_photo_mode_proxy_message(text_ai_client, context: dict) -> str:
+    try:
+        prompt = prompt_support.build_photo_mode_proxy_message_prompt(context)
+        result = text_ai_client.generate_text(
+            prompt,
+            temperature=0.85,
+            response_format={"type": "json_object"},
+        )
+        parsed = text_ai_client._try_parse_json(result.get("text"))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("photo mode proxy message response is invalid")
+        message_text = str(parsed.get("message_text") or "").strip()
+        if not message_text:
+            raise RuntimeError("photo mode proxy message is empty")
+        forbidden = ("話を進めて", "続けて", "何か話して")
+        if any(token in message_text for token in forbidden):
+            raise RuntimeError("photo mode proxy message is too generic")
+        return message_text[:220]
+    except Exception:
+        return prompt_support.fallback_photo_mode_proxy_message(context)
+
+
 def generate_idle_character_message(text_ai_client, context: dict) -> dict:
     try:
         prompt = prompt_support.build_idle_character_message_prompt(context)

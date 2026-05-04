@@ -366,11 +366,14 @@ class CharacterService:
 
     def _build_base_image_prompt(self, character, payload: dict) -> str:
         art_style = str(payload.get("art_style") or getattr(character, "art_style", None) or "").strip()
+        world = self._world_service.get_world(character.project_id)
         parts = [
             "Create a full-body character reference image for a visual novel / live chat character.",
-            "Show exactly one character, full body, standing pose, clear face, clear outfit, centered composition.",
+            "Show exactly one character, full body from head to shoes, clear face, clear outfit, centered composition.",
+            "Use a light natural standing pose, not a stiff straight reference-sheet stance: a gentle contrapposto, relaxed weight shift, one hand near the waist/hair/collar, or a small characterful gesture is ideal.",
+            "Keep the body readable for future costume references. Do not crop the feet. Do not use extreme action, sitting, lying, jumping, heavy foreshortening, or a pose that hides the outfit.",
             "No text, no words, no letters, no subtitles, no captions, no speech bubbles, no readable signs, no UI overlay, no watermark, no logo.",
-            "Use a clean character design sheet feel, but make it attractive and polished.",
+            "Make it attractive and polished like a collectible full-body character key visual, while still usable as the character's base reference.",
             f"Name: {character.name}",
         ]
         if getattr(character, "nickname", None):
@@ -397,7 +400,21 @@ class CharacterService:
             parts.append(f"Art style: {art_style}")
         else:
             parts.append("Art style: high-quality Japanese anime visual novel character art, consistent linework and colors.")
-        parts.append("Background: simple neutral studio background so the character design is easy to reuse as a reference image.")
+        if world:
+            parts.extend(
+                [
+                    "World background context:",
+                    f"World name: {getattr(world, 'name', '') or ''}",
+                    f"World overview: {getattr(world, 'overview', '') or ''}",
+                    f"World tone: {getattr(world, 'tone', '') or ''}",
+                    f"Era / technology: {getattr(world, 'era_description', '') or ''} {getattr(world, 'technology_level', '') or ''}",
+                ]
+            )
+        parts.append(
+            "Background: include a tasteful, non-distracting environment that reflects the character concept and world setting. "
+            "It should feel like where this character belongs, with atmospheric lighting and a few setting-specific motifs. "
+            "Keep enough separation around the silhouette so the character remains reusable as a reference; avoid plain gray studio backgrounds."
+        )
         return "\n".join(parts)
 
     def _build_introduction_prompt(self, character, payload: dict) -> str:

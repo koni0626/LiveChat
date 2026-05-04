@@ -788,6 +788,65 @@ def build_player_proxy_message_prompt(context: dict) -> str:
     return "\n".join(lines)
 
 
+def build_photo_mode_proxy_message_prompt(context: dict) -> str:
+    state_json = context["state"].get("state_json") or {}
+    scene_progression = state_json.get("scene_progression") or {}
+    current_location = state_json.get("current_location") or {}
+    current_service = state_json.get("current_location_service") or {}
+    displayed_image = state_json.get("displayed_image_observation") or {}
+    session_objective = get_session_objective(context)
+    player_name = context["session"].get("player_name") or "プレイヤー"
+    lines = [
+        "あなたはビジュアルノベルの写真撮影ディレクターです。",
+        "撮影モードでプレイヤーが送信するための、日本語の撮影プロンプトを1つ作ってください。",
+        "Xで映えそうなポーズ、表情、構図、距離感、光、背景の見せ方を具体化してください。",
+        "JSONオブジェクトのみを返してください。",
+        "必須キー: message_text, reason。",
+        "message_textは、プレイヤーがそのまま送信できる日本語の撮影指示文にしてください。",
+        "会話のセリフではなく、画像生成に使いやすい撮影プロンプトにしてください。",
+        "場所、衣装、世界観、キャラクター性は現在の状態に合わせ、勝手な移動や着替えを入れないでください。",
+        "縦構図/横構図、カメラ位置、視線、手足の動き、前景/背景、光の演出のうち複数を自然に含めてください。",
+        "ハッシュタグ、Markdown、箇条書き、英語だけの文、抽象的な褒め言葉だけの文は禁止です。",
+        "過度に長くせず、80〜180文字程度を目安にしてください。",
+        f"Player name: {player_name}",
+        f"Project title: {context['project'].get('title') or 'Untitled'}",
+        f"Session objective: {session_objective or 'none'}",
+        f"Current location: {state_json.get('location') or scene_progression.get('location') or (current_location.get('name') if isinstance(current_location, dict) else '') or ''}",
+        f"Current background: {state_json.get('background') or scene_progression.get('background') or (current_location.get('description') if isinstance(current_location, dict) else '') or ''}",
+        f"Current facility/service: {((current_location.get('description') if isinstance(current_location, dict) else '') or '')[:800]} / {((current_service.get('summary') if isinstance(current_service, dict) else '') or '')[:500]}",
+        f"Displayed image summary: {displayed_image.get('short_summary') or ''}",
+        f"Displayed image background: {displayed_image.get('background') or ''}",
+        "Characters:",
+    ]
+    for character in context["characters"]:
+        lines.append(
+            f"- {character.get('name')}: character_summary={character.get('character_summary') or ''}, appearance={character.get('appearance_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, likes={character.get('likes_text') or ''}, dislikes={character.get('dislikes_text') or ''}, art_style={character.get('art_style') or ''}"
+        )
+    lines.append("Recent conversation:")
+    for message in context["messages"][-10:]:
+        lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
+    lines.extend(
+        [
+            "Good examples of direction style, not fixed output:",
+            "ネオンの逆光を背に少し振り返り、片手で髪を押さえながらこちらを見る。背景の光を大きくぼかした縦構図で、余白に余韻が残る一枚にして。",
+            "低めのカメラから半歩踏み出す瞬間を切り取り、衣装のラインと表情が引き立つ斜め構図にする。前景の光を入れてSNSで目を引く雰囲気に。",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def fallback_photo_mode_proxy_message(context: dict) -> str:
+    state_json = context["state"].get("state_json") or {}
+    location = state_json.get("location") or ""
+    displayed_image = state_json.get("displayed_image_observation") or {}
+    background = displayed_image.get("background") or state_json.get("background") or ""
+    place_hint = location or background or "今いる場所"
+    return (
+        f"{place_hint}の雰囲気を活かして、少し振り返りながらこちらへ視線を向けるポーズ。"
+        "光を背中側から入れ、背景を大きくぼかした縦構図で、Xで目を引くドラマチックな一枚にして。"
+    )[:220]
+
+
 def fallback_player_proxy_message(context: dict) -> str:
     latest_character = next(
         (

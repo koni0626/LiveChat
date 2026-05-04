@@ -16,6 +16,8 @@ from .world_map_service import WorldMapService
 from .character_user_memory_service import CharacterUserMemoryService
 from .character_memory_note_service import CharacterMemoryNoteService
 from .character_intel_hint_service import CharacterIntelHintService
+from .character_affinity_reward_service import CharacterAffinityRewardService
+from .session_character_affinity_service import SessionCharacterAffinityService
 from .session_objective_note_service import SessionObjectiveNoteService
 from .world_news_service import WorldNewsService
 from ..repositories.character_repository import CharacterRepository
@@ -46,6 +48,8 @@ class LiveChatContextService:
         character_user_memory_service: CharacterUserMemoryService | None = None,
         character_memory_note_service: CharacterMemoryNoteService | None = None,
         character_intel_hint_service: CharacterIntelHintService | None = None,
+        character_affinity_reward_service: CharacterAffinityRewardService | None = None,
+        session_character_affinity_service: SessionCharacterAffinityService | None = None,
         session_objective_note_service: SessionObjectiveNoteService | None = None,
         world_news_service: WorldNewsService | None = None,
         character_repository: CharacterRepository | None = None,
@@ -69,6 +73,12 @@ class LiveChatContextService:
         self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
         self._character_memory_note_service = character_memory_note_service or CharacterMemoryNoteService()
         self._character_intel_hint_service = character_intel_hint_service or CharacterIntelHintService()
+        self._character_affinity_reward_service = (
+            character_affinity_reward_service or CharacterAffinityRewardService()
+        )
+        self._session_character_affinity_service = (
+            session_character_affinity_service or SessionCharacterAffinityService()
+        )
         self._session_objective_note_service = session_objective_note_service or SessionObjectiveNoteService()
         self._world_news_service = world_news_service or WorldNewsService()
         self._character_repository = character_repository or CharacterRepository()
@@ -303,13 +313,44 @@ class LiveChatContextService:
             session_id,
             characters=characters,
         )
-        character_user_memories = {}
+        long_term_character_user_memories = {}
+        character_ids = []
         for character in characters:
             character_id = int(character.get("id") or 0)
             if not character_id:
                 continue
+            character_ids.append(character_id)
             row = self._character_user_memory_service.get_memory(session.owner_user_id, character_id)
-            character_user_memories[str(character_id)] = self._character_user_memory_service.serialize_memory(row)
+            long_term_character_user_memories[str(character_id)] = self._character_user_memory_service.serialize_memory(row)
+        session_character_affinities = self._session_character_affinity_service.list_serialized_affinities(
+            session_id=session.id,
+            user_id=session.owner_user_id,
+            project_id=session.project_id,
+            character_ids=character_ids,
+        )
+        character_user_memories = session_character_affinities
+        affinity_rewards = self._character_affinity_reward_service.list_serialized_rewards(
+            user_id=session.owner_user_id,
+            project_id=session.project_id,
+            character_ids=character_ids,
+            session_id=session.id,
+        )
+        active_character_id = character_ids[0] if character_ids else None
+        active_reward = affinity_rewards.get(str(active_character_id)) if active_character_id else {}
+        closet_unlocked = bool((active_reward or {}).get("closet_unlocked"))
+        closet_outfits = (
+            self._media_service.list_closet_outfits(session_id)
+            if closet_unlocked
+            else {
+                "character_id": active_character_id,
+                "outfits": [],
+                "locked": True,
+                "unlock_label": "好感度100で開放",
+            }
+        )
+        if closet_unlocked:
+            closet_outfits["locked"] = False
+            closet_outfits["unlock_label"] = ""
         project_characters = [
             self._serializer.serialize_character(row)
             for row in self._character_repository.list_by_project(session.project_id)
@@ -338,6 +379,9 @@ class LiveChatContextService:
                 "world_activity": world_activity_context,
                 "session": self._serializer.serialize_session(session),
                 "character_user_memories": character_user_memories,
+                "long_term_character_user_memories": long_term_character_user_memories,
+                "affinity_rewards": affinity_rewards,
+                "closet_outfits": closet_outfits,
                 "character_intel": character_intel,
                 "project_characters": project_characters,
                 "session_objective_notes": session_objective_notes,
@@ -361,6 +405,9 @@ class LiveChatContextService:
             "world_activity": world_activity_context,
             "session": self._serializer.serialize_session(session),
             "character_user_memories": character_user_memories,
+            "long_term_character_user_memories": long_term_character_user_memories,
+            "affinity_rewards": affinity_rewards,
+            "closet_outfits": closet_outfits,
             "character_intel": character_intel,
             "project_characters": project_characters,
             "session_objective_notes": session_objective_notes,

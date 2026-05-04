@@ -174,6 +174,8 @@ class LetterService:
             return None
 
     def schedule_generate_for_context(self, session_id: int, context: dict, *, trigger_type: str = "conversation") -> bool:
+        if trigger_type in {"conversation", "scene_transition", "gift"}:
+            return False
         try:
             app = current_app._get_current_object()
         except RuntimeError:
@@ -193,6 +195,70 @@ class LetterService:
 
         threading.Thread(target=worker, name=f"letter-generate-{session_id}", daemon=True).start()
         return True
+
+    def schedule_generate_affinity_threshold_letter(
+        self,
+        session_id: int,
+        context: dict,
+        *,
+        character_id: int,
+        threshold: int,
+    ) -> bool:
+        try:
+            app = current_app._get_current_object()
+        except RuntimeError:
+            session = self._chat_session_service.get_session(session_id)
+            self.try_generate_affinity_threshold_letter(
+                session,
+                context,
+                character_id=character_id,
+                threshold=threshold,
+            )
+            return False
+
+        def worker():
+            with app.app_context():
+                try:
+                    session = self._chat_session_service.get_session(session_id)
+                    self.try_generate_affinity_threshold_letter(
+                        session,
+                        context,
+                        character_id=character_id,
+                        threshold=threshold,
+                    )
+                except Exception:
+                    app.logger.exception("affinity threshold letter generation failed")
+                finally:
+                    db.session.remove()
+
+        threading.Thread(
+            target=worker,
+            name=f"affinity-letter-{session_id}-{character_id}-{threshold}",
+            daemon=True,
+        ).start()
+        return True
+
+    def try_generate_affinity_threshold_letter(
+        self,
+        session,
+        context: dict,
+        *,
+        character_id: int,
+        threshold: int,
+    ):
+        try:
+            return self.generate_affinity_threshold_letter(
+                session,
+                context,
+                character_id=character_id,
+                threshold=threshold,
+            )
+        except Exception:
+            try:
+                current_app.logger.exception("affinity threshold letter generation failed")
+            except RuntimeError:
+                pass
+            return None
 
     def generate_for_context(self, session, context: dict, *, trigger_type: str = "conversation"):
         if not session or not getattr(session, "owner_user_id", None):
@@ -320,6 +386,152 @@ class LetterService:
                         "content": content,
                         "story_session_id": story_session.id,
                         "return_url": return_url,
+                        "generated_at": datetime.utcnow().isoformat(),
+                    }
+                ),
+            }
+        )
+        return self.serialize_letter(letter)
+
+    def generate_affinity_threshold_letter(
+        self,
+        session,
+        context: dict,
+        *,
+        character_id: int,
+        threshold: int,
+    ):
+        if not session or not getattr(session, "owner_user_id", None):
+            return None
+        threshold = int(threshold)
+        trigger_type = f"affinity_{threshold}"
+        character = next(
+            (item for item in (context.get("characters") or []) if int(item.get("id") or 0) == int(character_id)),
+            None,
+        )
+        if not character:
+            return None
+        existing = self._repo.find_for_session_trigger(
+            session_id=session.id,
+            recipient_user_id=session.owner_user_id,
+            sender_character_id=character_id,
+            trigger_type=trigger_type,
+        )
+        if existing:
+            return self.serialize_letter(existing)
+        self._apply_context_letter_references(context, character)
+        memory = (context.get("character_user_memories") or {}).get(str(character_id)) or {}
+        tone_by_threshold = {
+            60: "親密さがはっきり増え、また話したい気持ちを隠しきれない",
+            80: "強い好意と独占欲に近い切なさが混じり、特別な相手だと伝わる",
+            100: "心の底から愛していると告白する、情熱的で決定的な愛情",
+        }
+        decision = {
+            "should_send_letter": True,
+            "reason": f"セッション好感度が{threshold}に到達したため。",
+            "emotional_hook": tone_by_threshold.get(threshold) or "関係が深まった節目",
+            "image_direction": (
+                f"{character.get('name') or 'キャラクター'}がプレイヤーへの気持ちを抑えきれず、"
+                "こちらを見つめるドラマチックなイベントCG。文字や手紙そのものは描かない。"
+            ),
+            "affinity_threshold": threshold,
+            "session_affinity": memory,
+        }
+        content = self._generate_letter_content(context, character, decision)
+        if not content.get("body"):
+            player_name = ((context.get("session") or {}).get("player_name") or "あなた").strip()
+            content = {
+                "subject": f"{player_name}へ",
+                "body": (
+                    f"{player_name}へ\n\n"
+                    f"今日、あなたとの距離がまた少し変わった気がします。\n"
+                    f"うまく言えないけれど、私にとってあなたはもう、ただの誰かではありません。\n\n"
+                    f"{character.get('name') or ''}"
+                ),
+                "summary": f"好感度{threshold}到達メール",
+                "image_direction": decision["image_direction"],
+            }
+        image_asset_id = self._generate_letter_image_asset(session, context, character, content)
+        letter = self._repo.create(
+            {
+                "project_id": session.project_id,
+                "room_id": getattr(session, "room_id", None),
+                "session_id": session.id,
+                "recipient_user_id": session.owner_user_id,
+                "sender_character_id": character_id,
+                "subject": self._normalize_text(content.get("subject") or f"好感度{threshold}到達")[:255],
+                "body": self._normalize_text(content.get("body")),
+                "summary": self._normalize_text(content.get("summary") or decision.get("reason")) or None,
+                "image_asset_id": image_asset_id,
+                "status": "unread",
+                "trigger_type": trigger_type,
+                "trigger_reason": decision["reason"],
+                "generation_state_json": json_util.dumps(
+                    {
+                        "decision": decision,
+                        "content": content,
+                        "session_id": session.id,
+                        "character_id": character_id,
+                        "affinity_threshold": threshold,
+                        "generated_at": datetime.utcnow().isoformat(),
+                    }
+                ),
+            }
+        )
+        return self.serialize_letter(letter)
+
+    def create_affinity_100_letter(self, session, context: dict, character_id: int, image_asset_id: int | None):
+        if not session or not getattr(session, "owner_user_id", None):
+            return None
+        existing = self._repo.find_for_session_trigger(
+            session_id=session.id,
+            recipient_user_id=session.owner_user_id,
+            sender_character_id=character_id,
+            trigger_type="affinity_100",
+        )
+        if existing:
+            return self.serialize_letter(existing)
+        character = next(
+            (item for item in (context.get("characters") or []) if int(item.get("id") or 0) == int(character_id)),
+            None,
+        )
+        if not character:
+            return None
+        player_name = ((context.get("session") or {}).get("player_name") or "あなた").strip()
+        name = character.get("name") or "キャラクター"
+        content = {
+            "subject": f"{player_name}へ",
+            "body": (
+                f"{player_name}へ\n\n"
+                "もうごまかせないくらい、あなたのことが好きです。\n"
+                "一緒に過ごした時間のひとつひとつが、私の中で特別になっていました。\n"
+                "あなたの声を待ってしまうことも、近くにいたいと思ってしまうことも、"
+                "今はもう全部、心の底からの本当の気持ちです。\n\n"
+                "私はあなたを愛しています。\n"
+                "この気持ちを、今日の記念の画像と一緒に受け取ってください。\n\n"
+                f"{name}より"
+            ),
+            "summary": "好感度100達成の愛情メール",
+        }
+        letter = self._repo.create(
+            {
+                "project_id": session.project_id,
+                "room_id": getattr(session, "room_id", None),
+                "session_id": session.id,
+                "recipient_user_id": session.owner_user_id,
+                "sender_character_id": character_id,
+                "subject": content["subject"][:255],
+                "body": content["body"],
+                "summary": content["summary"],
+                "image_asset_id": image_asset_id,
+                "status": "unread",
+                "trigger_type": "affinity_100",
+                "trigger_reason": "好感度100達成",
+                "generation_state_json": json_util.dumps(
+                    {
+                        "content": content,
+                        "session_id": session.id,
+                        "character_id": character_id,
                         "generated_at": datetime.utcnow().isoformat(),
                     }
                 ),

@@ -1,9 +1,9 @@
-(function () {
+﻿(function () {
   const root = document.querySelector(".live-chat-shell[data-session-id]");
   if (!root) return;
 
-  const { LiveChatApi, LiveChatView, LiveChatGift, LiveChatActions, LiveChatShell, LiveChatCostumeRoom } = window;
-  if (!LiveChatApi || !LiveChatView || !LiveChatGift || !LiveChatActions || !LiveChatShell || !LiveChatCostumeRoom) {
+  const { LiveChatApi, LiveChatView, LiveChatActions, LiveChatShell, LiveChatCostumeRoom } = window;
+  if (!LiveChatApi || !LiveChatView || !LiveChatActions || !LiveChatShell || !LiveChatCostumeRoom) {
     throw new Error("LiveChat dependencies are not loaded");
   }
 
@@ -35,6 +35,8 @@
   const toggleLocationMoveButton = document.getElementById("liveChatToggleLocationMoveButton");
   const lccdPanel = document.getElementById("liveChatLccdPanel");
   const toggleLccdButton = document.getElementById("liveChatToggleLccdButton");
+  const costumeTicketBadge = document.getElementById("liveChatCostumeTicketBadge");
+  const costumeTicketCount = document.getElementById("liveChatCostumeTicketCount");
   const conversationModeButton = document.getElementById("liveChatConversationModeButton");
   const togglePhotoModeButton = document.getElementById("liveChatTogglePhotoModeButton");
   const toggleInventoryButton = document.getElementById("liveChatToggleInventoryButton");
@@ -51,6 +53,7 @@
   const objectiveCount = document.getElementById("liveChatObjectiveDebugCount");
   const affinityCard = document.getElementById("liveChatAffinityCard");
   const affinityList = document.getElementById("liveChatAffinityList");
+  const intelRail = document.getElementById("liveChatIntelRail");
   const cameraToggleButton = document.getElementById("liveChatCameraToggleButton");
   const cameraStatus = document.getElementById("liveChatCameraStatus");
   const cameraStatusText = document.getElementById("liveChatCameraStatusText");
@@ -77,7 +80,6 @@
   const cameraFeatureEnabled = false;
 
   let currentContext = null;
-  let giftController = null;
   let costumeRoomController = null;
   let composeVisible = true;
   let userDefaultImageSettings = {};
@@ -97,7 +99,14 @@
   let inventoryVisible = false;
   let inventoryBusy = false;
   let inventoryItems = [];
+  let affinityScoresInitialized = false;
+  const lastAffinityScores = new Map();
+  const affinityRewardClaiming = new Set();
   let currentShortStory = null;
+  const composePlaceholders = {
+    chat: "メッセージを入力。メッセージを作成ボタンで代理メッセージも作れます。",
+    photo: "例: ネオンの逆光を背に少し振り返り、こちらへ視線を向ける。背景を大きくぼかした縦構図で、Xで映える一枚にする。",
+  };
   let idleTalkTimer = null;
   let idleTalkBusy = false;
   let idleTalksSincePlayerInput = 0;
@@ -276,7 +285,7 @@
     imageLightboxClose: document.getElementById("liveChatImageLightboxClose"),
     getMessageListElement,
     getNovelElements,
-    onGiftInteractionChange: (disabled) => giftController?.setInteractionDisabled(disabled),
+    onGiftInteractionChange: () => {},
   });
 
   function applyContext(context) {
@@ -302,16 +311,133 @@
     renderLocationMovePanel(context);
     renderLocationServicePanel(context);
     renderLccdPanel();
+    updateLccdAvailability(context);
+    updatePhotoModeAvailability(context);
     renderObjectiveNotes(context);
     renderCharacterAffinity(context);
+    renderCharacterIntelRail(context);
     renderPlayerReaction(context);
     renderSavedShortStories(context);
     renderInventoryPanel();
   }
 
+  function activeCharacterId(context = currentContext) {
+    const session = context?.session || {};
+    const state = context?.state?.state_json || {};
+    const roomSnapshot = session.room_snapshot_json || {};
+    const room = context?.room || {};
+    const settings = session.settings_json || {};
+    const characters = context?.characters || [];
+    const projectCharacters = context?.project_characters || [];
+    const availableCharacters = [...characters, ...projectCharacters];
+    const candidates = [
+      roomSnapshot.character_id,
+      room.character_id,
+      Array.isArray(state.active_character_ids) ? state.active_character_ids[0] : null,
+      Array.isArray(settings.selected_character_ids) ? settings.selected_character_ids[0] : null,
+      settings.selected_character_id,
+      characters[0]?.id,
+    ];
+    const characterId = candidates
+      .map((value) => Number(value || 0))
+      .find((value) => Number.isFinite(value) && value > 0);
+    if (characterId && availableCharacters.some((character) => Number(character.id || 0) === characterId)) {
+      return characterId;
+    }
+    const names = [
+      roomSnapshot.character_name,
+      roomSnapshot.name,
+      roomSnapshot.nickname,
+      room.character_name,
+      room.name,
+      room.nickname,
+    ].map((value) => String(value || "").trim()).filter(Boolean);
+    const replacement = availableCharacters.find((character) => {
+      const characterNames = [
+        character.name,
+        character.nickname,
+      ].map((value) => String(value || "").trim()).filter(Boolean);
+      return characterNames.some((name) => names.includes(name));
+    });
+    if (replacement?.id) return Number(replacement.id);
+    return characterId || null;
+  }
+
+  function activeCharacters(context = currentContext) {
+    const characters = Array.isArray(context?.characters) ? context.characters : [];
+    const characterId = activeCharacterId(context);
+    if (!characterId) return characters;
+    const filtered = characters.filter((character) => Number(character.id || 0) === Number(characterId));
+    return filtered;
+  }
+
   function inventoryTargetCharacterId() {
-    const characters = currentContext?.characters || [];
-    return characters[0]?.id || null;
+    return activeCharacterId(currentContext);
+  }
+
+  function activeAffinityReward(context = currentContext) {
+    const characterId = activeCharacterId(context);
+    if (!characterId) return null;
+    return (context?.affinity_rewards || {})[String(characterId)] || null;
+  }
+
+  function canUseLccd(context = currentContext) {
+    return false;
+  }
+
+  function canUsePhotoMode(context = currentContext) {
+    const reward = activeAffinityReward(context);
+    return Boolean(reward?.clear_unlocked || reward?.closet_unlocked || reward?.event_claimed);
+  }
+
+  function updateLccdAvailability(context = currentContext) {
+    if (!toggleLccdButton) return;
+    const reward = activeAffinityReward(context);
+    const ticketCount = Number(reward?.costume_ticket_balance || 0);
+    const available = false;
+    if (costumeTicketBadge) {
+      costumeTicketBadge.hidden = true;
+      costumeTicketBadge.classList.toggle("is-visible", false);
+      costumeTicketBadge.setAttribute("title", `衣装チケット: ${ticketCount}枚`);
+      costumeTicketBadge.setAttribute("aria-label", `衣装チケット ${ticketCount}枚`);
+    }
+    if (costumeTicketCount) {
+      costumeTicketCount.textContent = String(ticketCount);
+    }
+    toggleLccdButton.hidden = true;
+    toggleLccdButton.classList.toggle("is-ticket-ready", available);
+    toggleLccdButton.setAttribute(
+      "title",
+      reward?.lccd_unlocked_for_session ? "お着替え部屋" : `お着替えチケット: ${ticketCount}`,
+    );
+    toggleLccdButton.setAttribute(
+      "aria-label",
+      reward?.lccd_unlocked_for_session ? "お着替え部屋" : `お着替えチケット ${ticketCount}枚`,
+    );
+    if (!available && lccdVisible) {
+      lccdVisible = false;
+      renderLccdPanel();
+    }
+  }
+
+  function updatePhotoModeAvailability(context = currentContext) {
+    if (!togglePhotoModeButton) return;
+    const available = canUsePhotoMode(context);
+    togglePhotoModeButton.hidden = !available;
+    togglePhotoModeButton.disabled = photoModeBusy || !available;
+    togglePhotoModeButton.classList.toggle("is-clear-unlocked", available);
+    togglePhotoModeButton.setAttribute(
+      "title",
+      available ? (photoModeActive ? "撮影モード中" : "撮影モード") : "好感度100で開放",
+    );
+    togglePhotoModeButton.setAttribute(
+      "aria-label",
+      available ? (photoModeActive ? "撮影モード中" : "撮影モード") : "撮影モードは好感度100で開放",
+    );
+    if (!available && photoModeActive) {
+      photoModeActive = false;
+      setConversationModeActive(true);
+    }
   }
 
   function setInventoryVisible(visible) {
@@ -393,10 +519,11 @@
     const item = inventoryItems.find((entry) => Number(entry.id) === Number(itemId));
     shell.setReplyLoading(true, currentContext);
     try {
-      await LiveChatApi.giveInventoryItem(sessionId, itemId, {
+      const result = await LiveChatApi.giveInventoryItem(sessionId, itemId, {
         character_id: inventoryTargetCharacterId(),
         message_text: item?.name ? `${item.name}を渡した。` : "アイテムを渡した。",
       });
+      playAffinityFeedback(result?.affinity_feedback);
       inventoryItems = inventoryItems.filter((entry) => Number(entry.id) !== Number(itemId));
       NovelUI.toast("アイテムを渡しました。");
       await loadContext();
@@ -408,9 +535,127 @@
     }
   }
 
+  function triggerAffinityHeartBurst(delta = 1) {
+    const stage = selectedImagePanel?.closest(".live-chat-stage");
+    if (!stage) return;
+    const count = Math.max(3, Math.min(9, Math.ceil(Number(delta || 1) / 2) + 2));
+    for (let index = 0; index < count; index += 1) {
+      const heart = document.createElement("span");
+      heart.className = "live-chat-affinity-heart";
+      heart.innerHTML = '<i class="bi bi-heart-fill" aria-hidden="true"></i>';
+      heart.style.setProperty("--heart-x", `${Math.round((Math.random() - 0.5) * 130)}px`);
+      heart.style.setProperty("--heart-y", `${Math.round(70 + Math.random() * 90)}px`);
+      heart.style.setProperty("--heart-delay", `${index * 70}ms`);
+      heart.style.setProperty("--heart-scale", `${0.82 + Math.random() * 0.55}`);
+      stage.appendChild(heart);
+      window.setTimeout(() => heart.remove(), 1500 + index * 70);
+    }
+  }
+
+  function triggerAffinityMaxHeartBurst() {
+    const stage = selectedImagePanel?.closest(".live-chat-stage");
+    if (!stage) return;
+    for (let index = 0; index < 34; index += 1) {
+      const heart = document.createElement("span");
+      heart.className = "live-chat-affinity-heart is-max-reward";
+      heart.innerHTML = '<i class="bi bi-heart-fill" aria-hidden="true"></i>';
+      heart.style.setProperty("--heart-x", `${Math.round((Math.random() - 0.5) * 260)}px`);
+      heart.style.setProperty("--heart-y", `${Math.round(110 + Math.random() * 190)}px`);
+      heart.style.setProperty("--heart-delay", `${index * 45}ms`);
+      heart.style.setProperty("--heart-scale", `${0.9 + Math.random() * 1.05}`);
+      stage.appendChild(heart);
+      window.setTimeout(() => heart.remove(), 2200 + index * 45);
+    }
+  }
+
+  function playAffinityFeedback(feedback) {
+    const events = Array.isArray(feedback) ? feedback : [];
+    events.forEach((event) => {
+      const delta = Number(event?.affinity_delta || event?.physical_closeness_delta || 1);
+      const previousScore = Number(event?.previous_score || 0);
+      const nextScore = Number(event?.next_score || 0);
+      const alreadyHandledByScoreIncrease = nextScore > previousScore && nextScore < 100;
+      if (alreadyHandledByScoreIncrease) return;
+      if (delta > 0 || event?.at_max) {
+        triggerAffinityHeartBurst(Math.max(1, delta || 1));
+      }
+    });
+  }
+
+  async function claimAffinityReward(characterId) {
+    const key = String(characterId || "");
+    if (!key || affinityRewardClaiming.has(key)) return;
+    affinityRewardClaiming.add(key);
+    shell.setImageLoading(true, "auto");
+    try {
+      const result = await LiveChatApi.claimAffinityReward(sessionId, characterId);
+      triggerAffinityMaxHeartBurst();
+      window.setTimeout(() => {
+        if (result?.context) applyContext(result.context);
+        if (result?.event_image) shell.renderSelectedImage(result.event_image, result.context || currentContext);
+      }, 1250);
+      if (result?.letter) NovelUI.refreshLetterBadge?.();
+      NovelUI.toast("好感度100達成。衣装チケットを1枚獲得しました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "好感度100報酬を受け取れませんでした。", "danger");
+    } finally {
+      window.setTimeout(() => shell.setImageLoading(false, currentContext), 1300);
+      affinityRewardClaiming.delete(key);
+    }
+  }
+
+  async function debugAffinityClearShortcut() {
+    if (!LiveChatApi.debugAffinityClear) return;
+    const password = window.prompt("DEBUG password");
+    if (!password) return;
+    shell.setImageLoading(true, "auto");
+    try {
+      const result = await LiveChatApi.debugAffinityClear(sessionId, { password });
+      triggerAffinityMaxHeartBurst();
+      window.setTimeout(() => {
+        if (result?.context) applyContext(result.context);
+        if (result?.event_image) shell.renderSelectedImage(result.event_image, result.context || currentContext);
+      }, 1250);
+      if (result?.letter) NovelUI.refreshLetterBadge?.();
+      NovelUI.toast("デバッグ: 好感度100クリアにしました。");
+    } catch (error) {
+      NovelUI.toast(error.message || "デバッグクリアに失敗しました。", "danger");
+    } finally {
+      window.setTimeout(() => shell.setImageLoading(false, currentContext), 1300);
+    }
+  }
+
+  function detectAffinityIncreases(context) {
+    const memoryMap = context?.character_user_memories || {};
+    const visibleCharacterIds = new Set(activeCharacters(context).map((character) => String(character.id)));
+    const nextScores = new Map();
+    Object.entries(memoryMap).forEach(([characterId, memory]) => {
+      if (visibleCharacterIds.size && !visibleCharacterIds.has(String(characterId))) return;
+      const score = Math.max(0, Math.min(100, Number(memory?.affinity_score || 0)));
+      nextScores.set(String(characterId), score);
+      if (!affinityScoresInitialized) return;
+      const previous = lastAffinityScores.get(String(characterId));
+      if (previous !== undefined && score > previous) {
+        triggerAffinityHeartBurst(score - previous);
+      }
+      const reward = (context?.affinity_rewards || {})[String(characterId)] || {};
+      if (
+        score >= 100
+        && !reward.event_claimed
+        && (previous === undefined || previous < 100)
+      ) {
+        claimAffinityReward(characterId);
+      }
+    });
+    lastAffinityScores.clear();
+    nextScores.forEach((score, characterId) => lastAffinityScores.set(characterId, score));
+    affinityScoresInitialized = true;
+  }
+
   function renderCharacterAffinity(context) {
     if (!affinityCard || !affinityList) return;
-    const characters = Array.isArray(context?.characters) ? context.characters : [];
+    detectAffinityIncreases(context);
+    const characters = activeCharacters(context);
     const memoryMap = context?.character_user_memories || {};
     const rows = characters
       .map((character) => {
@@ -418,6 +663,7 @@
         const score = Math.max(0, Math.min(100, Number(memory.affinity_score || 0)));
         const label = memory.affinity_label || "警戒";
         const closenessLevel = Math.max(0, Math.min(5, Number(memory.physical_closeness_level || 0)));
+        const closenessLevelLabel = closenessLevel >= 5 ? "Max" : String(closenessLevel);
         const closenessLabel = memory.physical_closeness_label || "距離を保つ";
         const note = memory.affinity_notes || "";
         const toneClass = score >= 70 ? "is-high" : score >= 40 ? "is-mid" : "is-low";
@@ -426,6 +672,7 @@
           score,
           label,
           closenessLevel,
+          closenessLevelLabel,
           closenessLabel,
           note,
           toneClass,
@@ -449,12 +696,73 @@
           <span style="width: ${row.score}%"></span>
         </div>
         <div class="live-chat-affinity-foot">
-          <span>距離感 Lv.${row.closenessLevel}</span>
+          <span>距離感 Lv.${row.closenessLevelLabel}</span>
           <span>${NovelUI.escape(row.closenessLabel)}</span>
         </div>
         ${row.note ? `<p>${NovelUI.escape(row.note)}</p>` : ""}
       </article>
     `).join("");
+  }
+
+  function characterAssetUrl(character) {
+    return character?.bromide_asset?.media_url
+      || character?.thumbnail_asset?.media_url
+      || character?.base_asset?.media_url
+      || "";
+  }
+
+  function renderCharacterIntelRail(context) {
+    if (!intelRail) return;
+    const hints = ((context?.character_intel || {}).available_hints || []);
+    const characters = new Map((context?.project_characters || []).map((character) => [Number(character.id), character]));
+    const byTarget = [];
+    const seenTargets = new Set();
+    hints.forEach((hint) => {
+      const targetId = Number(hint.target_character_id || 0);
+      if (!targetId || seenTargets.has(targetId)) return;
+      seenTargets.add(targetId);
+      byTarget.push(hint);
+    });
+    intelRail.classList.toggle("is-hidden", byTarget.length === 0);
+    if (!byTarget.length) {
+      intelRail.innerHTML = "";
+      return;
+    }
+    intelRail.innerHTML = byTarget.slice(0, 6).map((hint) => {
+      const character = characters.get(Number(hint.target_character_id || 0)) || {};
+      const imageUrl = characterAssetUrl(character);
+      const name = hint.target_character_name || character.name || "Character";
+      return `
+        <button class="live-chat-intel-button" type="button"
+          data-source-character-id="${Number(hint.source_character_id || 0)}"
+          data-target-character-id="${Number(hint.target_character_id || 0)}"
+          data-topic="${NovelUI.escape(hint.topic || "")}"
+          title="${NovelUI.escape(name)}の情報">
+          ${imageUrl ? `<img src="${NovelUI.escape(imageUrl)}" alt="${NovelUI.escape(name)}">` : '<i class="bi bi-person-heart" aria-hidden="true"></i>'}
+          <span class="live-chat-intel-dot" aria-hidden="true"></span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  async function revealCharacterIntelHint(button) {
+    if (!button || button.disabled) return;
+    button.disabled = true;
+    try {
+      const result = await LiveChatApi.revealCharacterIntel(sessionId, {
+        source_character_id: Number(button.dataset.sourceCharacterId || 0),
+        target_character_id: Number(button.dataset.targetCharacterId || 0),
+        topic: button.dataset.topic || "",
+      });
+      if (result?.context) {
+        applyContext(result.context);
+      } else {
+        await loadContext();
+      }
+    } catch (error) {
+      NovelUI.toast(error.message || "キャラクター情報を開示できませんでした。", "danger");
+      button.disabled = false;
+    }
   }
 
   function getInitialObjective(context) {
@@ -771,7 +1079,6 @@
     if (!currentContext || !sessionId) return false;
     if (idleTalkBusy || shell.getState().replyLoading) return false;
     if (document.hidden || hasPendingPlayerText()) return false;
-    if (giftController?.hasSelectedGift()) return false;
     if (idleTalksSincePlayerInput >= 1) return false;
     return true;
   }
@@ -1071,6 +1378,11 @@
     shell.setModeBadgeText?.(currentModeBadgeText());
   }
 
+  function refreshComposePlaceholder() {
+    if (!composeInput) return;
+    composeInput.placeholder = photoModeActive ? composePlaceholders.photo : composePlaceholders.chat;
+  }
+
   function isCurrentLocationLccd() {
     const location = currentContext?.state?.state_json?.current_location;
     return String(location?.id || "") === "lccd";
@@ -1088,38 +1400,7 @@
   }
 
   async function enterLccdRoom() {
-    if (lccdEnterBusy) return;
-    locationMoveVisible = false;
-    lccdVisible = false;
-    renderLocationMovePanel(currentContext);
-    renderLccdPanel();
-    setLccdEnterLoading(true);
-    shell.setImageLoading(true, "auto");
-    try {
-      const result = await LiveChatApi.enterLccdRoom(sessionId, {
-        size: imageForm?.size?.value || "1536x1024",
-        quality: imageForm?.quality?.value || "low",
-      });
-      if (result?.context) {
-        applyContext(result.context);
-      } else {
-        await loadContext();
-      }
-      lccdVisible = false;
-      renderLccdPanel();
-      if (result?.image_generation_error) {
-        NovelUI.toast(`お着替えへ移動しました。背景画像は失敗しました: ${result.image_generation_error}`, "warning");
-      } else {
-        NovelUI.toast("お着替えへ移動しました。");
-      }
-    } catch (error) {
-      NovelUI.toast(error.message || "お着替えへの移動に失敗しました。", "danger");
-      await loadContext().catch(() => {});
-    } finally {
-      setLccdEnterLoading(false);
-      shell.setImageLoading(false, "auto");
-      renderLccdPanel();
-    }
+    NovelUI.toast("チャットルーム内でのお着替え部屋は廃止されました。クローゼットで衣装を作成してください。", "warning");
   }
 
   function setLccdLoading(active) {
@@ -1131,43 +1412,17 @@
       : "衣装を生成";
   }
 
-  async function generateLccdCostume(promptText, poseStyle = "") {
-    if (lccdBusy) return;
-    promptText = String(promptText || "").trim();
-    if (!promptText) {
-      NovelUI.toast("衣装の希望を入力してください。", "warning");
+  async function generateLccdCostume() {
+    NovelUI.toast("チャットルーム内での衣装生成は廃止されました。クローゼットで衣装を作成してください。", "warning");
+  }
+  function setPhotoModeActive(active) {
+    if (active && !canUsePhotoMode()) {
+      photoModeActive = false;
+      updatePhotoModeAvailability(currentContext);
+      refreshComposePlaceholder();
+      NovelUI.toast("撮影モードは好感度100クリア後に開放されます。", "warning");
       return;
     }
-    setLccdLoading(true);
-    shell.setImageLoading(true, "auto");
-    try {
-      const result = await LiveChatApi.generateLccdCostume(sessionId, {
-        prompt_text: promptText,
-        pose_style: poseStyle,
-        costume_size: "1024x1536",
-        quality: imageForm?.quality?.value || "low",
-      });
-      if (result?.context) {
-        applyContext(result.context);
-      } else {
-        await loadContext();
-      }
-      if (result?.photo_generation_error) {
-        NovelUI.toast(`衣装は保存しました。撮影カットは失敗しました: ${result.photo_generation_error}`, "warning");
-      } else {
-        NovelUI.toast("お着替えで衣装と撮影カットを生成しました。");
-      }
-    } catch (error) {
-      NovelUI.toast(error.message || "お着替え撮影に失敗しました。", "danger");
-      await loadContext().catch(() => {});
-    } finally {
-      setLccdLoading(false);
-      shell.setImageLoading(false, "auto");
-      renderLccdPanel();
-    }
-  }
-
-  function setPhotoModeActive(active) {
     photoModeActive = active;
     if (active) {
       conversationModeActive = false;
@@ -1181,7 +1436,9 @@
     togglePhotoModeButton.setAttribute("aria-pressed", active ? "true" : "false");
     togglePhotoModeButton.setAttribute("title", active ? "撮影モード中" : "撮影モード");
     togglePhotoModeButton.setAttribute("aria-label", active ? "撮影モード中" : "撮影モード");
+    updatePhotoModeAvailability(currentContext);
     refreshModeBadge();
+    refreshComposePlaceholder();
   }
 
   function setConversationModeActive(active) {
@@ -1199,12 +1456,13 @@
     conversationModeButton.setAttribute("title", active ? "会話モード中" : "会話モード");
     conversationModeButton.setAttribute("aria-label", active ? "会話モード中" : "会話モード");
     refreshModeBadge();
+    refreshComposePlaceholder();
   }
 
   function setPhotoModeLoading(active) {
     photoModeBusy = active;
     if (!togglePhotoModeButton) return;
-    togglePhotoModeButton.disabled = active;
+    togglePhotoModeButton.disabled = active || !canUsePhotoMode();
     togglePhotoModeButton.innerHTML = active
       ? '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>'
       : stageActionIcons.photoMode;
@@ -1212,6 +1470,11 @@
 
   async function generatePhotoModeShoot(promptText, poseStyle = "") {
     if (photoModeBusy) return;
+    if (!canUsePhotoMode()) {
+      NovelUI.toast("撮影モードは好感度100クリア後に開放されます。", "warning");
+      setConversationModeActive(true);
+      return;
+    }
     promptText = String(promptText || "").trim();
     if (!promptText) {
       NovelUI.toast("撮影したいポーズや構図を入力してください。", "warning");
@@ -1259,23 +1522,15 @@
     const rawMessage = composeForm.message_text.value.trim();
     let handledBySpecialMode = false;
     try {
-      if (!rawMessage && !giftController?.hasSelectedGift()) {
+      if (!rawMessage) {
         NovelUI.toast("送信するメッセージを入力するか、メッセージを作成ボタンで代理文を作成してください。", "warning");
         composeForm.message_text.focus();
         scheduleIdleTalk();
         return;
       }
       shell.setReplyLoading(true, currentContext);
-      if (giftController?.hasSelectedGift()) {
-        const uploaded = await giftController.uploadGiftImage(rawMessage);
-        if (!uploaded) {
-          throw new Error("\u8d08\u308a\u7269\u753b\u50cf\u306e\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002");
-        }
-      } else if (photoModeActive) {
+      if (photoModeActive) {
         await generatePhotoModeShoot(rawMessage);
-        handledBySpecialMode = true;
-      } else if (!conversationModeActive && isCurrentLocationLccd()) {
-        await generateLccdCostume(rawMessage);
         handledBySpecialMode = true;
       } else {
         const result = await LiveChatApi.postMessage(sessionId, {
@@ -1289,6 +1544,7 @@
           NovelUI.toast("\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304b\u3089\u30e1\u30fc\u30eb\u304c\u5c4a\u304d\u307e\u3057\u305f\u3002");
           NovelUI.refreshLetterBadge?.();
         }
+        playAffinityFeedback(result?.affinity_feedback);
         shell.setReplyLoading(false, currentContext, { render: false });
         await loadContext();
         await capturePlayerReactionIfEnabled();
@@ -1325,12 +1581,16 @@
     try {
       proxyMessageButton.disabled = true;
       proxyMessageButton.textContent = "作成中...";
-      const proxy = await LiveChatApi.generateProxyPlayerMessage(sessionId);
+      const proxy = await LiveChatApi.generateProxyPlayerMessage(sessionId, {
+        purpose: photoModeActive ? "photo_mode" : "chat",
+      });
       composeForm.message_text.value = proxy?.message_text || "";
       idleTalksSincePlayerInput = 0;
       scheduleIdleTalk();
       composeForm.message_text.focus();
-      NovelUI.toast("代理プレイヤーのメッセージを作成しました。内容を確認して送信してください。");
+      NovelUI.toast(photoModeActive
+        ? "撮影用プロンプトを作成しました。内容を確認して送信してください。"
+        : "代理プレイヤーのメッセージを作成しました。内容を確認して送信してください。");
     } catch (error) {
       NovelUI.toast(error.message || "代理メッセージの作成に失敗しました。", "danger");
     } finally {
@@ -1342,22 +1602,6 @@
   shortStoryButton?.addEventListener("click", generateShortStory);
   saveShortStoryButton?.addEventListener("click", saveShortStory);
   savedShortStoryList?.addEventListener("click", showSavedShortStory);
-
-  giftController = LiveChatGift.createGiftController({
-    giftUploadInput: document.getElementById("liveChatGiftUploadInput"),
-    giftDropTarget: document.getElementById("liveChatGiftDropTarget"),
-    giftPreview: document.getElementById("liveChatGiftPreview"),
-    giftPreviewImage: document.getElementById("liveChatGiftPreviewImage"),
-    giftSelectedNameDisplay: document.getElementById("liveChatGiftSelectedNameDisplay"),
-    giftSelectedName: document.getElementById("liveChatGiftSelectedName"),
-    giftClearButton: document.getElementById("liveChatGiftClearButton"),
-    giftSelectButton: document.getElementById("liveChatGiftSelectButton"),
-    api: LiveChatApi,
-    getSessionId: () => sessionId,
-    canInteract: () => !shell.getState().replyLoading,
-    onUploaded: loadContext,
-  });
-  giftController.bind();
 
   costumeRoomController = LiveChatCostumeRoom.createCostumeRoomController({
     api: LiveChatApi,
@@ -1389,6 +1633,12 @@
   stageActionsHandle?.addEventListener("pointerup", endStageActionsDrag);
   stageActionsHandle?.addEventListener("pointercancel", endStageActionsDrag);
   stageActionsHandle?.addEventListener("keydown", moveStageActionsByKeyboard);
+
+  document.addEventListener("keydown", (event) => {
+    if (!event.ctrlKey || !event.shiftKey || event.key.toLowerCase() !== "d") return;
+    event.preventDefault();
+    debugAffinityClearShortcut();
+  });
 
   document.getElementById("liveChatRefreshContextButton")?.addEventListener("click", () => {
     loadContext().catch((error) => {
@@ -1429,6 +1679,12 @@
   });
 
   inventoryGenerateButton?.addEventListener("click", generateInventoryItem);
+
+  intelRail?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-target-character-id]");
+    if (!button) return;
+    revealCharacterIntelHint(button);
+  });
 
   inventoryList?.addEventListener("dragstart", (event) => {
     const itemButton = event.target.closest("[data-inventory-item-id]");
@@ -1510,6 +1766,10 @@
   });
 
   togglePhotoModeButton?.addEventListener("click", () => {
+    if (!canUsePhotoMode()) {
+      NovelUI.toast("撮影モードは好感度100クリア後に開放されます。", "warning");
+      return;
+    }
     setConversationModeActive(false);
     setPhotoModeActive(!photoModeActive);
     if (!photoModeActive) {
@@ -1588,6 +1848,7 @@
 
   shell.initialize();
   setComposeVisible(true);
+  refreshComposePlaceholder();
 
   loadDefaultImageSettings().then(loadContext).catch((error) => {
     NovelUI.toast(error.message || "\u30e9\u30a4\u30d6\u30c1\u30e3\u30c3\u30c8\u753b\u9762\u306e\u521d\u671f\u5316\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002", "danger");
@@ -1601,3 +1862,4 @@
     }
   });
 })();
+

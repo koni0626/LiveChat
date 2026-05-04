@@ -81,6 +81,8 @@
     } = options;
     applyStageDimensions(selectedImage, selectedImagePanel);
     const mediaUrl = selectedImage?.asset?.media_url;
+    const previousMediaUrl = selectedImagePanel.querySelector(".live-chat-stage-image")?.getAttribute("src") || "";
+    const shouldFadeInImage = Boolean(mediaUrl && previousMediaUrl && previousMediaUrl !== mediaUrl);
     const novelMarkup = `
       <div class="live-chat-novel-box ${textboxVisible ? "" : "is-hidden"}" id="liveChatNovelBox">
         <div class="live-chat-novel-speaker" id="liveChatNovelSpeaker">${NovelUI.escape(novelSpeakerText || "")}</div>
@@ -97,7 +99,7 @@
     `;
     const stageBody = !mediaUrl
       ? '<div class="empty-panel">まだ画像がありません。</div>'
-      : `<img class="live-chat-stage-image" src="${mediaUrl}" alt="selected image">`;
+      : `<img class="live-chat-stage-image ${shouldFadeInImage ? "is-entering" : "is-visible"}" src="${mediaUrl}" alt="selected image">`;
     const modeBadgeMarkup = modeBadgeText
       ? `<div class="live-chat-mode-badge">${NovelUI.escape(modeBadgeText)}</div>`
       : "";
@@ -112,9 +114,15 @@
     if (stageImage) {
       stageImage.addEventListener("load", () => {
         applyNaturalStageDimensions(selectedImagePanel, stageImage.naturalWidth, stageImage.naturalHeight);
+        if (stageImage.classList.contains("is-entering")) {
+          window.requestAnimationFrame(() => stageImage.classList.add("is-visible"));
+        }
       }, { once: true });
       if (stageImage.complete && stageImage.naturalWidth > 0 && stageImage.naturalHeight > 0) {
         applyNaturalStageDimensions(selectedImagePanel, stageImage.naturalWidth, stageImage.naturalHeight);
+        if (stageImage.classList.contains("is-entering")) {
+          window.requestAnimationFrame(() => stageImage.classList.add("is-visible"));
+        }
       }
     }
   }

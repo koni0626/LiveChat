@@ -14,26 +14,6 @@
     });
   }
 
-  async function generateCostume(sessionId, body) {
-    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/costumes/generate`, {
-      method: "POST",
-      body,
-    });
-  }
-
-  async function uploadCostume(sessionId, formData) {
-    const response = await fetch(`/api/v1/chat/sessions/${sessionId}/costumes/upload`, {
-      method: "POST",
-      credentials: "same-origin",
-      body: formData,
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(payload?.data?.message || payload?.message || `HTTP ${response.status}`);
-    }
-    return payload;
-  }
-
   async function selectCostume(sessionId, imageId) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/costumes/${imageId}/select`, {
       method: "POST",
@@ -79,23 +59,22 @@
     });
   }
 
-  async function generateLccdPhotoShoot(sessionId, body = {}) {
-    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/lccd/photo-shoot`, {
+  async function generatePhotoModeShoot(sessionId, body = {}) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/photo-mode/shoot`, {
       method: "POST",
       body,
     });
   }
 
-  async function generateLccdCostume(sessionId, body = {}) {
-    return generateLccdPhotoShoot(sessionId, { ...body, mode: "combined" });
+  async function claimAffinityReward(sessionId, characterId) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/affinity-rewards/${characterId}/claim`, {
+      method: "POST",
+      body: {},
+    });
   }
 
-  async function generatePhotoModeShoot(sessionId, body = {}) {
-    return generateLccdPhotoShoot(sessionId, { ...body, mode: "photo_only" });
-  }
-
-  async function enterLccdRoom(sessionId, body = {}) {
-    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/lccd/enter`, {
+  async function debugAffinityClear(sessionId, body = {}) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/debug/affinity-clear`, {
       method: "POST",
       body,
     });
@@ -108,10 +87,10 @@
     });
   }
 
-  async function generateProxyPlayerMessage(sessionId) {
+  async function generateProxyPlayerMessage(sessionId, body = {}) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/proxy-player-message`, {
       method: "POST",
-      body: {},
+      body,
     });
   }
 
@@ -200,6 +179,13 @@
     });
   }
 
+  async function revealCharacterIntel(sessionId, body = {}) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/intel/reveal`, {
+      method: "POST",
+      body,
+    });
+  }
+
   async function selectImage(sessionId, imageId) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/images/${imageId}/select`, {
       method: "POST",
@@ -224,8 +210,6 @@
     loadSettings,
     loadContext,
     generateSessionImage,
-    generateCostume,
-    uploadCostume,
     postMessage,
     analyzePlayerReaction,
     generateShortStory,
@@ -238,6 +222,7 @@
     loadInventory,
     generateInventoryItem,
     giveInventoryItem,
+    revealCharacterIntel,
     selectImage,
     selectCostume,
     loadClosetOutfits,
@@ -246,10 +231,9 @@
     executeSceneChoice,
     moveToLocation,
     selectLocationService,
-    generateLccdPhotoShoot,
-    generateLccdCostume,
     generatePhotoModeShoot,
-    enterLccdRoom,
+    claimAffinityReward,
+    debugAffinityClear,
     setReferenceImage,
     deleteMessage,
   };

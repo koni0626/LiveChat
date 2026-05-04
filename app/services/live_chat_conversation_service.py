@@ -18,6 +18,7 @@ from .live_chat_media_service import LiveChatMediaService
 from .session_state_service import SessionStateService
 from .user_setting_service import UserSettingService
 from .character_user_memory_service import CharacterUserMemoryService
+from .session_character_affinity_service import SessionCharacterAffinityService
 from .character_memory_note_service import CharacterMemoryNoteService
 from .character_intel_hint_service import CharacterIntelHintService
 from .live_chat_character_intel_tracker import LiveChatCharacterIntelTracker
@@ -42,6 +43,7 @@ class LiveChatConversationService:
         serialize_message=None,
         serialize_state=None,
         character_user_memory_service: CharacterUserMemoryService | None = None,
+        session_character_affinity_service: SessionCharacterAffinityService | None = None,
         character_memory_note_service: CharacterMemoryNoteService | None = None,
         character_intel_hint_service: CharacterIntelHintService | None = None,
         session_objective_note_service: SessionObjectiveNoteService | None = None,
@@ -58,6 +60,9 @@ class LiveChatConversationService:
         self._serialize_message = serialize_message
         self._serialize_state = serialize_state
         self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
+        self._session_character_affinity_service = (
+            session_character_affinity_service or SessionCharacterAffinityService()
+        )
         self._character_memory_note_service = character_memory_note_service or CharacterMemoryNoteService()
         self._character_intel_tracker = LiveChatCharacterIntelTracker(character_intel_hint_service)
         self._session_objective_note_service = session_objective_note_service or SessionObjectiveNoteService()
@@ -140,7 +145,15 @@ class LiveChatConversationService:
         session = self._chat_session_service.get_session(session_id) if self._chat_session_service else None
         if not session:
             return None
+        previous_scores = {}
+        for character_id, memory in (context.get("character_user_memories") or {}).items():
+            try:
+                previous_scores[str(character_id)] = int(memory.get("affinity_score") or 0)
+            except (TypeError, ValueError):
+                previous_scores[str(character_id)] = 0
         evaluations = text_support.generate_character_affinity_evaluation(self._text_ai_client, context)
+        threshold_letters = []
+        affinity_feedback = []
         for item in evaluations or []:
             try:
                 character_id = int(item.get("character_id") or 0)
@@ -156,17 +169,49 @@ class LiveChatConversationService:
                 closeness_delta = int(item.get("physical_closeness_delta") or 0)
             except (TypeError, ValueError):
                 closeness_delta = 0
-            self._character_user_memory_service.update_affinity_from_ai_evaluation(
+            row = self._session_character_affinity_service.update_affinity_from_ai_evaluation(
+                session_id=int(session.id),
                 user_id=int(session.owner_user_id),
+                project_id=int(session.project_id),
                 character_id=character_id,
                 affinity_delta=affinity_delta,
                 reason=str(item.get("reason") or "").strip(),
                 physical_closeness_delta=closeness_delta,
             )
+            previous_score = int(previous_scores.get(str(character_id)) or 0)
+            next_score = int(getattr(row, "affinity_score", 0) or 0)
+            if affinity_delta > 0 or closeness_delta > 0:
+                affinity_feedback.append(
+                    {
+                        "character_id": character_id,
+                        "affinity_delta": affinity_delta,
+                        "physical_closeness_delta": closeness_delta,
+                        "previous_score": previous_score,
+                        "next_score": next_score,
+                        "at_max": bool(getattr(row, "locked_at_100", False) or next_score >= 100),
+                        "reason": str(item.get("reason") or "").strip(),
+                    }
+                )
+            for threshold in (60, 80):
+                if previous_score < threshold <= next_score and self._letter_service and self._context_provider:
+                    threshold_letters.append(
+                        self._letter_service.schedule_generate_affinity_threshold_letter(
+                            session_id,
+                            self._context_provider(session_id),
+                            character_id=character_id,
+                            threshold=threshold,
+                        )
+                    )
         state_row = self._session_state_service.get_state(session_id)
         state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
         state_json.pop("conversation_evaluation", None)
-        return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
+        if threshold_letters:
+            state_json["affinity_threshold_letters"] = {
+                "scheduled": len([item for item in threshold_letters if item]),
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+        state_row = self._session_state_service.upsert_state(session_id, {"state_json": state_json})
+        return {"state": state_row, "affinity_feedback": affinity_feedback}
 
     def _conversation_director_enabled(self) -> bool:
         try:
@@ -423,11 +468,7 @@ class LiveChatConversationService:
                 updated_context,
                 source_ref=f"chat_session:{session_id}",
             )
-            return self._letter_service.try_generate_for_context(
-                session,
-                updated_context,
-                trigger_type="conversation",
-            )
+            return None
         return None
 
     def _schedule_deferred_post_processing(
@@ -1456,6 +1497,8 @@ class LiveChatConversationService:
             raise ValueError("prompt_text is required")
         pose_style = str(payload.get("pose_style") or "").strip()
         mode = str(payload.get("mode") or "combined").strip().lower()
+        if mode not in {"photo", "photo_only", "shoot", "shoot_only"}:
+            raise ValueError("チャットルーム内での衣装生成は廃止されました。クローゼットで衣装を作成してください。")
 
         context = self._context_provider(session_id)
         character = (context.get("characters") or [{}])[0]
@@ -1728,10 +1771,11 @@ class LiveChatConversationService:
         costume_instruction = "\n".join(
             [
                 "お着替えで相談して決めた衣装。",
-                "クローゼット保存用なので、衣装の全体像と構造が分かる正面1枚の衣装基準画像にする。",
-                "必ず一人のキャラクターを正面向きで1回だけ描く。複数ポーズ、4分割、ターンアラウンド、背面図、側面図、コマ割り、比較表は禁止。",
-                "ユーザー指示に「回って」「くるっと」「ポーズ」「撮影」などの演出が含まれていても、保存用衣装基準画像では無視し、衣装デザインだけを抽出する。",
-                "背景はシンプルにして、衣装再利用のリファレンスとして使いやすくする。",
+                "クローゼット保存用なので、衣装の全体像と構造が分かる全身1枚の衣装基準画像にする。",
+                "必ず一人のキャラクターを頭から靴まで描く。複数ポーズ、4分割、ターンアラウンド、背面図、側面図、コマ割り、比較表は禁止。",
+                "直立不動の正面カタログ姿勢にはしない。軽い立ちポーズ、自然な体重移動、ゆるいS字、髪・襟・腰に手を添える、小さな一歩など、衣装が見える範囲で魅力的にする。",
+                "背景は無地やグレー壁ではなく、キャラクター設定・世界観・現在の場面に合う控えめな背景を入れる。衣装の輪郭が埋もれないよう、背景は適度に整理する。",
+                "ユーザー指示に強いアクションや撮影演出が含まれていても、保存用衣装基準画像では激しい動きにせず、衣装デザインとキャラクターらしさを両立する。",
                 instruction,
             ]
         )
@@ -1965,6 +2009,7 @@ class LiveChatConversationService:
         deferred_processing = False
         deferred_letter = False
         new_letter = None
+        evaluation_result = {}
         if defer_post_processing:
             deferred_processing = self._schedule_deferred_post_processing(
                 session_id,
@@ -1976,7 +2021,7 @@ class LiveChatConversationService:
             updated_context = self._context_provider(session_id)
             self.update_session_memory(session_id, updated_context)
             updated_context = self._context_provider(session_id)
-            self.update_conversation_evaluation(session_id, updated_context)
+            evaluation_result = self.update_conversation_evaluation(session_id, updated_context) or {}
             updated_context = self._context_provider(session_id)
             self._update_character_user_memory(session, updated_context)
             self._character_memory_note_service.extract_from_live_chat_context(
@@ -2001,13 +2046,23 @@ class LiveChatConversationService:
             "new_letter": new_letter,
             "deferred_letter": deferred_letter if not defer_post_processing else False,
             "deferred_processing": deferred_processing,
+            "affinity_feedback": evaluation_result.get("affinity_feedback") if isinstance(evaluation_result, dict) else [],
         }
 
-    def generate_player_proxy_message(self, session_id: int):
+    def generate_player_proxy_message(self, session_id: int, payload: dict | None = None):
         session = self._chat_session_service.get_session(session_id)
         if not session:
             return None
         context = self._context_provider(session_id)
+        payload = payload or {}
+        purpose = str(payload.get("purpose") or payload.get("mode") or "").strip().lower()
+        if purpose in {"photo_mode", "photo", "shooting", "shoot"}:
+            message_text = text_support.generate_photo_mode_proxy_message(self._text_ai_client, context)
+            return {
+                "message_text": message_text,
+                "player_name": session.player_name or "プレイヤー",
+                "purpose": "photo_mode",
+            }
         message_text = text_support.generate_player_proxy_message(self._text_ai_client, context)
         return {
             "message_text": message_text,

@@ -8,6 +8,7 @@ from .character import Character
 from .character_memory_note import CharacterMemoryNote
 from .character_memory_summary import CharacterMemorySummary
 from .character_intel_hint import CharacterIntelHint
+from .character_affinity_reward import CharacterAffinityReward
 from .character_user_memory import CharacterUserMemory
 from .character_feed_profile import CharacterFeedProfile
 from .character_outfit import CharacterOutfit
@@ -28,6 +29,7 @@ from .outing_session import OutingSession
 from .session_image import SessionImage
 from .session_gift_event import SessionGiftEvent
 from .session_state import SessionState
+from .session_character_affinity import SessionCharacterAffinity
 from .story import Story
 from .story_image import StoryImage
 from .story_message import StoryMessage
@@ -53,6 +55,7 @@ __all__ = [
     "CharacterMemoryNote",
     "CharacterMemorySummary",
     "CharacterIntelHint",
+    "CharacterAffinityReward",
     "CharacterUserMemory",
     "CharacterFeedProfile",
     "CharacterOutfit",
@@ -73,6 +76,7 @@ __all__ = [
     "SessionImage",
     "SessionGiftEvent",
     "SessionState",
+    "SessionCharacterAffinity",
     "Story",
     "StoryImage",
     "StoryMessage",

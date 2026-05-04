@@ -104,7 +104,7 @@ def physical_closeness_label_for_level(level: int) -> str:
         2: "隣に寄る",
         3: "軽い接触",
         4: "自発的な接触",
-        5: "かなり近い",
+        5: "想いが重なる",
     }
     return labels.get(_clamp_int(level, 0, 5), labels[0])
 
@@ -154,11 +154,7 @@ class CharacterUserMemoryService:
             f"player_preferences: {data['preference_notes'] or '(none)'}",
             f"open_threads: {data['unresolved_threads'] or '(none)'}",
             f"important_events: {data['important_events'] or '(none)'}",
-            f"affinity_toward_player: {data['affinity_score']}/100 ({data['affinity_label']})",
-            f"physical_closeness: level {data['physical_closeness_level']}/5 ({data['physical_closeness_label']})",
-            f"affinity_notes: {data['affinity_notes'] or '(none)'}",
-            "Let affinity influence warmth, vulnerability, jealousy, initiative, and body language.",
-            "At higher affinity, the character may proactively close distance or use light natural touch such as hand, arm, shoulder, sleeve, or leaning closer.",
+            "Session affinity is managed separately per chat session. Use the current session affinity from context, not long-term memory, for warmth and physical closeness.",
             "Respect the character profile, NG rules, and explicit refusal. Do not force contact or make it graphically sexual.",
             "Use this memory subtly. Do not mention it unnaturally.",
         ]

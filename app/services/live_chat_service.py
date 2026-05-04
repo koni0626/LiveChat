@@ -237,8 +237,8 @@ class LiveChatService:
     def post_message(self, session_id: int, payload: dict | None = None):
         return self._conversation_service.post_message(session_id, payload)
 
-    def generate_player_proxy_message(self, session_id: int):
-        return self._conversation_service.generate_player_proxy_message(session_id)
+    def generate_player_proxy_message(self, session_id: int, payload: dict | None = None):
+        return self._conversation_service.generate_player_proxy_message(session_id, payload)
 
     def post_idle_character_message(self, session_id: int):
         return self._conversation_service.post_idle_character_message(session_id)

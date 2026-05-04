@@ -743,6 +743,14 @@ class LiveChatMediaService:
             "ユーザー指示に回転、振り向き、歩く、踊る、撮影ポーズなどの演出が含まれていても、衣装基準画像では正面立ち姿に変換し、衣装デザインだけを反映する。\n"
             "ライブチャット用の参照画像なので、複雑な背景やイベントCG構図にはしない。\n"
         )
+        prompt += (
+            "\nCreate a polished full-body closet outfit image that looks good in the closet UI while still clearly showing the outfit."
+            "\nUse a light natural fashion pose, not a stiff front-facing catalog stance: relaxed weight shift, gentle S-curve, one hand near hair/collar/waist, small step, or a subtle characterful gesture."
+            "\nShow the full body from head to shoes. Keep the outfit structure, silhouette, materials, colors, shoes, and accessories readable."
+            "\nUse a tasteful background that matches the current scene, character concept, and world setting. Avoid plain gray, blank studio, or empty white backgrounds."
+            "\nThe background must support the character and outfit without hiding details: soft depth, clean silhouette separation, no readable text or UI."
+            "\nDo not use extreme action poses, sitting, lying, jumping, heavy foreshortening, multiple poses, turnarounds, split panels, comparison sheets, or back/side view sheets."
+        )
         prompt = prompt_support.forbid_text_in_image(prompt)
         safety_rewrite = {
             "rewritten_prompt": prompt,

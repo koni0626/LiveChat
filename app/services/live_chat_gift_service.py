@@ -16,6 +16,7 @@ from .chat_session_service import ChatSessionService
 from .letter_service import LetterService
 from .live_chat_media_service import LiveChatMediaService
 from .character_user_memory_service import CharacterUserMemoryService
+from .session_character_affinity_service import SessionCharacterAffinityService
 from .session_gift_event_service import SessionGiftEventService
 from .session_image_service import SessionImageService
 from .session_state_service import SessionStateService
@@ -42,6 +43,7 @@ class LiveChatGiftService:
         update_conversation_evaluation: Callable[[int, dict], object],
         serialize_message: Callable[[object], dict],
         character_user_memory_service: CharacterUserMemoryService | None = None,
+        session_character_affinity_service: SessionCharacterAffinityService | None = None,
     ):
         self._chat_session_service = chat_session_service
         self._chat_message_service = chat_message_service
@@ -58,6 +60,9 @@ class LiveChatGiftService:
         self._update_conversation_evaluation = update_conversation_evaluation
         self._serialize_message = serialize_message
         self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
+        self._session_character_affinity_service = (
+            session_character_affinity_service or SessionCharacterAffinityService()
+        )
 
     def _load_json(self, value):
         if value is None:
@@ -197,6 +202,93 @@ class LiveChatGiftService:
             "speaker_name": character.get("name") or "キャラクター",
             "message_text": lines.get(mood) or lines["neutral"],
         }
+
+    def _fallback_gift_reply(self, context: dict, character: dict, recognized_label: str, evaluation: dict):
+        player_name = context.get("session", {}).get("player_name") or "プレイヤー"
+        label = recognized_label or "その贈り物"
+        mood = evaluation.get("mood") or "neutral"
+        if mood == "delighted":
+            text = f"{player_name}、これを選んでくれたの……？ {label}、今の私には少し特別に見える。ありがとう。"
+        elif mood == "happy":
+            text = f"{label}、ちゃんと見て選んでくれた感じがする。……うん、嬉しい。"
+        elif mood == "awkward":
+            text = f"{label}か……気持ちは受け取るね。ただ、少しだけ反応に迷っちゃった。"
+        elif mood == "upset":
+            text = f"{label}は、今の私には少しつらいかも。どうして選んだのか、聞かせて。"
+        else:
+            text = f"{label}をくれるんだ。どんな気持ちで選んでくれたのか、少し気になる。"
+        return {
+            "speaker_name": character.get("name") or "キャラクター",
+            "message_text": text,
+        }
+
+    def _build_gift_reply(self, context: dict, character: dict, recognized_label: str, evaluation: dict):
+        memory = (context.get("character_user_memories") or {}).get(str(character.get("id") or "")) or {}
+        player_name = context.get("session", {}).get("player_name") or "プレイヤー"
+        profile = character.get("memory_profile") or {}
+        if not isinstance(profile, dict):
+            profile = {}
+        recent_messages = []
+        for item in (context.get("messages") or [])[-8:]:
+            speaker = item.get("speaker_name") or item.get("sender_type") or "speaker"
+            text = str(item.get("message_text") or "").strip()
+            if text:
+                recent_messages.append(f"- {speaker}: {text[:180]}")
+        prompt = "\n".join(
+            [
+                "Return only JSON.",
+                "You write one natural Japanese dialogue line for a visual novel live chat character who just received a gift from the player.",
+                "Required keys: speaker_name, message_text.",
+                "speaker_name must be exactly the target character name.",
+                "message_text must be only the character's spoken line, not narration.",
+                "Write 1 or 2 short sentences. Avoid generic assistant-like thanks.",
+                "Do not reuse template wording such as '気持ちはちゃんと伝わる'.",
+                "Reflect the character's personality, speech style, current affinity, physical closeness, mood, and the specific gift.",
+                "If the gift matches the character, make the reaction specific and emotionally textured.",
+                "If it is only mildly appreciated, keep it modest but still in-character.",
+                "",
+                f"Player name: {player_name}",
+                f"Target character name: {character.get('name') or 'キャラクター'}",
+                f"Nickname: {character.get('nickname') or ''}",
+                f"Personality: {character.get('personality') or ''}",
+                f"Speech style: {character.get('speech_style') or ''}",
+                f"First person: {character.get('first_person') or ''}",
+                f"Character summary: {character.get('character_summary') or ''}",
+                f"Likes: {', '.join(profile.get('likes') or character.get('favorite_items') or [])}",
+                f"Hobbies: {', '.join(profile.get('hobbies') or [])}",
+                f"Gift name: {recognized_label or 'その贈り物'}",
+                f"Gift evaluation mood: {evaluation.get('mood') or 'neutral'}",
+                f"Gift score delta: {evaluation.get('score_delta', 0)}",
+                f"Gift match reasons: {', '.join(evaluation.get('reasons') or [])}",
+                f"Affinity toward player: {memory.get('affinity_score', 0)}/100 ({memory.get('affinity_label') or ''})",
+                f"Physical closeness: level {memory.get('physical_closeness_level', 0)}/5 ({memory.get('physical_closeness_label') or ''})",
+                f"Affinity notes: {memory.get('affinity_notes') or ''}",
+                "Recent conversation:",
+                *(recent_messages or ["- (none)"]),
+            ]
+        )
+        try:
+            result = self._text_ai_client.generate_text(
+                prompt,
+                temperature=0.75,
+                response_format={"type": "json_object"},
+                max_tokens=220,
+            )
+            parsed = result.get("parsed_json") or self._text_ai_client._try_parse_json(result.get("text"))
+            if not isinstance(parsed, dict):
+                raise RuntimeError("gift reply response is invalid")
+            speaker_name = str(parsed.get("speaker_name") or character.get("name") or "キャラクター").strip()[:120]
+            message_text = str(parsed.get("message_text") or "").strip()
+            if not message_text:
+                raise RuntimeError("gift reply message is empty")
+            if len(message_text) > 260:
+                message_text = message_text[:260].rstrip()
+            return {
+                "speaker_name": speaker_name,
+                "message_text": message_text,
+            }
+        except Exception:
+            return self._fallback_gift_reply(context, character, recognized_label, evaluation)
 
     def _update_gift_state_memory(self, session_id: int, character: dict, recognized_label: str, recognized_tags: list[str], evaluation: dict):
         state_row = self._session_state_service.get_state(session_id)
@@ -511,12 +603,21 @@ class LiveChatGiftService:
             },
         )
         self._update_gift_state_memory(session_id, character, recognized_label, recognized_tags, evaluation)
-        self._character_user_memory_service.update_affinity_from_ai_evaluation(
+        character_id = int(character.get("id") or 0)
+        previous_memory = (context.get("character_user_memories") or {}).get(str(character_id)) or {}
+        try:
+            previous_score = int(previous_memory.get("affinity_score") or 0)
+        except (TypeError, ValueError):
+            previous_score = 0
+        affinity_row = self._session_character_affinity_service.update_affinity_from_ai_evaluation(
+            session_id=int(session.id),
             user_id=int(session.owner_user_id),
-            character_id=int(character.get("id") or 0),
+            project_id=int(session.project_id),
+            character_id=character_id,
             affinity_delta=int(evaluation.get("score_delta") or 0),
             reason=f"gift: {recognized_label}",
         )
+        gift_affinity_delta = int(evaluation.get("score_delta") or 0)
         generated_image = None
         try:
             generated_image = self._generate_gift_visual_image(
@@ -530,15 +631,37 @@ class LiveChatGiftService:
         except Exception:
             generated_image = None
         updated_context = self._context_provider(session_id)
+        next_score = int(getattr(affinity_row, "affinity_score", 0) or 0)
+        threshold_letters = []
+        for threshold in (60, 80):
+            if previous_score < threshold <= next_score:
+                threshold_letters.append(
+                    self._letter_service.schedule_generate_affinity_threshold_letter(
+                        session_id,
+                        updated_context,
+                        character_id=character_id,
+                        threshold=threshold,
+                    )
+                )
         self._update_session_memory(session_id, updated_context)
         updated_context = self._context_provider(session_id)
-        self._update_conversation_evaluation(session_id, updated_context)
+        evaluation_result = self._update_conversation_evaluation(session_id, updated_context) or {}
         updated_context = self._context_provider(session_id)
-        deferred_letter = self._letter_service.schedule_generate_for_context(
-            session_id,
-            updated_context,
-            trigger_type="gift",
-        )
+        deferred_letter = any(threshold_letters)
+        affinity_feedback = []
+        if gift_affinity_delta > 0 and (bool(getattr(affinity_row, "locked_at_100", False)) or next_score >= 100):
+            affinity_feedback.append(
+                {
+                    "character_id": character_id,
+                    "affinity_delta": gift_affinity_delta,
+                    "previous_score": previous_score,
+                    "next_score": next_score,
+                    "at_max": True,
+                    "reason": f"gift: {recognized_label}",
+                }
+            )
+        if isinstance(evaluation_result, dict):
+            affinity_feedback.extend(evaluation_result.get("affinity_feedback") or [])
         return {
             "gift_event": self.serialize_gift_event(gift_event),
             "messages": [self._serialize_message(user_message), self._serialize_message(assistant_message)],
@@ -548,4 +671,5 @@ class LiveChatGiftService:
             "state": updated_context["state"],
             "new_letter": None,
             "deferred_letter": deferred_letter,
+            "affinity_feedback": affinity_feedback,
         }

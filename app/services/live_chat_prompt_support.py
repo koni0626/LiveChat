@@ -36,6 +36,14 @@ def fallback_player_proxy_message(context: dict) -> str:
     return text_prompt_support.fallback_player_proxy_message(context)
 
 
+def build_photo_mode_proxy_message_prompt(context: dict) -> str:
+    return text_prompt_support.build_photo_mode_proxy_message_prompt(context)
+
+
+def fallback_photo_mode_proxy_message(context: dict) -> str:
+    return text_prompt_support.fallback_photo_mode_proxy_message(context)
+
+
 def build_idle_character_message_prompt(context: dict) -> str:
     return text_prompt_support.build_idle_character_message_prompt(context)
 
