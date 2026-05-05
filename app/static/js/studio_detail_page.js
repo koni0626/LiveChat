@@ -1,6 +1,7 @@
 (() => {
   const shell = document.querySelector("[data-project-id][data-asset-id]");
   const projectId = Number(shell?.dataset.projectId || 0);
+  const canManageProject = shell?.dataset.canManageProject === "true";
   let selectedAssetId = Number(shell?.dataset.assetId || 0);
   let images = [];
   let selected = null;
@@ -14,6 +15,29 @@
   const searchInput = document.getElementById("studioSearchInput");
   const generateButton = document.getElementById("studioGenerateButton");
   let searchTimer = null;
+
+  function openLightbox(image) {
+    if (!image?.media_url) return;
+    let overlay = document.querySelector(".studio-lightbox-overlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.className = "studio-lightbox-overlay";
+      overlay.innerHTML = `
+        <button class="studio-lightbox-close" type="button" aria-label="閉じる"><i class="bi bi-x-lg"></i></button>
+        <img class="studio-lightbox-image" alt="">
+      `;
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay || event.target.closest(".studio-lightbox-close")) {
+          overlay.classList.remove("is-open");
+        }
+      });
+      document.body.appendChild(overlay);
+    }
+    const imageNode = overlay.querySelector(".studio-lightbox-image");
+    imageNode.src = image.media_url;
+    imageNode.alt = image.file_name || "studio image";
+    overlay.classList.add("is-open");
+  }
 
   sourceSelect.value = new URLSearchParams(window.location.search).get("source") || "all";
   searchInput.value = new URLSearchParams(window.location.search).get("q") || "";
@@ -49,7 +73,9 @@
       return;
     }
     selectedPanel.innerHTML = `
-      <img class="studio-detail-image" src="${NovelUI.escape(selected.media_url)}" alt="${NovelUI.escape(selected.file_name || "selected image")}">
+      <button class="studio-detail-image-button" type="button" data-open-selected-image>
+        <img class="studio-detail-image" src="${NovelUI.escape(selected.media_url)}" alt="${NovelUI.escape(selected.file_name || "selected image")}">
+      </button>
       <div class="studio-selected-meta">
         <span>${NovelUI.escape(selected.source_label || selected.source)}</span>
         <span>${NovelUI.escape(selected.size || "")}</span>
@@ -106,12 +132,32 @@
     const button = event.target.closest("[data-asset-id]");
     if (!button) return;
     const image = images.find((item) => Number(item.asset_id) === Number(button.dataset.assetId));
+    if (!canManageProject) {
+      openLightbox(image);
+      return;
+    }
     selectImage(image);
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
 
-  document.getElementById("studioForm").addEventListener("submit", async (event) => {
+  selectedPanel?.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-open-selected-image]")) return;
+    openLightbox(selected);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      document.querySelector(".studio-lightbox-overlay")?.classList.remove("is-open");
+    }
+  });
+
+  const studioForm = document.getElementById("studioForm");
+  studioForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!canManageProject) {
+      NovelUI.toast("この画面では画像編集できません。", "warning");
+      return;
+    }
     if (!selected) {
       NovelUI.toast("基準画像を選択してください。", "warning");
       return;

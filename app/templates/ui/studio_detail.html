@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="studio-detail-shell" data-project-id="{{ project_id }}" data-asset-id="{{ asset_id }}">
+<section class="studio-detail-shell" data-project-id="{{ project_id }}" data-asset-id="{{ asset_id }}" data-can-manage-project="{{ 'true' if can_manage_project else 'false' }}">
   <section class="panel-card">
     <div class="panel-head">
       <div>
@@ -15,6 +15,7 @@
     </div>
   </section>
 
+  {% if can_manage_project %}
   <section class="panel-card">
     <div class="panel-head">
       <h3>編集</h3>
@@ -45,6 +46,7 @@
       <button class="btn btn-sunrise" type="submit" id="studioGenerateButton">画像を変更</button>
     </form>
   </section>
+  {% endif %}
 
   <section class="panel-card">
     <div class="panel-head">

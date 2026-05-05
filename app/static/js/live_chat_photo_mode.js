@@ -5,6 +5,7 @@
       sessionId,
       shell,
       imageForm,
+      getImageGenerationOptions,
       iconHtml,
       getReward,
       applyContext,
@@ -88,11 +89,18 @@
       setLoading(true);
       shell?.setImageLoading(true, "auto");
       try {
+        const imageOptions = typeof getImageGenerationOptions === "function"
+          ? getImageGenerationOptions()
+          : {
+              size: imageForm?.size?.value || "1536x1024",
+              quality: imageForm?.quality?.value || "low",
+            };
         const result = await api.generatePhotoModeShoot(sessionId, {
           prompt_text: text,
           pose_style: poseStyle,
-          photo_size: imageForm?.size?.value || "1536x1024",
-          quality: imageForm?.quality?.value || "low",
+          photo_size: imageOptions.size,
+          quality: imageOptions.quality,
+          client_viewport: imageOptions.client_viewport,
         });
         if (isInteractionLocked?.()) return false;
         if (result?.context) {

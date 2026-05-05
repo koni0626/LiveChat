@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="panel-card studio-main" data-project-id="{{ project_id }}">
+<section class="panel-card studio-main" data-project-id="{{ project_id }}" data-can-manage-project="{{ 'true' if can_manage_project else 'false' }}">
   <div class="panel-head">
     <div>
       <h3>スタジオ</h3>

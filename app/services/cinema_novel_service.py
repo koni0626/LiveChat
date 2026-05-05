@@ -37,17 +37,46 @@ from .user_setting_service import UserSettingService
 class CinemaNovelService:
     VALID_STATUSES = {"draft", "building", "published", "archived"}
 
-    def list_novels(self, project_id: int, *, include_unpublished: bool = False):
+    def list_novels(self, project_id: int, *, include_unpublished: bool = False, mobile_only: bool = False):
         query = CinemaNovel.query.filter(
             CinemaNovel.project_id == project_id,
             CinemaNovel.deleted_at.is_(None),
         )
         if not include_unpublished:
             query = query.filter(CinemaNovel.status == "published")
+        if mobile_only:
+            query = query.filter(CinemaNovel.mobile_visible.is_(True))
         return query.order_by(CinemaNovel.sort_order.asc(), CinemaNovel.updated_at.desc(), CinemaNovel.id.desc()).all()
 
     def get_novel(self, novel_id: int):
         return CinemaNovel.query.filter(CinemaNovel.id == novel_id, CinemaNovel.deleted_at.is_(None)).first()
+
+    def update_novel_publication(self, novel_id: int, payload: dict | None):
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        payload = dict(payload or {})
+        next_status = str(payload.get("status") or "").strip() or "draft"
+        if next_status not in {"draft", "published"}:
+            raise ValueError("status must be draft or published")
+        novel.status = next_status
+        novel.mobile_visible = bool(payload.get("mobile_visible", getattr(novel, "mobile_visible", True)))
+        db.session.add(novel)
+        db.session.commit()
+        return novel
+
+    def _apply_mobile_novel_image_options(self, novel, options: dict) -> dict:
+        options = dict(options or {})
+        if bool(getattr(novel, "mobile_visible", False)):
+            settings = self._user_setting_service.get_global_settings()
+            options["size"] = settings.get("mobile_default_size") or "1024x1536"
+            options["client_viewport"] = "portrait_mobile"
+        return options
+
+    def _novel_image_layout_instruction(self, novel) -> str:
+        if bool(getattr(novel, "mobile_visible", False)):
+            return "スマホ版向けの縦長9:16キービジュアル。縦長画面で主要人物と背景が自然に収まる構図。"
+        return "横長16:9。"
 
     def delete_novel(self, novel_id: int) -> bool:
         novel = self.get_novel(novel_id)
@@ -118,6 +147,7 @@ class CinemaNovelService:
             "subtitle": novel.subtitle,
             "description": novel.description,
             "status": novel.status,
+            "mobile_visible": bool(getattr(novel, "mobile_visible", True)),
             "mode": novel.mode,
             "cover_asset_id": novel.cover_asset_id,
             "poster_asset_id": novel.poster_asset_id,
@@ -518,6 +548,7 @@ class CinemaNovelService:
             subtitle=str(payload.get("subtitle") or "ノベル作品").strip() or None,
             description=str(payload.get("description") or "").strip() or None,
             status=str(payload.get("status") or "published").strip() or "published",
+            mobile_visible=self._normalize_bool(payload.get("mobile_visible", True)),
             mode="cinema_novel",
             source_path=str(folder),
             production_json=json_util.dumps(
@@ -1081,6 +1112,15 @@ class CinemaNovelService:
             return text
         return text[:limit].rstrip() + "..."
 
+    def _normalize_bool(self, value, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
     def save_production_outline(self, project_id: int, user_id: int, payload: dict | None):
         payload = dict(payload or {})
         title = str(payload.get("title") or "無題のノベル作品").strip() or "無題のノベル作品"
@@ -1109,6 +1149,7 @@ class CinemaNovelService:
             existing.subtitle = str(payload.get("subtitle") or existing.subtitle or "ノベル制作設計").strip() or None
             existing.description = str(payload.get("description") or source_input.get("theme") or existing.description or "").strip() or None
             existing.status = str(payload.get("status") or existing.status or "draft").strip() or "draft"
+            existing.mobile_visible = self._normalize_bool(payload.get("mobile_visible", getattr(existing, "mobile_visible", True)))
             existing.production_json = json_util.dumps(production_payload)
             db.session.commit()
             return existing
@@ -1119,6 +1160,7 @@ class CinemaNovelService:
             subtitle=str(payload.get("subtitle") or "ノベル制作設計").strip() or None,
             description=str(payload.get("description") or source_input.get("theme") or "").strip() or None,
             status=str(payload.get("status") or "draft").strip() or "draft",
+            mobile_visible=self._normalize_bool(payload.get("mobile_visible", True)),
             mode="cinema_novel",
             production_json=json_util.dumps(production_payload),
         )
@@ -1182,6 +1224,7 @@ class CinemaNovelService:
         options = self._user_setting_service.apply_cinema_novel_image_generation_settings(
             payload.get("image_options") or payload
         )
+        options = self._apply_mobile_novel_image_options(novel, options)
         references = self._matching_character_references(
             novel.project_id,
             "\n".join([novel.title or "", premise, outline[:2500]]),
@@ -1192,7 +1235,7 @@ class CinemaNovelService:
         prompt = "\n".join(
             [
                 f"ノベルゲーム『{novel.title}』のタイトル画像、オープニング画像。",
-                "作品起動時に最初に表示される派手なキービジュアル。横長16:9。",
+                f"作品起動時に最初に表示される派手なキービジュアル。{self._novel_image_layout_instruction(novel)}",
                 "日本のビジュアルノベル、映画ポスター、ゲームタイトル画面の雰囲気。",
                 "タイトルロゴを大きく中央または上部に配置。発光、金属感、ネオン、粒子、強いコントラストで印象的に。",
                 "キャラクターがいる場合は、参考画像の顔立ち、髪型、衣装、雰囲気を保つ。",
@@ -1379,6 +1422,11 @@ class CinemaNovelService:
         sample = "\n".join(str(scene.get("text") or "") for scene in scenes[:12] if isinstance(scene, dict))[:1800]
         cover_references = self._matching_character_references(novel.project_id, "\n".join([chapter.title or "", chapter.body_markdown or "", sample]))
         visual_scenes = self._select_visual_scene_candidates(novel.project_id, scenes, limit=20)
+        still_layout = (
+            "スマホ版向けの縦長9:16スチル。人物の顔と上半身、背景の場所感が縦画面に自然に収まる構図。"
+            if bool(getattr(novel, "mobile_visible", False))
+            else "横長シネマ構図。"
+        )
 
         def character_plan_lines(references):
             if not references:
@@ -1401,7 +1449,7 @@ class CinemaNovelService:
                 [
                     f"ノベル作品『{novel.title}』第{chapter.chapter_no}章「{chapter.title}」の章扉画像。",
                     *character_plan_lines(cover_references),
-                    "ノベルゲーム用の事前生成スチル。読み込み時に即表示できる横長シネマ構図。",
+                    f"ノベルゲーム用の事前生成スチル。読み込み時に即表示できる{still_layout}",
                     "キャラクターデザインを保ち、章の象徴的な場面を一枚にまとめる。",
                     "画像内に読める文字、ロゴ、透かしは入れない。",
                     f"章本文抜粋: {sample}",
@@ -1415,7 +1463,7 @@ class CinemaNovelService:
                         [
                             f"ノベル作品『{novel.title}』第{chapter.chapter_no}章「{chapter.title}」の劇中スチル。",
                             *character_plan_lines(item["character_references"]),
-                            "ノベルゲーム再生用の横長映画スチル。キャラクター表情と場所の空気を重視。",
+                            f"ノベルゲーム再生用の映画スチル。{still_layout}キャラクター表情と場所の空気を重視。",
                             "画像内に読める文字、ロゴ、透かしは入れない。",
                             f"シーン本文: {item['text'][:900]}",
                         ]
@@ -1438,6 +1486,7 @@ class CinemaNovelService:
         options = self._user_setting_service.apply_cinema_novel_image_generation_settings(
             payload.get("image_options") or payload
         )
+        options = self._apply_mobile_novel_image_options(novel, options)
         still_count = max(0, min(20, int(payload.get("still_count") or 20)))
         generate_cover = payload.get("generate_cover", False) is True
         overwrite = bool(payload.get("overwrite"))

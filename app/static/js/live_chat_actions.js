@@ -11,9 +11,64 @@
       generateSessionImage,
     } = options;
 
+    let imageClickTimer = null;
+    let imageLongPressTimer = null;
+    let imageLongPressPointerId = null;
+    let imageLongPressStart = null;
+    let suppressNextImageClick = false;
+    let selectingImage = false;
+    const imageLongPressMs = 650;
+
     function playShutter() {
       window.LiveChatSound?.unlock?.();
       window.LiveChatSound?.play("shutter");
+    }
+
+    function isMobilePointer(event) {
+      return event?.pointerType === "touch" || event?.pointerType === "pen" || window.matchMedia?.("(max-width: 767.98px)")?.matches;
+    }
+
+    function clearImageLongPress() {
+      window.clearTimeout(imageLongPressTimer);
+      imageLongPressTimer = null;
+      imageLongPressPointerId = null;
+      imageLongPressStart = null;
+      imageGrid?.querySelectorAll(".live-chat-thumb.is-long-pressing").forEach((item) => {
+        item.classList.remove("is-long-pressing");
+      });
+    }
+
+    async function selectGalleryImage(button) {
+      const imageId = Number(button?.dataset?.imageId || 0);
+      if (!imageId || selectingImage) return;
+      selectingImage = true;
+      button.classList.add("is-selecting");
+      button.disabled = true;
+      try {
+        await api.selectImage(getSessionId(), imageId);
+        await loadContext();
+        NovelUI.toast("現在の画像に戻しました。");
+      } catch (error) {
+        NovelUI.toast(error.message || "現在の画像への変更に失敗しました。", "danger");
+      } finally {
+        selectingImage = false;
+        if (button.isConnected) {
+          button.disabled = false;
+          button.classList.remove("is-selecting");
+        }
+      }
+    }
+
+    function openGalleryLightbox(button) {
+      const src = button.dataset.imageUrl || button.querySelector("img")?.getAttribute("src") || "";
+      const lightbox = document.getElementById("liveChatImageLightbox");
+      const lightboxImage = document.getElementById("liveChatImageLightboxImage");
+      if (src && lightbox && lightboxImage) {
+        lightboxImage.src = src;
+        lightbox.classList.remove("is-hidden");
+        lightbox.setAttribute("aria-hidden", "false");
+        document.body.classList.add("live-chat-lightbox-open");
+      }
     }
 
     document.getElementById("liveChatGenerateImageButton")?.addEventListener("click", async () => {
@@ -62,15 +117,53 @@
       if (event.target.closest(".live-chat-thumb-download")) return;
       const button = event.target.closest("[data-image-id]");
       if (!button) return;
-      const src = button.dataset.imageUrl || button.querySelector("img")?.getAttribute("src") || "";
-      const lightbox = document.getElementById("liveChatImageLightbox");
-      const lightboxImage = document.getElementById("liveChatImageLightboxImage");
-      if (src && lightbox && lightboxImage) {
-        lightboxImage.src = src;
-        lightbox.classList.remove("is-hidden");
-        lightbox.setAttribute("aria-hidden", "false");
-        document.body.classList.add("live-chat-lightbox-open");
+      if (suppressNextImageClick) {
+        suppressNextImageClick = false;
+        return;
       }
+      window.clearTimeout(imageClickTimer);
+      imageClickTimer = window.setTimeout(() => openGalleryLightbox(button), 220);
+    });
+
+    imageGrid?.addEventListener("dblclick", async (event) => {
+      if (event.target.closest(".live-chat-thumb-download")) return;
+      const button = event.target.closest("[data-image-id]");
+      if (!button) return;
+      event.preventDefault();
+      window.clearTimeout(imageClickTimer);
+      await selectGalleryImage(button);
+    });
+
+    imageGrid?.addEventListener("pointerdown", (event) => {
+      if (!isMobilePointer(event) || event.target.closest(".live-chat-thumb-download")) return;
+      const button = event.target.closest("[data-image-id]");
+      if (!button) return;
+      clearImageLongPress();
+      imageLongPressPointerId = event.pointerId;
+      imageLongPressStart = { x: event.clientX, y: event.clientY };
+      button.classList.add("is-long-pressing");
+      button.setPointerCapture?.(event.pointerId);
+      imageLongPressTimer = window.setTimeout(async () => {
+        suppressNextImageClick = true;
+        clearImageLongPress();
+        await selectGalleryImage(button);
+        window.setTimeout(() => {
+          suppressNextImageClick = false;
+        }, 420);
+      }, imageLongPressMs);
+    });
+
+    imageGrid?.addEventListener("pointermove", (event) => {
+      if (imageLongPressPointerId !== event.pointerId || !imageLongPressStart) return;
+      const deltaX = Math.abs(event.clientX - imageLongPressStart.x);
+      const deltaY = Math.abs(event.clientY - imageLongPressStart.y);
+      if (deltaX > 12 || deltaY > 12) clearImageLongPress();
+    });
+
+    ["pointerup", "pointercancel", "pointerleave"].forEach((eventName) => {
+      imageGrid?.addEventListener(eventName, (event) => {
+        if (imageLongPressPointerId === event.pointerId) clearImageLongPress();
+      });
     });
 
     const handleMessageDelete = async (event) => {

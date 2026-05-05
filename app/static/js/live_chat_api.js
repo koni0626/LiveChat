@@ -66,10 +66,10 @@
     });
   }
 
-  async function claimAffinityReward(sessionId, characterId) {
+  async function claimAffinityReward(sessionId, characterId, body = {}) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/affinity-rewards/${characterId}/claim`, {
       method: "POST",
-      body: {},
+      body,
     });
   }
 

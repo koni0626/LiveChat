@@ -31,6 +31,7 @@
   const stageActionsHandle = document.getElementById("liveChatStageActionsHandle");
   const composeForm = document.getElementById("liveChatComposeForm");
   const composeInput = document.getElementById("liveChatComposeInput");
+  const logCard = document.getElementById("liveChatLogCard");
   const imageForm = document.getElementById("liveChatImageForm");
   const uploadForm = document.getElementById("liveChatImageUploadForm");
   const costumeForm = document.getElementById("liveChatCostumeForm");
@@ -54,6 +55,8 @@
   const objectiveCount = document.getElementById("liveChatObjectiveDebugCount");
   const affinityCard = document.getElementById("liveChatAffinityCard");
   const affinityList = document.getElementById("liveChatAffinityList");
+  const affinityOriginalParent = affinityCard?.parentElement || null;
+  const affinityOriginalNextSibling = affinityCard?.nextElementSibling || null;
   const cameraToggleButton = document.getElementById("liveChatCameraToggleButton");
   const cameraStatus = document.getElementById("liveChatCameraStatus");
   const cameraStatusText = document.getElementById("liveChatCameraStatusText");
@@ -91,6 +94,50 @@
     cameraOn: '<i class="bi bi-webcam-fill" aria-hidden="true"></i>',
     cameraOff: '<i class="bi bi-webcam" aria-hidden="true"></i>',
   };
+
+  function isMobileViewport() {
+    return window.matchMedia("(max-width: 767.98px)").matches;
+  }
+
+  function currentImageSize() {
+    if (isMobileViewport()) {
+      return userDefaultImageSettings?.mobile_default_size || "1024x1536";
+    }
+    return imageForm?.size?.value || userDefaultImageSettings?.default_size || "1536x1024";
+  }
+
+  function configuredImageSizeForViewport() {
+    return isMobileViewport()
+      ? (userDefaultImageSettings?.mobile_default_size || "1024x1536")
+      : (userDefaultImageSettings?.default_size || "1536x1024");
+  }
+
+  function syncAffinityCardPlacement() {
+    if (!affinityCard || !affinityOriginalParent) return;
+    if (isMobileViewport()) {
+      if (affinityCard.parentElement !== composeForm?.parentElement) {
+        logCard?.parentElement?.insertBefore(affinityCard, logCard);
+      } else if (logCard && affinityCard.nextElementSibling !== logCard) {
+        logCard.parentElement.insertBefore(affinityCard, logCard);
+      }
+      affinityCard.classList.add("is-mobile-inline");
+      return;
+    }
+    if (affinityCard.parentElement !== affinityOriginalParent) {
+      affinityOriginalParent.insertBefore(affinityCard, affinityOriginalNextSibling);
+    }
+    affinityCard.classList.remove("is-mobile-inline");
+  }
+
+  function imageGenerationOptions(overrides = {}) {
+    return {
+      size: currentImageSize(),
+      quality: imageForm?.quality?.value || userDefaultImageSettings?.default_quality || "low",
+      client_viewport: isMobileViewport() ? "mobile" : "desktop",
+      ...overrides,
+    };
+  }
+
   const idleTalkEnabled = false;
   const idleTalkMinMs = 10000;
   const idleTalkMaxMs = 30000;
@@ -183,12 +230,18 @@
   function clampStageActionsPosition(x, y) {
     if (!stageElement || !stageActions) return { x: 12, y: 12 };
     const stageRect = stageElement.getBoundingClientRect();
+    const stageFrame = selectedImagePanel?.querySelector(".live-chat-stage-frame");
+    const boundsRect = isMobileViewport() && stageFrame
+      ? stageFrame.getBoundingClientRect()
+      : stageRect;
     const actionsRect = stageActions.getBoundingClientRect();
-    const maxX = Math.max(12, stageRect.width - actionsRect.width - 12);
-    const maxY = Math.max(12, stageRect.height - actionsRect.height - 12);
+    const minX = Math.max(12, boundsRect.left - stageRect.left + 12);
+    const minY = Math.max(12, boundsRect.top - stageRect.top + 12);
+    const maxX = Math.max(minX, boundsRect.right - stageRect.left - actionsRect.width - 12);
+    const maxY = Math.max(minY, boundsRect.bottom - stageRect.top - actionsRect.height - 12);
     return {
-      x: Math.min(Math.max(12, x), maxX),
-      y: Math.min(Math.max(12, y), maxY),
+      x: Math.min(Math.max(minX, x), maxX),
+      y: Math.min(Math.max(minY, y), maxY),
     };
   }
 
@@ -358,12 +411,14 @@
     loadContext,
     isInteractionLocked,
     playAffinityFeedback,
+    getImageGenerationOptions: imageGenerationOptions,
   });
   const locationController = LiveChatLocation.createLocationController({
     api: LiveChatApi,
     sessionId,
     shell,
     imageForm,
+    getImageGenerationOptions: imageGenerationOptions,
     getCurrentContext: () => currentContext,
     applyContext,
     loadContext,
@@ -375,6 +430,7 @@
     sessionId,
     shell,
     imageForm,
+    getImageGenerationOptions: imageGenerationOptions,
     iconHtml: stageActionIcons.photoMode,
     getReward: (context) => activeAffinityReward(context || currentContext),
     applyContext,
@@ -393,6 +449,7 @@
     input: composeInput,
     shell,
     imageForm,
+    getImageGenerationOptions: imageGenerationOptions,
     getCurrentContext: () => currentContext,
     isPhotoModeActive: () => photoModeController.isActive(),
     generatePhotoShoot: (promptText) => photoModeController.generateShoot(promptText),
@@ -623,7 +680,15 @@
     shell.setImageLoading(true, "ending");
     shell.setReplyLoading(true, currentContext, { render: false });
     try {
-      const result = await LiveChatApi.claimAffinityReward(sessionId, characterId);
+      const result = await LiveChatApi.claimAffinityReward(
+        sessionId,
+        characterId,
+        imageGenerationOptions({ quality: "medium" })
+      );
+      if (!result?.claimed) {
+        if (result?.context) applyContext(result.context, { force: true });
+        return;
+      }
       triggerAffinityMaxHeartBurst();
       await endingController.playAffinityEndingSequence(result);
       if (result?.letter) NovelUI.refreshLetterBadge?.();
@@ -652,7 +717,10 @@
     shell.setImageLoading(true, "ending");
     shell.setReplyLoading(true, currentContext, { render: false });
     try {
-      const result = await LiveChatApi.debugAffinityClear(sessionId, { password });
+      const result = await LiveChatApi.debugAffinityClear(
+        sessionId,
+        imageGenerationOptions({ password, quality: "medium" })
+      );
       triggerAffinityMaxHeartBurst();
       await endingController.playAffinityEndingSequence(result);
       if (result?.letter) NovelUI.refreshLetterBadge?.();
@@ -676,14 +744,17 @@
       nextScores.set(String(characterId), score);
       const sessionEndings = context?.state?.state_json?.affinity_100_endings || {};
       const sessionEnding = sessionEndings[String(characterId)] || {};
+      const previous = lastAffinityScores.get(String(characterId));
       if (
+        affinityScoresInitialized
+        &&
         score >= 100
         && !sessionEnding.played_at
+        && (previous === undefined || previous < 100)
       ) {
         claimAffinityReward(characterId);
       }
       if (!affinityScoresInitialized) return;
-      const previous = lastAffinityScores.get(String(characterId));
       if (previous !== undefined && score > previous) {
         if (
           (previous < 60 && score >= 60)
@@ -1009,7 +1080,7 @@
       }
       costumeRoomController?.applySettings(settings);
       if (settings?.default_size && imageForm.size) {
-        imageForm.size.value = settings.default_size;
+        imageForm.size.value = configuredImageSizeForViewport();
       }
     } catch (error) {
       userDefaultImageSettings = {};
@@ -1020,11 +1091,7 @@
     const epoch = interactionEpoch;
     shell.setImageLoading(true, mode);
     try {
-      const body = {
-        size: imageForm.size.value,
-        quality: imageForm.quality.value,
-        ...overrides,
-      };
+      const body = imageGenerationOptions(overrides);
       if (useExistingPrompt) {
         body.prompt_text = imageForm.prompt_text.value;
         body.use_existing_prompt = true;
@@ -1139,6 +1206,7 @@
   }
 
   setPanelExpanded(galleryCard, galleryBody, galleryToggleButton, false);
+  syncAffinityCardPlacement();
   composerController.bind();
   shortStoryPanel.bind();
   galleryToggleButton?.addEventListener("click", () => togglePanel(galleryCard, galleryBody, galleryToggleButton));
@@ -1267,7 +1335,7 @@
     shell.setImageLoading(true, "auto");
     const epoch = interactionEpoch;
     try {
-      const result = await LiveChatApi.executeSceneChoice(sessionId, button.dataset.sceneChoiceId);
+      const result = await LiveChatApi.executeSceneChoice(sessionId, button.dataset.sceneChoiceId, imageGenerationOptions());
       if (isStaleInteraction(epoch)) return;
       if (result?.context) {
         applyContext(result.context);
@@ -1298,6 +1366,7 @@
   });
 
   window.addEventListener("resize", () => {
+    syncAffinityCardPlacement();
     if (currentContext) {
       shell.renderSelectedImage(currentContext.selected_image, currentContext);
       scheduleStageActionPosition();

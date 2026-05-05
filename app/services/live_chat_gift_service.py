@@ -20,6 +20,7 @@ from .session_character_affinity_service import SessionCharacterAffinityService
 from .session_gift_event_service import SessionGiftEventService
 from .session_image_service import SessionImageService
 from .session_state_service import SessionStateService
+from .user_setting_service import UserSettingService
 
 
 class LiveChatGiftService:
@@ -44,6 +45,7 @@ class LiveChatGiftService:
         serialize_message: Callable[[object], dict],
         character_user_memory_service: CharacterUserMemoryService | None = None,
         session_character_affinity_service: SessionCharacterAffinityService | None = None,
+        user_setting_service: UserSettingService | None = None,
     ):
         self._chat_session_service = chat_session_service
         self._chat_message_service = chat_message_service
@@ -63,6 +65,7 @@ class LiveChatGiftService:
         self._session_character_affinity_service = (
             session_character_affinity_service or SessionCharacterAffinityService()
         )
+        self._user_setting_service = user_setting_service or UserSettingService()
 
     def _load_json(self, value):
         if value is None:
@@ -428,15 +431,28 @@ class LiveChatGiftService:
         prompt_parts.append("show the character naturally using or holding the gift if appropriate")
         return prompt_support.normalize_first_person_visual_prompt(", ".join(part for part in prompt_parts if part))
 
-    def _generate_gift_visual_image(self, session, context: dict, character: dict, recognized_label: str, recognized_tags: list[str], visual_decision: dict):
+    def _generate_gift_visual_image(self, session, context: dict, character: dict, recognized_label: str, recognized_tags: list[str], visual_decision: dict, payload: dict | None = None):
         if not visual_decision.get("show_gift_visual"):
             return None
         prompt = self._build_gift_visual_prompt(context, character, recognized_label, visual_decision)
         reference_paths, reference_asset_ids = self._media_service.collect_session_reference_assets(session.id, [character], limit=1)
+        payload = dict(payload or {})
+        image_options = self._user_setting_service.apply_image_generation_settings(
+            getattr(session, "owner_user_id", None),
+            {
+                "size": payload.get("size") or "1536x1024",
+                "quality": payload.get("quality") or "low",
+                "provider": payload.get("provider"),
+                "model": payload.get("model"),
+                "client_viewport": payload.get("client_viewport") or payload.get("viewport"),
+            },
+        )
         result = self._image_ai_client.generate_image(
             prompt,
-            size="1536x1024",
-            quality="low",
+            size=image_options.get("size") or "1536x1024",
+            quality=image_options.get("quality") or "low",
+            model=image_options.get("model"),
+            provider=image_options.get("provider"),
             input_image_paths=reference_paths,
             input_fidelity="high" if reference_paths else None,
         )
@@ -499,8 +515,8 @@ class LiveChatGiftService:
                 "image_type": "gift_reaction",
                 "prompt_text": prompt,
                 "state_json": state_json,
-                "quality": "low",
-                "size": "1536x1024",
+                "quality": image_options.get("quality") or "low",
+                "size": image_options.get("size") or "1536x1024",
                 "is_selected": 1,
                 "is_reference": 1,
             },
@@ -627,6 +643,7 @@ class LiveChatGiftService:
                 recognized_label,
                 recognized_tags,
                 visual_decision,
+                payload,
             )
         except Exception:
             generated_image = None

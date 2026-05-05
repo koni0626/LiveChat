@@ -12,6 +12,7 @@ class CinemaNovel(db.Model, TimestampMixin, SoftDeleteMixin):
     subtitle = db.Column(db.String(255))
     description = db.Column(db.Text)
     status = db.Column(db.String(50), nullable=False, default="draft", index=True)
+    mobile_visible = db.Column(db.Boolean, nullable=False, default=True)
     mode = db.Column(db.String(80), nullable=False, default="cinema_novel", index=True)
     cover_asset_id = db.Column(db.Integer, db.ForeignKey("asset.id"))
     poster_asset_id = db.Column(db.Integer, db.ForeignKey("asset.id"))

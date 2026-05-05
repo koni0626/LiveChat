@@ -57,6 +57,11 @@ body[data-screen="studio"] .studio-image-card {
   text-decoration: none;
 }
 
+body[data-screen="studio"] button.studio-image-card {
+  width: 100%;
+  cursor: zoom-in;
+}
+
 body[data-screen="studio"] .studio-image-card img,
 body[data-screen="studio"] .studio-selected-image img {
   width: 100%;
@@ -147,6 +152,19 @@ body[data-screen="studio"] .studio-detail-image {
   background: rgba(4, 10, 20, 0.84);
 }
 
+body[data-screen="studio"] .studio-detail-image-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+body[data-screen="studio"] .studio-detail-image-button .studio-detail-image {
+  display: block;
+}
+
 body[data-screen="studio"] .studio-prompt-section {
   display: grid;
   gap: 0.5rem;
@@ -178,6 +196,46 @@ body[data-screen="studio"] .studio-prompt-section h4 {
 .studio-lightbox-prompt h4 {
   margin: 0 0 0.7rem;
   font-size: 0.95rem;
+}
+
+.studio-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: none;
+  place-items: center;
+  padding: clamp(1rem, 3vw, 2.4rem);
+  background: rgba(2, 6, 14, 0.86);
+  backdrop-filter: blur(10px);
+}
+
+.studio-lightbox-overlay.is-open {
+  display: grid;
+}
+
+.studio-lightbox-image {
+  max-width: min(96vw, 1440px);
+  max-height: 92vh;
+  object-fit: contain;
+  border: 1px solid rgba(105, 220, 255, 0.26);
+  border-radius: 1rem;
+  box-shadow: 0 1.5rem 5rem rgba(0, 0, 0, 0.52);
+  background: rgba(4, 10, 20, 0.92);
+}
+
+.studio-lightbox-close {
+  position: fixed;
+  top: max(1rem, env(safe-area-inset-top));
+  right: max(1rem, env(safe-area-inset-right));
+  z-index: 5001;
+  display: inline-grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid rgba(105, 220, 255, 0.34);
+  border-radius: 999px;
+  background: rgba(7, 16, 31, 0.82);
+  color: #eaffff;
 }
 
 @media (max-width: 991.98px) {

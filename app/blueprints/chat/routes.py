@@ -46,20 +46,24 @@ def _run_with_app_context(app, callback, *args, **kwargs):
         return callback(*args, **kwargs)
 
 
-def _generate_affinity_100_event_image(session_id: int, context: dict, character_id: int):
+def _generate_affinity_100_event_image(session_id: int, context: dict, character_id: int, image_options: dict | None = None):
+    image_options = image_options or {}
     return live_chat_service.generate_image(
         session_id,
         {
             "image_type": "affinity_100_event",
             "prompt_text": _event_image_prompt(context, character_id),
             "use_existing_prompt": True,
-            "size": "1536x1024",
-            "quality": "medium",
+            "size": image_options.get("size") or "1536x1024",
+            "quality": image_options.get("quality") or "medium",
+            "model": image_options.get("model") or image_options.get("image_ai_model"),
+            "provider": image_options.get("provider") or image_options.get("image_ai_provider"),
         },
     )
 
 
-def _generate_affinity_100_short_story(session_id: int):
+def _generate_affinity_100_short_story(session_id: int, image_options: dict | None = None):
+    image_options = image_options or {}
     short_story = live_chat_service.generate_short_story(
         session_id,
         {
@@ -67,8 +71,10 @@ def _generate_affinity_100_short_story(session_id: int):
             "length": "900〜1300字",
             "instruction": "好感度100到達のエンディング直前に流す、二人の関係を振り返る短い回想章としてまとめる。最後の告白台詞と重複しすぎないよう、余韻を残して終える。",
             "generate_images": True,
-            "image_quality": "medium",
-            "image_size": "1536x1024",
+            "image_quality": image_options.get("quality") or "medium",
+            "image_size": image_options.get("size") or "1536x1024",
+            "model": image_options.get("model") or image_options.get("image_ai_model"),
+            "provider": image_options.get("provider") or image_options.get("image_ai_provider"),
         },
     )
     if short_story and not short_story.get("error"):
@@ -95,7 +101,27 @@ def _session_affinity_ending_claimed(session_id: int, character_id: int) -> bool
     state_json = _session_state_json(session_id)
     endings = state_json.get("affinity_100_endings") if isinstance(state_json.get("affinity_100_endings"), dict) else {}
     ending = endings.get(str(character_id)) if isinstance(endings, dict) else None
-    return bool(isinstance(ending, dict) and ending.get("played_at"))
+    if isinstance(ending, dict) and ending.get("played_at"):
+        return True
+    for message in reversed(chat_message_service.list_messages(session_id)):
+        raw_snapshot = getattr(message, "state_snapshot_json", None)
+        if not raw_snapshot:
+            continue
+        try:
+            snapshot = raw_snapshot if isinstance(raw_snapshot, dict) else json.loads(raw_snapshot)
+        except Exception:
+            continue
+        if not isinstance(snapshot, dict):
+            continue
+        if snapshot.get("affinity_100_reward") and int(snapshot.get("character_id") or 0) == int(character_id):
+            _mark_session_affinity_ending_claimed(
+                session_id,
+                character_id,
+                event_image_id=snapshot.get("event_image_id"),
+                replayed_reward=bool(snapshot.get("reward_replayed")),
+            )
+            return True
+    return False
 
 
 def _mark_session_affinity_ending_claimed(
@@ -657,9 +683,11 @@ def _claim_affinity_reward_payload(
     user,
     context: dict,
     character_id: int,
+    image_options: dict | None = None,
     *,
     force_debug_replay: bool = False,
 ):
+    image_options = image_options or {}
     session_id = chat_session.id
     existing = character_affinity_reward_service.get_reward(user.id, character_id)
     session_ending_claimed = _session_affinity_ending_claimed(session_id, character_id)
@@ -684,12 +712,14 @@ def _claim_affinity_reward_payload(
             chat_session.id,
             context,
             character_id,
+            image_options,
         )
         short_story_future = executor.submit(
             _run_with_app_context,
             app,
             _generate_affinity_100_short_story,
             session_id,
+            image_options,
         )
         event_image = None
         try:
@@ -781,14 +811,23 @@ def _claim_affinity_reward_payload(
 @chat_bp.route("/chat/sessions/<int:session_id>/affinity-rewards/<int:character_id>/claim", methods=["POST"])
 def claim_chat_affinity_reward(session_id: int, character_id: int):
     chat_session, project, user = _require_session(session_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    image_options = user_setting_service.apply_image_generation_settings(user.id, payload)
     context = live_chat_service.get_session_context(session_id)
     active_ids = {int(item.get("id") or 0) for item in (context or {}).get("characters") or []}
     if int(character_id) not in active_ids:
         raise ValidationError("このセッションのキャラクターではありません。")
     if _affinity_score_from_context(context, character_id) < 100:
         raise ValidationError("好感度100に到達していません。")
-    payload, status = _claim_affinity_reward_payload(chat_session, project, user, context, character_id)
-    return json_response(payload, status=status)
+    response_payload, status = _claim_affinity_reward_payload(
+        chat_session,
+        project,
+        user,
+        context,
+        character_id,
+        image_options,
+    )
+    return json_response(response_payload, status=status)
 
 
 @chat_bp.route("/chat/sessions/<int:session_id>/debug/affinity-clear", methods=["POST"])
@@ -819,6 +858,7 @@ def debug_clear_chat_affinity(session_id: int):
         user,
         context,
         character_id,
+        user_setting_service.apply_image_generation_settings(user.id, payload),
         force_debug_replay=True,
     )
     response_payload["debug"] = {

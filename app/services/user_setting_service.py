@@ -14,7 +14,8 @@ class UserSettingService:
         "image_ai_model": "gpt-image-2",
         "default_quality": "medium",
         "default_size": "1024x1024",
-        "prefer_portrait_on_mobile": False,
+        "mobile_default_size": "1024x1536",
+        "prefer_portrait_on_mobile": True,
         "autosave_interval": "off",
         "cinema_novel_text_model": "gpt-5.5",
         "cinema_novel_image_ai_provider": "openai",
@@ -68,6 +69,7 @@ class UserSettingService:
             "image_ai_model": setting.image_ai_model,
             "default_quality": setting.default_quality,
             "default_size": setting.default_size,
+            "mobile_default_size": getattr(setting, "mobile_default_size", None) or self.DEFAULTS["mobile_default_size"],
             "prefer_portrait_on_mobile": bool(getattr(setting, "prefer_portrait_on_mobile", False)),
             "autosave_interval": setting.autosave_interval,
             "cinema_novel_text_model": getattr(setting, "cinema_novel_text_model", None) or self.DEFAULTS["cinema_novel_text_model"],
@@ -132,6 +134,7 @@ class UserSettingService:
             "image_ai_model": self.DEFAULTS["image_ai_model"],
             "default_quality": self.DEFAULTS["default_quality"],
             "default_size": self.DEFAULTS["default_size"],
+            "mobile_default_size": self.DEFAULTS["mobile_default_size"],
             "prefer_portrait_on_mobile": bool(self.DEFAULTS["prefer_portrait_on_mobile"]),
             "autosave_interval": self.DEFAULTS["autosave_interval"],
             "cinema_novel_text_model": self.DEFAULTS["cinema_novel_text_model"],
@@ -167,7 +170,8 @@ class UserSettingService:
         image_ai_model = self._normalize_string(payload, "image_ai_model")
         default_quality = self._normalize_string(payload, "default_quality")
         default_size = self._normalize_string(payload, "default_size")
-        prefer_portrait_on_mobile = self._normalize_bool(payload.get("prefer_portrait_on_mobile", False))
+        mobile_default_size = self._normalize_string(payload, "mobile_default_size")
+        prefer_portrait_on_mobile = self._normalize_bool(payload.get("prefer_portrait_on_mobile", True))
         autosave_interval = self._normalize_string(payload, "autosave_interval")
         cinema_novel_text_model = self._normalize_string(payload, "cinema_novel_text_model")
         cinema_novel_image_ai_provider = self._normalize_string(payload, "cinema_novel_image_ai_provider").lower()
@@ -186,6 +190,8 @@ class UserSettingService:
             raise ValidationError("default_quality is invalid")
         if default_size not in self.VALID_SIZES:
             raise ValidationError("default_size is invalid")
+        if mobile_default_size not in self.VALID_SIZES:
+            raise ValidationError("mobile_default_size is invalid")
         if autosave_interval not in self.VALID_AUTOSAVE_INTERVALS:
             raise ValidationError("autosave_interval is invalid")
         if cinema_novel_image_ai_provider not in self.VALID_IMAGE_PROVIDERS:
@@ -203,6 +209,7 @@ class UserSettingService:
         setting.image_ai_model = image_ai_model
         setting.default_quality = default_quality
         setting.default_size = default_size
+        setting.mobile_default_size = mobile_default_size
         setting.prefer_portrait_on_mobile = prefer_portrait_on_mobile
         setting.autosave_interval = autosave_interval
         setting.cinema_novel_text_model = cinema_novel_text_model
@@ -234,9 +241,15 @@ class UserSettingService:
         options["model"] = self._normalize_image_model_for_provider(options["provider"], options.get("model"))
         options.setdefault("quality", settings.get("default_quality") or self.DEFAULTS["default_quality"])
         options.setdefault("size", settings.get("default_size") or self.DEFAULTS["default_size"])
-        if self._normalize_bool(settings.get("prefer_portrait_on_mobile")) and self._is_mobile_request():
-            options["size"] = "1024x1536"
+        if self._uses_mobile_size(settings, options):
+            options["size"] = settings.get("mobile_default_size") or self.DEFAULTS["mobile_default_size"]
         return options
+
+    def _uses_mobile_size(self, settings: dict, options: dict) -> bool:
+        viewport = str(options.get("client_viewport") or options.get("viewport") or "").strip().lower()
+        if viewport in {"mobile", "phone", "portrait_mobile"}:
+            return True
+        return self._normalize_bool(settings.get("prefer_portrait_on_mobile", True)) and self._is_mobile_request()
 
     def apply_cinema_novel_text_generation_settings(self, payload: dict | None = None) -> dict:
         settings = self.get_global_settings()

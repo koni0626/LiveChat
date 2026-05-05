@@ -25,7 +25,7 @@
   const toggleTextboxButton = document.getElementById("outingToggleTextboxButton");
   let currentOuting = null;
   let isBusy = false;
-  let outingNovelPageState = { pages: [], pageIndex: 0 };
+  let outingNovelPageState = { pages: [], pageIndex: 0, fullText: "" };
   let textboxVisible = true;
   const mobilePagerMediaQuery = window.matchMedia("(max-width: 767.98px)");
 
@@ -65,6 +65,81 @@
         </div>
       </div>
     `;
+    applyOutingStageDimensions({ width: 1024, height: 1536 });
+  }
+
+  function resolveOutingStageDimensions(step) {
+    const asset = step?.image_asset || {};
+    const width = Number(asset.width);
+    const height = Number(asset.height);
+    if (width > 0 && height > 0) {
+      return { width, height };
+    }
+    const sizeText = String(step?.image_size || step?.size || "").trim();
+    const match = sizeText.match(/^(\d+)x(\d+)$/);
+    if (match) {
+      return { width: Number(match[1]), height: Number(match[2]) };
+    }
+    return { width: 1024, height: 1536 };
+  }
+
+  function applyOutingStageDimensions(dimensions) {
+    const selectedImagePanel = currentHost.querySelector(".outing-image-panel");
+    if (!selectedImagePanel) return;
+    const dims = dimensions || { width: 1024, height: 1536 };
+    const widthNum = Number(dims.width);
+    const heightNum = Number(dims.height);
+    if (!(widthNum > 0) || !(heightNum > 0)) return;
+    selectedImagePanel.style.setProperty("--stage-width", String(widthNum));
+    selectedImagePanel.style.setProperty("--stage-height", String(heightNum));
+    const viewportHeight = Math.max(window.innerHeight || 0, 720);
+    const desktopOffset = 250;
+    const mobileOffset = window.innerWidth <= 767 ? 230 : 320;
+    const maxHeight = Math.max(
+      window.innerWidth <= 1200 ? 360 : 420,
+      viewportHeight - (window.innerWidth <= 1200 ? mobileOffset : desktopOffset)
+    );
+    const stageParent = selectedImagePanel.parentElement;
+    const availableWidth = stageParent ? stageParent.clientWidth : selectedImagePanel.clientWidth;
+
+    let width = Math.min(availableWidth, maxHeight * (widthNum / heightNum));
+    let height = width * (heightNum / widthNum);
+
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height * (widthNum / heightNum);
+    }
+
+    selectedImagePanel.style.width = `${Math.round(width)}px`;
+    selectedImagePanel.style.height = "auto";
+    selectedImagePanel.style.setProperty("--rendered-stage-height", `${Math.round(height)}px`);
+  }
+
+  function syncOutingStageDimensions(step) {
+    const image = currentHost.querySelector(".outing-stage-image");
+    if (image?.complete && image.naturalWidth > 0 && image.naturalHeight > 0) {
+      applyOutingStageDimensions({ width: image.naturalWidth, height: image.naturalHeight });
+      return;
+    }
+    applyOutingStageDimensions(resolveOutingStageDimensions(step));
+  }
+
+  function triggerOutingChoiceFeedback() {
+    window.LiveChatSound?.unlock?.();
+    window.LiveChatSound?.play("choice");
+    const stage = currentHost.querySelector(".outing-stage-frame") || currentHost.querySelector(".outing-image-panel");
+    if (!stage) return;
+    for (let index = 0; index < 5; index += 1) {
+      const heart = document.createElement("span");
+      heart.className = "live-chat-affinity-heart";
+      heart.innerHTML = '<i class="bi bi-heart-fill" aria-hidden="true"></i>';
+      heart.style.setProperty("--heart-x", `${Math.round((Math.random() - 0.5) * 120)}px`);
+      heart.style.setProperty("--heart-y", `${Math.round(55 + Math.random() * 85)}px`);
+      heart.style.setProperty("--heart-delay", `${index * 65}ms`);
+      heart.style.setProperty("--heart-scale", `${0.78 + Math.random() * 0.5}`);
+      stage.appendChild(heart);
+      window.setTimeout(() => heart.remove(), 1500 + index * 65);
+    }
   }
 
   function imageForCharacter(character) {
@@ -179,6 +254,14 @@
         </div>
       </div>
     `;
+    syncOutingStageDimensions(step);
+    const stageImage = currentHost.querySelector(".outing-stage-image");
+    if (stageImage) {
+      stageImage.addEventListener("load", () => {
+        applyOutingStageDimensions({ width: stageImage.naturalWidth, height: stageImage.naturalHeight });
+        updateOutingNovelPagination(novelText, { preservePage: true });
+      }, { once: true });
+    }
     setupOutingNovelPagination(novelText);
     setTextboxVisible(textboxVisible);
     renderGallery(outing);
@@ -307,18 +390,27 @@
     }
   }
 
-  function setupOutingNovelPagination(text) {
+  function updateOutingNovelPagination(text, options = {}) {
     const choiceList = currentHost.querySelector(".outing-choice-list");
     if (choiceList) choiceList.hidden = false;
+    const previousIndex = options.preservePage ? Number(outingNovelPageState.pageIndex || 0) : 0;
+    const pages = paginateOutingNovelText(text);
     outingNovelPageState = {
-      pages: paginateOutingNovelText(text),
-      pageIndex: 0,
+      pages,
+      pageIndex: Math.max(0, Math.min(previousIndex, pages.length - 1)),
+      fullText: String(text || ""),
     };
     renderOutingNovelPage();
   }
 
+  function setupOutingNovelPagination(text) {
+    updateOutingNovelPagination(text, { preservePage: false });
+  }
+
   window.addEventListener("resize", () => {
-    renderOutingNovelPage();
+    const steps = Array.isArray(currentOuting?.steps) ? currentOuting.steps : [];
+    syncOutingStageDimensions(steps[steps.length - 1]);
+    updateOutingNovelPagination(outingNovelPageState.fullText, { preservePage: true });
   });
 
   function moveOutingNovelPage(delta) {
@@ -467,6 +559,7 @@
     }
     const button = event.target.closest("[data-choice-id]");
     if (!button || !currentOuting || isBusy) return;
+    triggerOutingChoiceFeedback();
     setLoading(true, "次の場面へ", "選択に合わせて本文とイベントCGを更新しています。");
     try {
       const outing = await NovelUI.api(`/api/v1/outings/${currentOuting.id}/choose`, {

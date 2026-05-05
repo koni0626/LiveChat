@@ -1,0 +1,1 @@
+ALTER TABLE cinema_novel ADD COLUMN mobile_visible BOOLEAN NOT NULL DEFAULT 1;

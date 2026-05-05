@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="cinema-list-shell" data-project-id="{{ project_id }}">
+<section class="cinema-list-shell" data-project-id="{{ project_id }}" data-can-manage-project="{{ 'true' if can_manage_project else 'false' }}">
   <div class="cinema-list-head">
     <div>
       <div class="eyebrow">Novel</div>
@@ -22,6 +22,14 @@
     </div>
     <form class="cinema-production-form" id="cinemaProductionOutlineForm">
       <input class="form-control" name="title" placeholder="作品タイトル。空欄ならAIが提案します">
+      <select class="form-select" name="status" id="cinemaProductionStatusSelect" aria-label="公開状態">
+        <option value="draft">非公開</option>
+        <option value="published">公開</option>
+      </select>
+      <label class="cinema-production-check">
+        <input class="form-check-input" type="checkbox" name="mobile_visible" value="1" checked>
+        <span>スマホ版に表示</span>
+      </label>
       <select class="form-select" name="main_character_id" id="cinemaMainCharacterSelect">
         <option value="">主役はAIが選定</option>
       </select>
@@ -56,6 +64,18 @@
         <p>既存章を選んで、専用モデルで深掘り生成します。反映するまで読者側には変わりません。</p>
       </div>
       <button class="btn btn-sm btn-outline-dark" type="button" id="cinemaChapterProductionClose">閉じる</button>
+    </div>
+    <div class="cinema-novel-status-controls">
+      <label class="form-label" for="cinemaNovelStatusSelect">公開状態</label>
+      <select class="form-select" id="cinemaNovelStatusSelect">
+        <option value="draft">非公開</option>
+        <option value="published">公開</option>
+      </select>
+      <label class="cinema-production-check">
+        <input class="form-check-input" type="checkbox" id="cinemaNovelMobileVisibleCheck">
+        <span>スマホ版に表示</span>
+      </label>
+      <button class="btn btn-sm btn-outline-dark" type="button" id="cinemaNovelStatusSaveButton">保存</button>
     </div>
     <div class="cinema-chapter-production-grid">
       <div>

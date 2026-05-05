@@ -20,7 +20,7 @@
     selectedImagePanel.style.setProperty("--stage-height", String(dims.height));
     const viewportHeight = Math.max(window.innerHeight || 0, 720);
     const desktopOffset = 250;
-    const mobileOffset = 320;
+    const mobileOffset = window.innerWidth <= 767 ? 230 : 320;
     const maxHeight = Math.max(
       window.innerWidth <= 1200 ? 360 : 420,
       viewportHeight - (window.innerWidth <= 1200 ? mobileOffset : desktopOffset)
@@ -49,7 +49,7 @@
     selectedImagePanel.style.setProperty("--stage-height", String(heightNum));
     const viewportHeight = Math.max(window.innerHeight || 0, 720);
     const desktopOffset = 250;
-    const mobileOffset = 320;
+    const mobileOffset = window.innerWidth <= 767 ? 230 : 320;
     const maxHeight = Math.max(
       window.innerWidth <= 1200 ? 360 : 420,
       viewportHeight - (window.innerWidth <= 1200 ? mobileOffset : desktopOffset)
@@ -106,7 +106,7 @@
     selectedImagePanel.innerHTML = `
       <div class="live-chat-stage-frame ${imageLoading ? "is-loading" : ""}">
         ${modeBadgeMarkup}
-        ${imageLoading ? '<span class="live-chat-generation-status is-visible" aria-live="polite">\u751f\u6210\u4e2d\u2026\u2026</span>' : ""}
+        ${imageLoading ? '<span class="live-chat-generation-status is-visible" aria-live="polite">生成中……</span>' : ""}
         ${stageBody}
         ${imageLoading ? '<div class="live-chat-loading-heart" aria-hidden="true"><i class="bi bi-heart-fill"></i></div>' : ""}
         ${novelMarkup}
@@ -140,8 +140,9 @@
       const fileName = item.asset?.file_name || `live-chat-image-${item.id || "image"}.png`;
       return `
         <div class="live-chat-thumb-card ${item.is_selected ? "selected" : ""}">
-          <button class="live-chat-thumb ${item.is_selected ? "selected" : ""}" type="button" data-image-id="${item.id}" data-image-url="${NovelUI.escape(mediaUrl || "")}" title="拡大表示">
+          <button class="live-chat-thumb ${item.is_selected ? "selected" : ""}" type="button" data-image-id="${item.id}" data-image-url="${NovelUI.escape(mediaUrl || "")}" title="クリックで拡大。PCはダブルクリック、スマホは長押しで現在の画像に変更">
             ${mediaUrl ? `<img src="${mediaUrl}" alt="thumb">` : "<span>No Image</span>"}
+            ${item.is_selected ? '<span class="live-chat-thumb-current"><span class="live-chat-thumb-current-dot" aria-hidden="true"></span>現在の画像</span>' : ""}
           </button>
           ${mediaUrl ? `
             <a class="live-chat-thumb-download" href="${NovelUI.escape(mediaUrl)}" download="${NovelUI.escape(fileName)}" title="ダウンロード" aria-label="画像をダウンロード">

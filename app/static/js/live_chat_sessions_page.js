@@ -85,12 +85,21 @@
       button.textContent = "準備中...";
     }
     const isMobileViewport = window.matchMedia("(max-width: 767.98px)").matches;
-    const initialImageSize = isMobileViewport ? "1024x1536" : "1536x1024";
     try {
+      let settings = {};
+      try {
+        settings = await NovelUI.api("/api/v1/settings");
+      } catch (_error) {
+        settings = {};
+      }
+      const initialImageSize = isMobileViewport
+        ? (settings.mobile_default_size || "1024x1536")
+        : (settings.default_size || "1536x1024");
       const created = await NovelUI.api(`/api/v1/chat/rooms/${roomId}/sessions`, {
         method: "POST",
         body: {
           size: initialImageSize,
+          client_viewport: isMobileViewport ? "mobile" : "desktop",
         },
       });
       if (created.image_generation_error) {

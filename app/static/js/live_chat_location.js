@@ -5,6 +5,7 @@
       sessionId,
       shell,
       imageForm,
+      getImageGenerationOptions,
       getCurrentContext,
       applyContext,
       loadContext,
@@ -20,6 +21,16 @@
     let selectedMoveId = null;
     let moveBusy = false;
     let serviceBusy = false;
+
+    function imageOptions() {
+      if (typeof getImageGenerationOptions === "function") {
+        return getImageGenerationOptions();
+      }
+      return {
+        size: imageForm?.size?.value || "1536x1024",
+        quality: imageForm?.quality?.value || "low",
+      };
+    }
 
     function currentLocationId(context) {
       const location = context?.state?.state_json?.current_location;
@@ -114,10 +125,7 @@
       }
       shell?.setImageLoading(true, "auto");
       try {
-        const result = await api.moveToLocation(sessionId, locationId, {
-          size: imageForm?.size?.value || "1536x1024",
-          quality: imageForm?.quality?.value || "low",
-        });
+        const result = await api.moveToLocation(sessionId, locationId, imageOptions());
         if (isInteractionLocked?.()) return;
         if (result?.context) {
           applyContext?.(result.context);
@@ -160,10 +168,7 @@
       }
       shell?.setImageLoading(true, "auto");
       try {
-        const result = await api.selectLocationService(sessionId, serviceId, {
-          size: imageForm?.size?.value || "1536x1024",
-          quality: imageForm?.quality?.value || "low",
-        });
+        const result = await api.selectLocationService(sessionId, serviceId, imageOptions());
         if (isInteractionLocked?.()) return;
         if (result?.context) {
           applyContext?.(result.context);

@@ -57,8 +57,9 @@ def update_outfit(outfit_id: int):
     if not outfit:
         raise NotFoundError()
     require_project_manage(outfit["project_id"])
-    payload = request.get_json(silent=True) or {}
-    updated = closet_service.update_outfit(outfit_id, payload)
+    payload = dict(request.form) if request.form else (request.get_json(silent=True) or {})
+    upload_file = request.files.get("file")
+    updated = closet_service.update_outfit(outfit_id, payload, upload_file)
     if not updated:
         raise NotFoundError()
     return json_response(updated)

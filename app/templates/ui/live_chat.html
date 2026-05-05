@@ -119,6 +119,74 @@
       </form>
     </section>
 
+    <form class="live-chat-compose" id="liveChatComposeForm">
+      <div class="live-chat-compose-head">
+        <div class="live-chat-compose-modebar">
+          <div class="live-chat-compose-tabs" role="tablist" aria-label="入力モード">
+            <button class="live-chat-compose-tab is-active" type="button" data-composer-mode="chat" aria-selected="true">
+              <i class="bi bi-chat-dots" aria-hidden="true"></i>
+              <span>会話</span>
+            </button>
+            <button class="live-chat-compose-tab" type="button" data-composer-mode="action" aria-selected="false">
+              <i class="bi bi-stars" aria-hidden="true"></i>
+              <span>アクション</span>
+            </button>
+          </div>
+          <button class="live-chat-compose-proxy" type="button" id="liveChatProxyMessageButton">
+            <span>メッセージを作成</span>
+          </button>
+        </div>
+      </div>
+      <div class="live-chat-compose-shell" id="liveChatComposeShell">
+        <div class="live-chat-action-panel is-hidden" id="liveChatActionPanel" aria-label="アクション一覧">
+          <div class="live-chat-action-group">
+            <div class="live-chat-action-group-label">ライト</div>
+            <div class="live-chat-action-grid">
+              <button class="live-chat-action-option" type="button" data-action-id="smile_at"><i class="bi bi-emoji-smile" aria-hidden="true"></i><span>微笑みかける</span></button>
+              <button class="live-chat-action-option" type="button" data-action-id="wave"><i class="bi bi-hand-index" aria-hidden="true"></i><span>手を振る</span></button>
+              <button class="live-chat-action-option" type="button" data-action-id="cheer"><i class="bi bi-lightning-charge" aria-hidden="true"></i><span>応援する</span></button>
+              <button class="live-chat-action-option" type="button" data-action-id="gaze_at"><i class="bi bi-eye" aria-hidden="true"></i><span>見つめる</span></button>
+            </div>
+          </div>
+          <div class="live-chat-action-group">
+            <div class="live-chat-action-group-label">距離を縮める</div>
+            <div class="live-chat-action-grid">
+              <button class="live-chat-action-option" type="button" data-action-id="move_closer"><i class="bi bi-arrow-right-circle" aria-hidden="true"></i><span>近くに寄る</span></button>
+              <button class="live-chat-action-option" type="button" data-action-id="sit_next"><i class="bi bi-person-plus" aria-hidden="true"></i><span>隣に座る</span></button>
+              <button class="live-chat-action-option" type="button" data-action-id="hold_hands"><i class="bi bi-heart" aria-hidden="true"></i><span>手をつなぐ</span></button>
+            </div>
+          </div>
+          <div class="live-chat-action-group">
+            <div class="live-chat-action-group-label">親密</div>
+            <div class="live-chat-action-grid">
+              <button class="live-chat-action-option" type="button" data-action-id="hug_softly"><i class="bi bi-suit-heart" aria-hidden="true"></i><span>そっと抱きしめる</span></button>
+              <button class="live-chat-action-option" type="button" data-action-id="snuggle"><i class="bi bi-hearts" aria-hidden="true"></i><span>寄り添う</span></button>
+              <button class="live-chat-action-option" type="button" data-action-id="pat_head"><i class="bi bi-stars" aria-hidden="true"></i><span>頭をなでる</span></button>
+              <button class="live-chat-action-option" type="button" data-action-id="touch_cheek"><i class="bi bi-flower1" aria-hidden="true"></i><span>頬に触れる</span></button>
+              <button class="live-chat-action-option" type="button" data-action-id="interlace_fingers"><i class="bi bi-infinity" aria-hidden="true"></i><span>指を絡める</span></button>
+            </div>
+          </div>
+        </div>
+        <div class="live-chat-action-chip is-hidden" id="liveChatActionChip">
+          <span class="live-chat-action-chip-icon"><i class="bi bi-stars" aria-hidden="true"></i></span>
+          <span class="live-chat-action-chip-label" id="liveChatActionChipLabel"></span>
+          <button type="button" id="liveChatActionClearButton" aria-label="アクションを解除"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </div>
+        <div class="live-chat-compose-editor">
+          <textarea
+            class="form-control"
+            id="liveChatComposeInput"
+            name="message_text"
+            rows="4"
+            placeholder="メッセージまたは指示を入力。メッセージを作成ボタンで代理メッセージを自動生成できます。"
+          ></textarea>
+          <button class="live-chat-compose-send" type="submit" id="liveChatSendButton" aria-label="送信">
+            <span aria-hidden="true">↑</span>
+          </button>
+        </div>
+      </div>
+    </form>
+
     <section class="live-chat-log-card" id="liveChatLogCard">
       <div class="live-chat-log-head">
         <div>
@@ -219,75 +287,6 @@
         </article>
       </div>
     </section>
-
-    <form class="live-chat-compose" id="liveChatComposeForm">
-      <div class="live-chat-compose-head">
-        <div class="live-chat-compose-modebar">
-          <div class="live-chat-compose-tabs" role="tablist" aria-label="入力モード">
-            <button class="live-chat-compose-tab is-active" type="button" data-composer-mode="chat" aria-selected="true">
-              <i class="bi bi-chat-dots" aria-hidden="true"></i>
-              <span>会話</span>
-            </button>
-            <button class="live-chat-compose-tab" type="button" data-composer-mode="action" aria-selected="false">
-              <i class="bi bi-stars" aria-hidden="true"></i>
-              <span>アクション</span>
-            </button>
-          </div>
-          <button class="live-chat-compose-proxy" type="button" id="liveChatProxyMessageButton">
-            <span>メッセージを作成</span>
-          </button>
-        </div>
-        <button class="btn btn-sm btn-outline-dark" type="button" id="liveChatToggleComposeButton" aria-expanded="true">メッセージ欄を閉じる</button>
-      </div>
-      <div class="live-chat-compose-shell" id="liveChatComposeShell">
-        <div class="live-chat-action-panel is-hidden" id="liveChatActionPanel" aria-label="アクション一覧">
-          <div class="live-chat-action-group">
-            <div class="live-chat-action-group-label">ライト</div>
-            <div class="live-chat-action-grid">
-              <button class="live-chat-action-option" type="button" data-action-id="smile_at"><i class="bi bi-emoji-smile" aria-hidden="true"></i><span>微笑みかける</span></button>
-              <button class="live-chat-action-option" type="button" data-action-id="wave"><i class="bi bi-hand-index" aria-hidden="true"></i><span>手を振る</span></button>
-              <button class="live-chat-action-option" type="button" data-action-id="cheer"><i class="bi bi-lightning-charge" aria-hidden="true"></i><span>応援する</span></button>
-              <button class="live-chat-action-option" type="button" data-action-id="gaze_at"><i class="bi bi-eye" aria-hidden="true"></i><span>見つめる</span></button>
-            </div>
-          </div>
-          <div class="live-chat-action-group">
-            <div class="live-chat-action-group-label">距離を縮める</div>
-            <div class="live-chat-action-grid">
-              <button class="live-chat-action-option" type="button" data-action-id="move_closer"><i class="bi bi-arrow-right-circle" aria-hidden="true"></i><span>近くに寄る</span></button>
-              <button class="live-chat-action-option" type="button" data-action-id="sit_next"><i class="bi bi-person-plus" aria-hidden="true"></i><span>隣に座る</span></button>
-              <button class="live-chat-action-option" type="button" data-action-id="hold_hands"><i class="bi bi-heart" aria-hidden="true"></i><span>手をつなぐ</span></button>
-            </div>
-          </div>
-          <div class="live-chat-action-group">
-            <div class="live-chat-action-group-label">親密</div>
-            <div class="live-chat-action-grid">
-              <button class="live-chat-action-option" type="button" data-action-id="hug_softly"><i class="bi bi-suit-heart" aria-hidden="true"></i><span>そっと抱きしめる</span></button>
-              <button class="live-chat-action-option" type="button" data-action-id="snuggle"><i class="bi bi-hearts" aria-hidden="true"></i><span>寄り添う</span></button>
-              <button class="live-chat-action-option" type="button" data-action-id="pat_head"><i class="bi bi-stars" aria-hidden="true"></i><span>頭をなでる</span></button>
-              <button class="live-chat-action-option" type="button" data-action-id="touch_cheek"><i class="bi bi-flower1" aria-hidden="true"></i><span>頬に触れる</span></button>
-              <button class="live-chat-action-option" type="button" data-action-id="interlace_fingers"><i class="bi bi-infinity" aria-hidden="true"></i><span>指を絡める</span></button>
-            </div>
-          </div>
-        </div>
-        <div class="live-chat-action-chip is-hidden" id="liveChatActionChip">
-          <span class="live-chat-action-chip-icon"><i class="bi bi-stars" aria-hidden="true"></i></span>
-          <span class="live-chat-action-chip-label" id="liveChatActionChipLabel"></span>
-          <button type="button" id="liveChatActionClearButton" aria-label="アクションを解除"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
-        </div>
-        <div class="live-chat-compose-editor">
-          <textarea
-            class="form-control"
-            id="liveChatComposeInput"
-            name="message_text"
-            rows="4"
-            placeholder="メッセージまたは指示を入力。メッセージを作成ボタンで代理メッセージを自動生成できます。"
-          "></textarea>
-          <button class="live-chat-compose-send" type="submit" id="liveChatSendButton" aria-label="送信">
-            <span aria-hidden="true">↑</span>
-          </button>
-        </div>
-      </div>
-    </form>
 
     <div class="live-chat-image-lightbox is-hidden" id="liveChatImageLightbox" aria-hidden="true">
       <button class="live-chat-image-lightbox-close" type="button" id="liveChatImageLightboxClose" aria-label="拡大表示を閉じる">×</button>

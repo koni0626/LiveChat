@@ -62,6 +62,16 @@
             <label class="form-label mt-3" for="closetDetailPromptInput">衣装生成プロンプト</label>
             <textarea class="form-control" id="closetDetailPromptInput" name="prompt_text" rows="4" placeholder="例: 黒いミニワンピース。胸元は上品に、細いシルバーのアクセサリー。夜景デート向け。"></textarea>
 
+            <label class="form-label mt-3" for="closetUploadInput">衣装画像をアップロード</label>
+            <button class="closet-upload-drop" type="button" id="closetUploadDrop">
+              <i class="bi bi-cloud-arrow-up"></i>
+              <span>
+                <strong id="closetUploadLabel">画像を選択 / ドロップ</strong>
+                <small>PNG / JPEG / WebP</small>
+              </span>
+            </button>
+            <input class="d-none" type="file" id="closetUploadInput" name="file" accept="image/png,image/jpeg,image/webp">
+
             <label class="form-label mt-3" for="closetGeneratedNameInput">衣装名</label>
             <input class="form-control" id="closetGeneratedNameInput" name="name" maxlength="255" placeholder="例: 夜景デートの黒ワンピース">
 

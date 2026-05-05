@@ -259,6 +259,42 @@
   text-align: center;
 }
 
+.closet-upload-drop {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.85rem;
+  border: 1px dashed rgba(103, 232, 249, 0.52);
+  border-radius: 8px;
+  background: rgba(8, 47, 73, 0.28);
+  color: #e0f7ff;
+  padding: 0.9rem 1rem;
+  text-align: left;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.closet-upload-drop:hover,
+.closet-upload-drop:focus-visible,
+.closet-upload-drop.is-dragover {
+  border-color: rgba(45, 212, 191, 0.9);
+  background: rgba(20, 184, 166, 0.18);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.closet-upload-drop i {
+  font-size: 1.35rem;
+}
+
+.closet-upload-drop span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.closet-upload-drop small {
+  color: rgba(224, 247, 255, 0.66);
+}
+
 @media (max-width: 767.98px) {
   .closet-grid {
     grid-template-columns: 1fr;

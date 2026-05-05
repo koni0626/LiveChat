@@ -56,7 +56,7 @@
 
 .cinema-production-form {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1.3fr .6fr;
+  grid-template-columns: 1.4fr .75fr 1fr 1.3fr .6fr;
   gap: .75rem;
 }
 
@@ -71,6 +71,21 @@
   color: rgba(180, 221, 255, .58);
 }
 
+.cinema-production-check {
+  display: inline-flex;
+  gap: .45rem;
+  align-items: center;
+  min-height: 2.35rem;
+  margin: 0;
+  padding: .45rem .65rem;
+  border: 1px solid rgba(84, 177, 255, .16);
+  border-radius: .65rem;
+  background: rgba(4, 10, 20, .74);
+  color: #e7f9ff;
+  font-size: .86rem;
+  font-weight: 800;
+}
+
 .cinema-production-panel .form-label {
   color: rgba(220, 246, 255, .78);
   font-size: .82rem;
@@ -80,6 +95,15 @@
 .cinema-production-form textarea,
 .cinema-production-form button {
   grid-column: span 2;
+}
+
+.cinema-novel-status-controls {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) minmax(8rem, 12rem) minmax(9rem, auto) auto;
+  gap: .55rem;
+  align-items: end;
+  margin: .85rem 0 1rem;
+  max-width: 28rem;
 }
 
 .cinema-production-result {
@@ -217,9 +241,48 @@
 }
 
 .cinema-novel-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  align-items: center;
   color: #67e8f9;
   font-size: .78rem;
   font-weight: 700;
+}
+
+.cinema-novel-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.35rem;
+  padding: .14rem .48rem;
+  border: 1px solid rgba(84, 177, 255, .2);
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 900;
+}
+
+.cinema-novel-status-badge.is-published {
+  border-color: rgba(45, 212, 191, .34);
+  background: rgba(20, 184, 166, .16);
+  color: #99f6e4;
+}
+
+.cinema-novel-status-badge.is-draft {
+  border-color: rgba(148, 163, 184, .28);
+  background: rgba(148, 163, 184, .12);
+  color: #cbd5e1;
+}
+
+.cinema-novel-status-badge.is-mobile-visible {
+  border-color: rgba(125, 211, 252, .34);
+  background: rgba(14, 165, 233, .14);
+  color: #bae6fd;
+}
+
+.cinema-novel-status-badge.is-mobile-hidden {
+  border-color: rgba(251, 146, 60, .3);
+  background: rgba(251, 146, 60, .12);
+  color: #fed7aa;
 }
 
 .cinema-novel-card-body h3 {
@@ -670,6 +733,16 @@
 
   .cinema-production-form {
     grid-template-columns: 1fr;
+  }
+
+  .cinema-production-form textarea,
+  .cinema-production-form button {
+    grid-column: auto;
+  }
+
+  .cinema-novel-status-controls {
+    grid-template-columns: 1fr;
+    max-width: none;
   }
 
   .cinema-production-panel-head,

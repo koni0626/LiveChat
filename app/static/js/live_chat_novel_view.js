@@ -101,7 +101,13 @@
     const choices = Array.isArray(nextState.choices) ? nextState.choices : [];
     const isChoicePage = choices.length > 0 && pageIndex === pages.length - 1 && nextState.choicePage === true;
     const showChoices = choices.length > 0 && pageIndex === pages.length - 1;
-    novelTextElement.textContent = isChoicePage ? "" : (pages[pageIndex] || "");
+    const currentText = isChoicePage ? "" : (pages[pageIndex] || "");
+    novelTextElement.textContent = currentText;
+    if (novelElements.novelBox) {
+      novelElements.novelBox.classList.toggle("is-choice-active", showChoices);
+      novelElements.novelBox.classList.toggle("is-compact", !showChoices && currentText.length <= 70);
+      novelElements.novelBox.classList.toggle("is-long-text", !showChoices && currentText.length > 170);
+    }
     if (novelElements.novelChoiceList) {
       novelElements.novelChoiceList.hidden = !showChoices;
       novelElements.novelChoiceList.innerHTML = showChoices

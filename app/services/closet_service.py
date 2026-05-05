@@ -207,7 +207,7 @@ class ClosetService:
             "revised_prompt": result.get("revised_prompt"),
         }
 
-    def update_outfit(self, outfit_id: int, payload: dict):
+    def update_outfit(self, outfit_id: int, payload: dict, upload_file=None):
         outfit = self._outfits.get(outfit_id)
         if not outfit:
             return None
@@ -217,8 +217,8 @@ class ClosetService:
             if not name:
                 raise ValueError("name is required")
             normalized["name"] = name
-        if "asset_id" in payload:
-            asset_id = self._resolve_asset_id(outfit.project_id, payload)
+        if "asset_id" in payload or upload_file is not None:
+            asset_id = self._resolve_asset_id(outfit.project_id, payload, upload_file)
             normalized["asset_id"] = asset_id
             normalized["thumbnail_asset_id"] = int(payload.get("thumbnail_asset_id") or asset_id)
         updated = self._outfits.update(outfit_id, normalized)

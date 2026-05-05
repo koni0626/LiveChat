@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from flask import Blueprint, redirect, render_template, session, url_for
+from flask import Blueprint, redirect, render_template, request, session, url_for
 
-from ...models import User
+from ...models import CinemaNovel, User
 from ...services.authorization_service import AuthorizationService
 from ...services.project_service import ProjectService
 
@@ -10,6 +10,14 @@ from ...services.project_service import ProjectService
 ui_bp = Blueprint("ui", __name__)
 authorization_service = AuthorizationService()
 project_service = ProjectService()
+
+
+def _is_mobile_request() -> bool:
+    viewport = str(request.args.get("viewport") or request.headers.get("X-Client-Viewport") or "").lower()
+    if viewport in {"mobile", "phone", "portrait_mobile"}:
+        return True
+    user_agent = (request.headers.get("User-Agent") or "").lower()
+    return any(token in user_agent for token in ("iphone", "android", "mobile", "ipad"))
 
 
 def _project_nav(project_id: int | None, current_user: User | None = None):
@@ -22,19 +30,16 @@ def _project_nav(project_id: int | None, current_user: User | None = None):
     ]
     if can_manage_project:
         links.append({"label": "世界観", "icon": "bi-globe2", "href": url_for("ui.world_page", project_id=project_id)})
-        links.append({"label": "ワールドマップ", "icon": "bi-map", "href": url_for("ui.world_map_page", project_id=project_id)})
-        links.append({"label": "おでかけ", "icon": "bi-signpost-split", "href": url_for("ui.outings_page", project_id=project_id)})
-        links.append({"label": "ワールドニュース", "icon": "bi-newspaper", "href": url_for("ui.world_news_page", project_id=project_id)})
+    links.append({"label": "ワールドマップ", "icon": "bi-map", "href": url_for("ui.world_map_page", project_id=project_id)})
+    if can_manage_project:
         links.append({"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)})
+        links.append({"label": "クローゼット", "icon": "bi-person-bounding-box", "href": url_for("ui.closet_page", project_id=project_id)})
         links.append({"label": "ルーム", "icon": "bi-chat-square-heart", "href": url_for("ui.live_chat_rooms_page", project_id=project_id)})
-    else:
-        links.append({"label": "ワールドマップ", "icon": "bi-map", "href": url_for("ui.world_map_page", project_id=project_id)})
-        links.append({"label": "おでかけ", "icon": "bi-signpost-split", "href": url_for("ui.outings_page", project_id=project_id)})
-        links.append({"label": "ワールドニュース", "icon": "bi-newspaper", "href": url_for("ui.world_news_page", project_id=project_id)})
     links.append({"label": "チャットルーム", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)})
-    links.append({"label": "ノベル", "icon": "bi-film", "href": url_for("ui.cinema_novel_list_page", project_id=project_id)})
+    links.append({"label": "おでかけ", "icon": "bi-signpost-split", "href": url_for("ui.outings_page", project_id=project_id)})
     links.append({"label": "スタジオ", "icon": "bi-palette", "href": url_for("ui.studio_page", project_id=project_id)})
-    links.append({"label": "クローゼット", "icon": "bi-person-bounding-box", "href": url_for("ui.closet_page", project_id=project_id)})
+    links.append({"label": "ワールドニュース", "icon": "bi-newspaper", "href": url_for("ui.world_news_page", project_id=project_id)})
+    links.append({"label": "ノベル", "icon": "bi-film", "href": url_for("ui.cinema_novel_list_page", project_id=project_id)})
     return links
 
 
@@ -233,6 +238,16 @@ def cinema_novel_list_page(project_id: int):
 
 @ui_bp.route("/projects/<int:project_id>/cinema-novels/<int:novel_id>", methods=["GET"])
 def cinema_novel_reader_page(project_id: int, novel_id: int):
+    user_id = session.get("user_id")
+    current_user = User.query.get(user_id) if user_id else None
+    project = project_service.get_project(project_id)
+    novel = CinemaNovel.query.filter(CinemaNovel.id == novel_id, CinemaNovel.project_id == project_id, CinemaNovel.deleted_at.is_(None)).first()
+    if not novel or not authorization_service.can_view_project(current_user, project):
+        return redirect(url_for("ui.cinema_novel_list_page", project_id=project_id))
+    if novel.status != "published" and not authorization_service.can_manage_project(current_user, project):
+        return redirect(url_for("ui.cinema_novel_list_page", project_id=project_id))
+    if _is_mobile_request() and not bool(getattr(novel, "mobile_visible", True)) and not authorization_service.can_manage_project(current_user, project):
+        return redirect(url_for("ui.cinema_novel_list_page", project_id=project_id))
     return _render(
         "ui/cinema_novel_reader.html",
         title="ノベル",

@@ -29,6 +29,14 @@ def _current_user():
     return user
 
 
+def _is_mobile_request() -> bool:
+    viewport = str(request.args.get("viewport") or request.headers.get("X-Client-Viewport") or "").lower()
+    if viewport in {"mobile", "phone", "portrait_mobile"}:
+        return True
+    user_agent = (request.headers.get("User-Agent") or "").lower()
+    return any(token in user_agent for token in ("iphone", "android", "mobile", "ipad"))
+
+
 def _require_project(project_id: int, *, for_manage: bool = False):
     user = _current_user()
     project = project_service.get_project(project_id)
@@ -52,8 +60,13 @@ def _require_novel(novel_id: int, *, for_manage: bool = False):
     if for_manage:
         if not authorization_service.can_manage_project(user, project):
             raise ForbiddenError()
-    elif not authorization_service.can_view_project(user, project):
-        raise NotFoundError()
+    else:
+        if not authorization_service.can_view_project(user, project):
+            raise NotFoundError()
+        if novel.status != "published" and not authorization_service.can_manage_project(user, project):
+            raise NotFoundError()
+        if _is_mobile_request() and not bool(getattr(novel, "mobile_visible", True)) and not authorization_service.can_manage_project(user, project):
+            raise NotFoundError()
     return novel, project, user
 
 
@@ -61,7 +74,8 @@ def _require_novel(novel_id: int, *, for_manage: bool = False):
 def list_project_cinema_novels(project_id: int):
     project, user = _require_project(project_id)
     include_unpublished = authorization_service.can_manage_project(user, project)
-    novels = cinema_novel_service.list_novels(project_id, include_unpublished=include_unpublished)
+    mobile_only = _is_mobile_request() and not include_unpublished
+    novels = cinema_novel_service.list_novels(project_id, include_unpublished=include_unpublished, mobile_only=mobile_only)
     return json_response([cinema_novel_service.serialize_novel(novel, user_id=user.id) for novel in novels])
 
 
@@ -205,6 +219,19 @@ def delete_cinema_novel(novel_id: int):
     if not cinema_novel_service.delete_novel(novel.id):
         raise NotFoundError()
     return json_response({"deleted": True})
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/status", methods=["PUT"])
+def update_cinema_novel_status(novel_id: int):
+    novel, _project, user = _require_novel(novel_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        updated = cinema_novel_service.update_novel_publication(novel.id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not updated:
+        raise NotFoundError()
+    return json_response(cinema_novel_service.serialize_novel(updated, include_chapters=True, user_id=user.id))
 
 
 @cinema_novels_bp.route("/cinema-novels/<int:novel_id>/reviews", methods=["GET"])

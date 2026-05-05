@@ -4,13 +4,7 @@
   const modelInput = document.getElementById("imageAiModelInput");
   const cinemaNovelProviderSelect = document.getElementById("cinemaNovelImageProviderSelect");
   const cinemaNovelModelInput = document.getElementById("cinemaNovelImageModelInput");
-  const preferPortraitOnMobileInput = document.getElementById("preferPortraitOnMobile");
   let providerDefaultModels = { openai: "gpt-image-2", grok: "grok-imagine-image" };
-
-  function syncMobilePortraitToggle(settings) {
-    if (!preferPortraitOnMobileInput) return;
-    preferPortraitOnMobileInput.checked = Boolean(settings?.prefer_portrait_on_mobile);
-  }
 
   function applyProviderModelDefault(previousProvider) {
     const provider = providerSelect?.value || "openai";
@@ -40,7 +34,6 @@
     const settings = await NovelUI.api("/api/v1/settings");
     providerDefaultModels = settings?.available_options?.provider_default_models || providerDefaultModels;
     NovelUI.fillForm(form, settings);
-    syncMobilePortraitToggle(settings);
     if (providerSelect) providerSelect.dataset.previousProvider = providerSelect.value || "openai";
     if (cinemaNovelProviderSelect) cinemaNovelProviderSelect.dataset.previousProvider = cinemaNovelProviderSelect.value || "openai";
   }
@@ -48,14 +41,13 @@
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const body = Object.fromEntries(new FormData(form).entries());
-    body.prefer_portrait_on_mobile = preferPortraitOnMobileInput?.checked ? "1" : "0";
+    body.prefer_portrait_on_mobile = "1";
     try {
       const settings = await NovelUI.api("/api/v1/settings", {
         method: "PUT",
         body,
       });
       NovelUI.fillForm(form, settings);
-      syncMobilePortraitToggle(settings);
       NovelUI.toast("ユーザー設定を保存しました。");
     } catch (error) {
       NovelUI.toast(error.message || "設定の保存に失敗しました。", "danger");
@@ -69,7 +61,6 @@
         body: {},
       });
       NovelUI.fillForm(form, settings);
-      syncMobilePortraitToggle(settings);
       NovelUI.toast("設定を初期値に戻しました。", "warning");
     } catch (error) {
       NovelUI.toast(error.message || "設定の初期化に失敗しました。", "danger");

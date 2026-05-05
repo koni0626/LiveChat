@@ -11,6 +11,7 @@
       loadContext,
       isInteractionLocked,
       playAffinityFeedback,
+      getImageGenerationOptions,
     } = options;
 
     const panel = document.getElementById("liveChatInventoryPanel");
@@ -32,6 +33,11 @@
     let items = [];
     let activeModalItemId = null;
     let draggingInventoryItem = false;
+    let longPressState = null;
+    let suppressNextItemClick = false;
+    let mobileGiftPendingItemId = null;
+    const longPressDelayMs = 620;
+    const longPressMoveTolerance = 12;
 
     function getItemImageUrl(item) {
       return item?.asset?.media_url || item?.image_asset?.media_url || item?.media_url || item?.image_url || "";
@@ -93,15 +99,17 @@
         return;
       }
       if (!items.length) {
-        list.innerHTML = '<div class="live-chat-inventory-empty">アイテムがありません。生成してからステージ画像へドラッグしてください。</div>';
+        list.innerHTML = '<div class="live-chat-inventory-empty">アイテムがありません。生成してからステージ画像へドラッグしてください。スマホでは長押しで渡せます。</div>';
         return;
       }
       list.innerHTML = items.map((item) => {
         const imageUrl = getItemImageUrl(item);
+        const isMobileGifting = Number(mobileGiftPendingItemId || 0) === Number(item.id);
         return `
-          <button class="live-chat-inventory-item" type="button" draggable="true" data-inventory-item-id="${item.id}" title="${NovelUI.escape(item.description || item.name || "")}">
-            ${imageUrl ? `<img src="${NovelUI.escape(imageUrl)}" alt="${NovelUI.escape(item.name || "item")}">` : '<i class="bi bi-gift"></i>'}
-            <span>${NovelUI.escape(item.name || "Item")}</span>
+          <button class="live-chat-inventory-item${isMobileGifting ? " is-gifting" : ""}" type="button" draggable="${isMobileGifting ? "false" : "true"}" data-inventory-item-id="${item.id}" title="${NovelUI.escape(item.description || item.name || "")}" ${isMobileGifting ? "disabled" : ""}>
+            ${isMobileGifting
+              ? '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>プレゼント中...</span>'
+              : `${imageUrl ? `<img src="${NovelUI.escape(imageUrl)}" alt="${NovelUI.escape(item.name || "item")}">` : '<i class="bi bi-gift"></i>'}<span>${NovelUI.escape(item.name || "Item")}</span>`}
           </button>
         `;
       }).join("");
@@ -132,6 +140,7 @@
         const body = {
           session_id: sessionId,
           character_id: getTargetCharacterId?.(),
+          ...getImageGenerationOptions?.(),
           size: "1024x1024",
         };
         if (prompt) body.prompt = prompt;
@@ -149,13 +158,20 @@
       }
     }
 
-    async function giveItem(itemId) {
+    async function giveItem(itemId, options = {}) {
       if (!itemId || shell?.getState?.().replyLoading) return;
+      const isMobileLongPress = Boolean(options.mobileLongPress);
       const item = items.find((entry) => Number(entry.id) === Number(itemId));
+      if (isMobileLongPress) {
+        mobileGiftPendingItemId = Number(itemId);
+        closeItemModal();
+        render();
+      }
       shell?.setReplyLoading(true, getCurrentContext?.());
       try {
         const result = await api.giveInventoryItem(sessionId, itemId, {
           character_id: getTargetCharacterId?.(),
+          ...getImageGenerationOptions?.(),
           message_text: item?.name ? `${item.name}を渡した。` : "アイテムを渡した。",
         });
         if (isInteractionLocked?.()) return;
@@ -163,13 +179,70 @@
         items = items.filter((entry) => Number(entry.id) !== Number(itemId));
         NovelUI.toast("アイテムを渡しました。");
         await loadContext?.();
+        if (isMobileLongPress) {
+          setVisible(false);
+        }
       } catch (error) {
         NovelUI.toast(error.message || "アイテムを渡せませんでした。", "danger");
       } finally {
+        if (isMobileLongPress) {
+          mobileGiftPendingItemId = null;
+        }
         if (!isInteractionLocked?.()) {
           shell?.setReplyLoading(false, getCurrentContext?.());
           render();
         }
+      }
+    }
+
+    function clearLongPressState() {
+      if (longPressState?.timerId) {
+        window.clearTimeout(longPressState.timerId);
+      }
+      longPressState?.button?.classList.remove("is-long-pressing");
+      longPressState = null;
+    }
+
+    function isTouchLikePointer(event) {
+      return event.pointerType === "touch" || event.pointerType === "pen";
+    }
+
+    function beginItemLongPress(event) {
+      const itemButton = event.target.closest("[data-inventory-item-id]");
+      if (!itemButton || !isTouchLikePointer(event) || event.button > 0) return;
+      clearLongPressState();
+      const itemId = Number(itemButton.dataset.inventoryItemId || 0);
+      if (!itemId) return;
+      longPressState = {
+        itemId,
+        button: itemButton,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        timerId: window.setTimeout(async () => {
+          const state = longPressState;
+          if (!state || state.itemId !== itemId) return;
+          suppressNextItemClick = true;
+          draggingInventoryItem = false;
+          itemButton.classList.remove("is-long-pressing");
+          itemButton.releasePointerCapture?.(event.pointerId);
+          longPressState = null;
+          await giveItem(itemId, { mobileLongPress: true });
+          window.setTimeout(() => {
+            suppressNextItemClick = false;
+          }, 360);
+        }, longPressDelayMs),
+      };
+      itemButton.classList.add("is-long-pressing");
+      itemButton.setPointerCapture?.(event.pointerId);
+    }
+
+    function moveItemLongPress(event) {
+      if (!longPressState || longPressState.pointerId !== event.pointerId) return;
+      const deltaX = Math.abs(event.clientX - longPressState.startX);
+      const deltaY = Math.abs(event.clientY - longPressState.startY);
+      if (deltaX > longPressMoveTolerance || deltaY > longPressMoveTolerance) {
+        clearLongPressState();
       }
     }
 
@@ -198,11 +271,25 @@
       generateButton?.addEventListener("click", generateItem);
 
       list?.addEventListener("click", (event) => {
-        if (draggingInventoryItem) return;
+        if (draggingInventoryItem || suppressNextItemClick) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         const itemButton = event.target.closest("[data-inventory-item-id]");
         if (!itemButton) return;
         event.preventDefault();
         openItemModal(itemButton.dataset.inventoryItemId);
+      });
+
+      list?.addEventListener("pointerdown", beginItemLongPress);
+      list?.addEventListener("pointermove", moveItemLongPress);
+      list?.addEventListener("pointerup", () => clearLongPressState());
+      list?.addEventListener("pointercancel", () => clearLongPressState());
+      list?.addEventListener("pointerleave", () => clearLongPressState());
+      list?.addEventListener("contextmenu", (event) => {
+        if (!event.target.closest("[data-inventory-item-id]") || !(window.navigator?.maxTouchPoints || 0)) return;
+        event.preventDefault();
       });
 
       modalBackdrop?.addEventListener("click", closeItemModal);

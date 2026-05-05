@@ -12,6 +12,7 @@
 
     let latestVisualMomentHint = "";
     let replyEffectTimer = null;
+    let shutterChanceBusy = false;
 
     function clearReplyEffectTimer() {
       window.clearTimeout(replyEffectTimer);
@@ -20,7 +21,7 @@
 
     function hideReplyEffect() {
       clearReplyEffectTimer();
-      const layer = selectedImagePanel?.closest(".live-chat-stage")?.querySelector(".live-chat-reply-effect");
+      const layer = selectedImagePanel?.querySelector(".live-chat-reply-effect");
       layer?.classList.remove("is-visible");
     }
 
@@ -58,13 +59,13 @@
     }
 
     function ensureLayer() {
-      const stage = selectedImagePanel?.closest(".live-chat-stage");
-      if (!stage) return null;
-      let layer = stage.querySelector(".live-chat-reply-effect");
+      if (!selectedImagePanel) return null;
+      const host = selectedImagePanel.querySelector(".live-chat-stage-frame") || selectedImagePanel;
+      let layer = host.querySelector(".live-chat-reply-effect");
       if (!layer) {
         layer = document.createElement("div");
         layer.className = "live-chat-reply-effect";
-        stage.appendChild(layer);
+        host.appendChild(layer);
       }
       return layer;
     }
@@ -147,31 +148,45 @@
       }
     }
 
-    async function generateImageFromLatestHint() {
+    async function generateImageFromLatestHint(button = null) {
+      if (shutterChanceBusy || isInteractionLocked?.()) return;
       const prompt = String(latestVisualMomentHint || "").trim();
       if (!prompt) {
         NovelUI.toast("画像化できる表情メモがありません。", "warning");
         return;
       }
       if (imageForm?.prompt_text) imageForm.prompt_text.value = prompt;
+      shutterChanceBusy = true;
+      if (button) {
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        button.classList.add("is-loading");
+      }
+      hideReplyEffect();
       try {
         await generateSessionImage?.(false, "auto", { prompt_text: prompt });
-        hideReplyEffect();
         NovelUI.toast("シャッターチャンスを撮影しました。");
       } catch (error) {
         NovelUI.toast(error.message || "今の表情の画像化に失敗しました。", "danger");
+      } finally {
+        shutterChanceBusy = false;
+        if (button?.isConnected) {
+          button.disabled = false;
+          button.removeAttribute("aria-busy");
+          button.classList.remove("is-loading");
+        }
       }
     }
 
     function bind() {
-      selectedImagePanel?.closest(".live-chat-stage")?.addEventListener("click", (event) => {
+      selectedImagePanel?.closest(".live-chat-stage")?.addEventListener("click", async (event) => {
         const button = event.target.closest("[data-reply-effect-image]");
         if (!button) return;
         event.preventDefault();
-        if (isInteractionLocked?.()) return;
+        if (shutterChanceBusy || isInteractionLocked?.()) return;
         window.LiveChatSound?.unlock?.();
         window.LiveChatSound?.play("shutter");
-        generateImageFromLatestHint();
+        await generateImageFromLatestHint(button);
       });
     }
 

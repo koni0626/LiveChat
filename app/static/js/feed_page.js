@@ -69,7 +69,34 @@
 
   function postImage(post) {
     if (!post.image_asset?.media_url) return "";
-    return `<img class="feed-post-image" src="${escapeText(post.image_asset.media_url)}" alt="Feed image">`;
+    return `
+      <button class="feed-post-image-button" type="button" data-feed-image-url="${escapeText(post.image_asset.media_url)}" data-feed-image-alt="${escapeText(post.character?.name || "Feed image")}">
+        <img class="feed-post-image" src="${escapeText(post.image_asset.media_url)}" alt="Feed image">
+      </button>
+    `;
+  }
+
+  function openImageLightbox(url, alt = "Feed image") {
+    if (!url) return;
+    let overlay = document.querySelector(".feed-image-lightbox");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.className = "feed-image-lightbox";
+      overlay.innerHTML = `
+        <button class="feed-image-lightbox-close" type="button" aria-label="閉じる"><i class="bi bi-x-lg"></i></button>
+        <img class="feed-image-lightbox-image" alt="">
+      `;
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay || event.target.closest(".feed-image-lightbox-close")) {
+          overlay.classList.remove("is-open");
+        }
+      });
+      document.body.appendChild(overlay);
+    }
+    const image = overlay.querySelector(".feed-image-lightbox-image");
+    image.src = url;
+    image.alt = alt;
+    overlay.classList.add("is-open");
   }
 
   function bodyToHtml(body) {
@@ -132,14 +159,14 @@
     const statusBadge = post.status !== "published" ? `<span class="feed-status-badge">${escapeText(post.status)}</span>` : "";
     return `
       <article class="feed-post-card" data-post-id="${post.id}">
-        <div class="feed-post-rail">
-          <div class="feed-post-avatar">${avatar(post)}</div>
-        </div>
         <div class="feed-post-main">
           <div class="feed-post-head">
-            <div>
-              <div class="feed-post-name">${escapeText(characterName)}</div>
-              <a class="feed-post-world" href="/projects/${post.project_id}/live-chat">${escapeText(worldTitle)}</a>
+            <div class="feed-post-author">
+              <div class="feed-post-avatar">${avatar(post)}</div>
+              <div>
+                <div class="feed-post-name">${escapeText(characterName)}</div>
+                <a class="feed-post-world" href="/projects/${post.project_id}/live-chat">${escapeText(worldTitle)}</a>
+              </div>
             </div>
             <div class="feed-post-date">${statusBadge}${escapeText(formatDate(post.published_at || post.created_at))}</div>
           </div>
@@ -639,6 +666,16 @@
       expandButton.dataset.expanded = isExpanded ? "false" : "true";
       expandButton.textContent = isExpanded ? "さらに表示" : "折りたたむ";
       return;
+    }
+    const imageButton = event.target.closest("[data-feed-image-url]");
+    if (imageButton) {
+      openImageLightbox(imageButton.dataset.feedImageUrl, imageButton.dataset.feedImageAlt);
+      return;
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      document.querySelector(".feed-image-lightbox")?.classList.remove("is-open");
     }
   });
   stream.addEventListener("change", (event) => {

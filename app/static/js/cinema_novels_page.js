@@ -2,6 +2,7 @@
   const shell = document.querySelector(".cinema-list-shell");
   if (!shell) return;
   const projectId = Number(shell.dataset.projectId);
+  const canManageProject = shell.dataset.canManageProject === "true";
   const list = document.getElementById("cinemaNovelList");
   const empty = document.getElementById("cinemaNovelEmpty");
   const importButton = document.getElementById("cinemaImportAkaganeButton");
@@ -29,6 +30,9 @@
   const createReviewButton = document.getElementById("cinemaCreateReviewButton");
   const reviewCloseButton = document.getElementById("cinemaReviewCloseButton");
   const reviewResult = document.getElementById("cinemaReviewResult");
+  const novelStatusSelect = document.getElementById("cinemaNovelStatusSelect");
+  const novelMobileVisibleCheck = document.getElementById("cinemaNovelMobileVisibleCheck");
+  const novelStatusSaveButton = document.getElementById("cinemaNovelStatusSaveButton");
   let activeNovel = null;
   let activeReviewNovel = null;
   let latestProductionOutline = null;
@@ -88,7 +92,20 @@
     const character = selectedMainCharacter();
     body.main_character = character?.name || "";
     if (character?.nickname) body.main_character_nickname = character.nickname;
+    body.mobile_visible = Boolean(outlineForm.querySelector('[name="mobile_visible"]')?.checked);
     return body;
+  }
+
+  function statusLabel(status) {
+    return status === "published" ? "公開" : "非公開";
+  }
+
+  function statusClass(status) {
+    return status === "published" ? "is-published" : "is-draft";
+  }
+
+  function mobileVisibleLabel(visible) {
+    return visible ? "スマホ表示" : "PCのみ";
   }
 
   function setMainCharacterByName(name) {
@@ -163,7 +180,8 @@
         model: outline?.model,
         chapter_target_chars: outline?.chapter_target_chars,
         usage: outline?.usage,
-        status: "draft",
+        status: input?.status || "draft",
+        mobile_visible: Boolean(input?.mobile_visible),
       }),
     });
   }
@@ -200,6 +218,8 @@
     const progressCopy = novel.progress ? "続きあり" : "未読";
     const posterUrl = novel.poster_asset?.media_url || novel.cover_asset?.media_url || "";
     const reviews = Array.isArray(novel.reviews) ? novel.reviews : [];
+    const statusBadge = `<span class="cinema-novel-status-badge ${statusClass(novel.status)}">${statusLabel(novel.status)}</span>`;
+    const mobileBadge = canManageProject ? `<span class="cinema-novel-status-badge ${novel.mobile_visible ? "is-mobile-visible" : "is-mobile-hidden"}">${mobileVisibleLabel(novel.mobile_visible)}</span>` : "";
     const reviewersHtml = reviews.length ? `
       <div class="cinema-reviewers" title="レビュー済み">
         ${reviews.slice(0, 8).map((review) => {
@@ -220,17 +240,17 @@
               : `<div class="cinema-novel-poster-empty"><i class="bi bi-film"></i></div>`}
           </div>
           <div class="cinema-novel-card-body">
-            <div class="cinema-novel-status">${progressCopy} / ${novel.chapter_count || 0}章</div>
+            <div class="cinema-novel-status">${statusBadge}${mobileBadge}<span>${progressCopy} / ${novel.chapter_count || 0}章</span></div>
             <h3>${escape(novel.title)}</h3>
             <p>${escape(novel.subtitle || novel.description || "ノベル作品")}</p>
           </div>
         </a>
-        <div class="cinema-novel-card-actions">
+        ${canManageProject ? `<div class="cinema-novel-card-actions">
           <button class="btn btn-sm btn-outline-dark" type="button" data-production-novel-id="${novel.id}">
             <i class="bi bi-tools"></i>
             制作
           </button>
-        </div>
+        </div>` : ""}
       </article>
     `;
   }
@@ -244,6 +264,7 @@
   }
 
   function decorateReviewControls(novels) {
+    if (!canManageProject) return;
     const novelById = new Map((novels || []).map((novel) => [Number(novel.id), novel]));
     list.querySelectorAll(".cinema-novel-card").forEach((card) => {
       const productionButton = card.querySelector("[data-production-novel-id]");
@@ -434,6 +455,8 @@
     if (!chapterPanel || !chapterSelect) return;
     chapterPanel.hidden = false;
     chapterPanelTitle.textContent = `${novel.title} / 章制作`;
+    if (novelStatusSelect) novelStatusSelect.value = novel.status === "published" ? "published" : "draft";
+    if (novelMobileVisibleCheck) novelMobileVisibleCheck.checked = Boolean(novel.mobile_visible);
     chapterSelect.innerHTML = (novel.chapters || []).map((chapter) => `
       <option value="${chapter.id}">${String(chapter.chapter_no).padStart(2, "0")} ${escape(chapter.title)}</option>
     `).join("");
@@ -466,6 +489,29 @@
   async function openChapterProduction(novelId) {
     const novel = await api(`/api/v1/cinema-novels/${novelId}`);
     renderChapterProduction(novel);
+  }
+
+  async function saveNovelStatus() {
+    if (!activeNovel || !novelStatusSelect || !novelStatusSaveButton) return;
+    const originalHtml = novelStatusSaveButton.innerHTML;
+    novelStatusSaveButton.disabled = true;
+    novelStatusSaveButton.innerHTML = `<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> 保存中`;
+    try {
+      const updated = await api(`/api/v1/cinema-novels/${activeNovel.id}/status`, {
+        method: "PUT",
+        body: JSON.stringify({
+          status: novelStatusSelect.value,
+          mobile_visible: Boolean(novelMobileVisibleCheck?.checked),
+        }),
+      });
+      activeNovel = { ...activeNovel, status: updated.status, mobile_visible: updated.mobile_visible };
+      await loadNovels();
+    } catch (error) {
+      if (chapterMeta) chapterMeta.innerHTML = `<span class="text-danger">${escape(error.message || "公開状態を保存できませんでした")}</span>`;
+    } finally {
+      novelStatusSaveButton.disabled = false;
+      novelStatusSaveButton.innerHTML = originalHtml;
+    }
   }
 
   function syncSelectedChapter() {
@@ -723,6 +769,7 @@
       }
     });
   });
+  novelStatusSaveButton?.addEventListener("click", saveNovelStatus);
   chapterSelect?.addEventListener("change", syncSelectedChapter);
   generateChapterDraftButton?.addEventListener("click", generateChapterDraft);
   applyChapterDraftButton?.addEventListener("click", applyChapterDraft);

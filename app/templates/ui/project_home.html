@@ -15,16 +15,21 @@
       </div>
 
       <div class="world-home-actions">
+        <a class="quick-link" href="{{ url_for('ui.project_home_page', project_id=project_id) }}"><i class="bi bi-grid-1x2"></i><span>ホーム</span></a>
         {% if can_manage_project %}
-        <a class="quick-link" href="/projects/{{ project_id }}/world"><i class="bi bi-globe2"></i><span>世界観</span></a>
-        <a class="quick-link" href="/projects/{{ project_id }}/characters"><i class="bi bi-people"></i><span>キャラクター</span></a>
-        <a class="quick-link" href="/projects/{{ project_id }}/live-chat/rooms"><i class="bi bi-chat-square-heart"></i><span>ルーム</span></a>
+        <a class="quick-link" href="{{ url_for('ui.world_page', project_id=project_id) }}"><i class="bi bi-globe2"></i><span>世界観</span></a>
         {% endif %}
-        <a class="quick-link" href="/projects/{{ project_id }}/live-chat"><i class="bi bi-chat-dots"></i><span>チャットルーム</span></a>
-        <a class="quick-link" href="/projects/{{ project_id }}/world-map"><i class="bi bi-map"></i><span>ワールドマップ</span></a>
+        <a class="quick-link" href="{{ url_for('ui.world_map_page', project_id=project_id) }}"><i class="bi bi-map"></i><span>ワールドマップ</span></a>
         {% if can_manage_project %}
-        <a class="quick-link" href="/projects/{{ project_id }}/studio"><i class="bi bi-palette"></i><span>スタジオ</span></a>
+        <a class="quick-link" href="{{ url_for('ui.character_list_page', project_id=project_id) }}"><i class="bi bi-people"></i><span>キャラクター</span></a>
+        <a class="quick-link" href="{{ url_for('ui.closet_page', project_id=project_id) }}"><i class="bi bi-person-bounding-box"></i><span>クローゼット</span></a>
+        <a class="quick-link" href="{{ url_for('ui.live_chat_rooms_page', project_id=project_id) }}"><i class="bi bi-chat-square-heart"></i><span>ルーム</span></a>
         {% endif %}
+        <a class="quick-link" href="{{ url_for('ui.live_chat_sessions_page', project_id=project_id) }}"><i class="bi bi-chat-dots"></i><span>チャットルーム</span></a>
+        <a class="quick-link" href="{{ url_for('ui.outings_page', project_id=project_id) }}"><i class="bi bi-signpost-split"></i><span>おでかけ</span></a>
+        <a class="quick-link" href="{{ url_for('ui.studio_page', project_id=project_id) }}"><i class="bi bi-palette"></i><span>スタジオ</span></a>
+        <a class="quick-link" href="{{ url_for('ui.world_news_page', project_id=project_id) }}"><i class="bi bi-newspaper"></i><span>ワールドニュース</span></a>
+        <a class="quick-link" href="{{ url_for('ui.cinema_novel_list_page', project_id=project_id) }}"><i class="bi bi-film"></i><span>ノベル</span></a>
       </div>
     </aside>
   </section>

@@ -7,6 +7,7 @@
       input = document.getElementById("liveChatComposeInput"),
       shell,
       imageForm,
+      getImageGenerationOptions,
       getCurrentContext,
       isPhotoModeActive,
       generatePhotoShoot,
@@ -64,6 +65,31 @@
       return Boolean(isPhotoModeActive?.());
     }
 
+    function hasActiveSceneChoices(context = currentContext()) {
+      const choices = context?.state?.state_json?.scene_choices?.choices;
+      return Array.isArray(choices) && choices.length > 0;
+    }
+
+    function setChoiceInputLocked(locked) {
+      const isLocked = Boolean(locked);
+      form?.classList.toggle("is-choice-locked", isLocked);
+      shellElement?.classList.toggle("is-choice-locked", isLocked);
+      if (input) {
+        input.disabled = isLocked;
+        input.placeholder = isLocked ? "選択肢を選んでからメッセージを送信できます。" : input.placeholder;
+        input.setAttribute("aria-disabled", isLocked ? "true" : "false");
+      }
+      if (sendButton) sendButton.disabled = isLocked;
+      if (proxyButton) proxyButton.disabled = isLocked;
+      modeButtons.forEach((button) => {
+        button.disabled = isLocked;
+      });
+      actionButtons.forEach((button) => {
+        button.disabled = isLocked || button.classList.contains("is-locked");
+      });
+      if (actionClearButton) actionClearButton.disabled = isLocked;
+    }
+
     function markActivity() {
       onActivity?.();
       scheduleIdleTalk?.();
@@ -111,12 +137,17 @@
         id: "free_text",
         label: "メッセージ",
       };
+      const imageOptions = typeof getImageGenerationOptions === "function"
+        ? getImageGenerationOptions()
+        : {
+            size: imageForm?.size?.value || "1536x1024",
+            quality: imageForm?.quality?.value || "low",
+          };
       return {
         message_text: messageText,
         player_intent: normalizedIntent,
         auto_reply: true,
-        size: imageForm?.size?.value || "1536x1024",
-        quality: imageForm?.quality?.value || "low",
+        ...imageOptions,
         skip_auto_image: true,
       };
     }
@@ -132,6 +163,10 @@
 
     function refreshPlaceholder() {
       if (!input) return;
+      if (hasActiveSceneChoices()) {
+        input.placeholder = "選択肢を選んでからメッセージを送信できます。";
+        return;
+      }
       if (isPhotoMode()) {
         input.placeholder = placeholders.photo;
       } else if (selectedAction) {
@@ -153,6 +188,7 @@
 
     function renderActionAvailability() {
       const score = currentAffinityScore();
+      const choiceLocked = hasActiveSceneChoices();
       const lockedActions = Object.values(actionDefinitions)
         .filter((action) => Number(action.minAffinity || 0) > score)
         .sort((a, b) => a.minAffinity - b.minAffinity);
@@ -163,7 +199,7 @@
         const unlocked = isActionUnlocked(action);
         const showLocked = !unlocked && action.minAffinity === nextUnlock;
         button.hidden = !unlocked && !showLocked;
-        button.disabled = !unlocked;
+        button.disabled = choiceLocked || !unlocked;
         button.classList.toggle("is-locked", !unlocked);
         button.dataset.lockLabel = !unlocked ? `好感度${action.minAffinity}で解放` : "";
         button.setAttribute(
@@ -204,10 +240,11 @@
     }
 
     function hasPendingText() {
-      return Boolean(form?.message_text?.value?.trim() || selectedAction);
+      return !hasActiveSceneChoices() && Boolean(form?.message_text?.value?.trim() || selectedAction);
     }
 
     function playSendSound() {
+      if (hasActiveSceneChoices()) return;
       if (!hasPendingText()) return;
       const currentTime = Date.now();
       if (currentTime - lastSendSoundAt < 180) return;
@@ -217,10 +254,15 @@
     }
 
     function focus() {
+      if (hasActiveSceneChoices()) return;
       form?.message_text?.focus();
     }
 
     function submitText(text) {
+      if (hasActiveSceneChoices()) {
+        NovelUI.toast("先に選択肢を選んでください。", "warning");
+        return;
+      }
       const value = String(text || "").trim();
       if (!value || !form?.message_text) return;
       clearSelectedAction();
@@ -276,6 +318,11 @@
     async function handleSubmit(event) {
       event.preventDefault();
       if (isInteractionLocked?.()) return;
+      if (hasActiveSceneChoices()) {
+        NovelUI.toast("先に選択肢を選んでください。", "warning");
+        setChoiceInputLocked(true);
+        return;
+      }
       clearIdleTalkTimer?.();
       const rawMessage = form?.message_text?.value?.trim() || "";
       const playerIntent = selectedAction ? buildActionIntent(selectedAction) : null;
@@ -305,6 +352,10 @@
 
     async function generateProxyMessage() {
       if (isInteractionLocked?.()) return;
+      if (hasActiveSceneChoices()) {
+        NovelUI.toast("先に選択肢を選んでください。", "warning");
+        return;
+      }
       if (!proxyButton) return;
       const originalText = proxyButton.textContent;
       try {
@@ -331,6 +382,8 @@
 
     function render() {
       renderSelectedAction();
+      setChoiceInputLocked(hasActiveSceneChoices());
+      refreshPlaceholder();
     }
 
     function bind() {
@@ -350,6 +403,7 @@
       setVisible(true);
       setComposeMode("chat");
       renderSelectedAction();
+      setChoiceInputLocked(hasActiveSceneChoices());
       refreshPlaceholder();
     }
 

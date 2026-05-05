@@ -1910,10 +1910,6 @@ class LiveChatConversationService:
                     "prompt_text": photo_prompt,
                     "use_existing_prompt": True,
                     "use_selected_scene_as_reference": True,
-                    "selected_scene_reference_exclude_types": [
-                        "photo_mode_shoot",
-                        "dress_up_photo_shoot",
-                    ],
                     "size": payload.get("photo_size") or payload.get("size") or "1536x1024",
                     "quality": payload.get("photo_quality") or payload.get("quality") or "low",
                     "input_fidelity": "low",
@@ -2043,10 +2039,6 @@ class LiveChatConversationService:
                     "prompt_text": photo_prompt,
                     "use_existing_prompt": True,
                     "use_selected_scene_as_reference": True,
-                    "selected_scene_reference_exclude_types": [
-                        "photo_mode_shoot",
-                        "dress_up_photo_shoot",
-                    ],
                     "size": payload.get("photo_size") or payload.get("size") or "1536x1024",
                     "quality": payload.get("photo_quality") or payload.get("quality") or "low",
                     "input_fidelity": "low",

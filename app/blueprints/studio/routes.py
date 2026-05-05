@@ -25,12 +25,14 @@ def _current_user():
     return user
 
 
-def _require_project(project_id: int):
+def _require_project(project_id: int, *, manage: bool = False):
     user = _current_user()
     project = project_service.get_project(project_id)
     if not project:
         raise NotFoundError()
     if not authorization_service.can_view_project(user, project):
+        raise ForbiddenError()
+    if manage and not authorization_service.can_manage_project(user, project):
         raise ForbiddenError()
     return project, user
 
@@ -65,7 +67,7 @@ def get_studio_image(project_id: int, asset_id: int):
 
 @studio_bp.route("/projects/<int:project_id>/studio/generate", methods=["POST"])
 def generate_studio_image(project_id: int):
-    _, user = _require_project(project_id)
+    _, user = _require_project(project_id, manage=True)
     payload = request.get_json(silent=True) or {}
     payload = user_setting_service.apply_global_image_generation_settings(payload)
     try:
