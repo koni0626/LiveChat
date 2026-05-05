@@ -72,6 +72,66 @@ _ACTION_REJECTION_MARKERS = (
     "強引",
 )
 
+_CHOICE_INFO_MARKERS = (
+    "Feed",
+    "feed",
+    "フィード",
+    "ニュース",
+    "噂",
+    "うわさ",
+    "端末",
+    "地図",
+    "投稿",
+    "掲示板",
+    "放送",
+    "ログ",
+    "資料",
+    "メニュー",
+    "写真",
+    "読む",
+    "見る",
+    "確認",
+    "調べる",
+    "聞く",
+)
+
+_CHOICE_MOVE_MARKERS = (
+    "へ行く",
+    "に行く",
+    "へ向かう",
+    "に向かう",
+    "移動",
+    "出る",
+    "入る",
+    "奥へ",
+    "進む",
+    "戻る",
+    "通路",
+    "区画",
+    "別の場所",
+    "別施設",
+)
+
+_CHOICE_ACTION_MARKERS = (
+    "質問",
+    "相談",
+    "からかう",
+    "手を取",
+    "手を握",
+    "近づ",
+    "選ぶ",
+    "渡す",
+    "食べ",
+    "飲む",
+    "買う",
+    "試す",
+    "褒め",
+    "慰め",
+    "笑う",
+    "考え",
+    "話す",
+)
+
 
 def is_low_information_player_text(text: str | None) -> bool:
     value = str(text or "").strip()
@@ -135,6 +195,41 @@ def _accepted_action_floor(context: dict, last_user_message: dict) -> tuple[int 
     if reaction_text and any(marker in reaction_text for marker in _ACTION_REJECTION_MARKERS):
         return (None, 0, 0)
     return (target_character_id, floor[0], floor[1])
+
+
+def _choice_text_for_type(choice: dict | None, execution: dict | None = None) -> str:
+    values = []
+    for source in (choice or {}, execution or {}):
+        if not isinstance(source, dict):
+            continue
+        for key in ("label", "intent", "choice_type", "scene_instruction", "image_prompt_hint", "reply_hint"):
+            value = str(source.get(key) or "").strip()
+            if value:
+                values.append(value)
+    return " / ".join(values)
+
+
+def _normalize_choice_type(choice: dict | None, execution: dict | None = None) -> str:
+    allowed = {"location_move", "area_shift", "look_at_info", "action", "emotion", "topic", "photo"}
+    for source in (execution or {}, choice or {}):
+        explicit = str((source or {}).get("choice_type") or (source or {}).get("transition_type") or "").strip().lower()
+        if explicit in allowed:
+            return explicit
+    text = _choice_text_for_type(choice, execution)
+    lowered = text.lower()
+    if any(marker.lower() in lowered for marker in _CHOICE_INFO_MARKERS):
+        return "look_at_info"
+    if any(marker in text for marker in _CHOICE_ACTION_MARKERS):
+        return "action"
+    if any(marker in text for marker in _CHOICE_MOVE_MARKERS):
+        if any(marker in text for marker in ("奥へ", "進む", "通路", "区画", "戻る")):
+            return "area_shift"
+        return "location_move"
+    return "action"
+
+
+def _choice_preserves_location(choice_type: str) -> bool:
+    return choice_type not in {"location_move", "area_shift"}
 
 
 class LiveChatConversationService:
@@ -2360,18 +2455,64 @@ class LiveChatConversationService:
         for key in ("scene_instruction", "image_prompt_hint", "reply_hint"):
             if execution.get(key):
                 directed_choice[key] = execution[key]
+        choice_type = _normalize_choice_type(directed_choice, execution)
+        directed_choice["choice_type"] = choice_type
+        current_location = (
+            state_json.get("location")
+            or (state_json.get("scene_progression") or {}).get("location")
+            or (
+                (state_json.get("current_location") or {}).get("name")
+                if isinstance(state_json.get("current_location"), dict)
+                else ""
+            )
+            or ""
+        )
+        current_background = (
+            state_json.get("background")
+            or (state_json.get("scene_progression") or {}).get("background")
+            or (
+                (state_json.get("current_location") or {}).get("description")
+                if isinstance(state_json.get("current_location"), dict)
+                else ""
+            )
+            or ""
+        )
+        if _choice_preserves_location(choice_type):
+            stay_hint = (
+                "現在地と背景は維持する。別室、ニュース局、端末室、スタジオ、汎用的な室内へ移動させない。"
+                "Feed/ニュース/情報は、今いる場所の端末、掲示板、手元、放送、紙片、表示パネルとして見せる。"
+            )
+            directed_choice["image_prompt_hint"] = " ".join(
+                part for part in [directed_choice.get("image_prompt_hint"), stay_hint] if part
+            )
         prompt = self.build_choice_image_prompt(context, directed_choice)
+        if choice_type == "location_move":
+            scene_location = execution.get("location") or current_location or choice.get("label")
+            scene_background = execution.get("background") or directed_choice.get("image_prompt_hint") or current_background
+            transition_occurred = True
+            scene_phase = "choice_location_move"
+        elif choice_type == "area_shift":
+            scene_location = current_location or execution.get("location") or choice.get("label")
+            scene_background = execution.get("background") or directed_choice.get("image_prompt_hint") or current_background
+            transition_occurred = True
+            scene_phase = "choice_area_shift"
+        else:
+            scene_location = current_location
+            scene_background = current_background
+            transition_occurred = False
+            scene_phase = f"choice_{choice_type}"
         scene_update = {
-            "scene_phase": "choice_transition",
-            "location": execution.get("location") or state_json.get("location") or choice.get("label"),
-            "background": execution.get("background") or directed_choice.get("image_prompt_hint"),
+            "scene_phase": scene_phase,
+            "location": scene_location,
+            "background": scene_background,
             "focus_summary": directed_choice.get("scene_instruction") or directed_choice.get("label"),
             "next_topic": directed_choice.get("reply_hint") or "react to the selected scene",
-            "transition_occurred": True,
+            "transition_occurred": transition_occurred,
             "character_reaction_hint": directed_choice.get("reply_hint") or "",
             "image_focus": prompt,
             "selected_choice": directed_choice,
             "choice_execution": execution,
+            "choice_type": choice_type,
         }
         state_json["input_intent"] = {
             "intent": "visual_request",
