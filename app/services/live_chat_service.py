@@ -234,6 +234,14 @@ class LiveChatService:
     def _update_conversation_evaluation(self, session_id: int, context: dict):
         return self._conversation_service.update_conversation_evaluation(session_id, context)
 
+    def finalize_session_memory(
+        self,
+        session_id: int,
+        character_id: int | None = None,
+        trigger_type: str = "affinity_ending",
+    ):
+        return self._conversation_service.finalize_session_memory(session_id, character_id, trigger_type)
+
     def post_message(self, session_id: int, payload: dict | None = None):
         return self._conversation_service.post_message(session_id, payload)
 

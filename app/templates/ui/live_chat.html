@@ -295,6 +295,25 @@
     </div>
   </section>
 
+    <div class="live-chat-inventory-modal is-hidden" id="liveChatInventoryModal" aria-hidden="true">
+      <button class="live-chat-inventory-modal-backdrop" type="button" id="liveChatInventoryModalBackdrop" aria-label="Close item detail"></button>
+      <article class="live-chat-inventory-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="liveChatInventoryModalTitle">
+        <button class="live-chat-inventory-modal-close" type="button" id="liveChatInventoryModalClose" aria-label="Close item detail">
+          <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+        <div class="live-chat-inventory-modal-image-wrap">
+          <img class="live-chat-inventory-modal-image" id="liveChatInventoryModalImage" alt="">
+          <div class="live-chat-inventory-modal-fallback" id="liveChatInventoryModalFallback" aria-hidden="true">
+            <i class="bi bi-gift-fill"></i>
+          </div>
+        </div>
+        <div class="live-chat-inventory-modal-body">
+          <div class="eyebrow">Inventory Item</div>
+          <h3 id="liveChatInventoryModalTitle">Item</h3>
+          <p id="liveChatInventoryModalDescription"></p>
+        </div>
+      </article>
+    </div>
   <aside class="panel-card live-chat-side">
     <section class="live-chat-character-guide" id="liveChatCharacterGuide" hidden>
       <div class="live-chat-character-guide-head">
@@ -433,6 +452,7 @@
 <script src="{{ url_for('static', filename='js/live_chat_image_view.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live_chat_view.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live_chat_api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/live_chat_sound.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live_chat_actions.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live_chat_shell.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live_chat_costume_room.js') }}"></script>

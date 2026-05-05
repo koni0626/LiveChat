@@ -193,23 +193,6 @@ class LiveChatConversationService:
         character_text = str((last_character or {}).get("message_text") or "").strip()
         if not user_text and not character_text:
             return
-        if user_text:
-            self._player_profile_memory_service.update_from_user_message(
-                user_id=int(session.owner_user_id),
-                user_text=user_text,
-            )
-        for character in context.get("characters") or []:
-            character_id = int(character.get("id") or 0)
-            if not character_id:
-                continue
-            summary = f"{character.get('name') or 'character'}との会話を継続中。"
-            notes = " / ".join(item for item in [user_text[:200], character_text[:200]] if item)
-            self._character_user_memory_service.update_from_event(
-                user_id=int(session.owner_user_id),
-                character_id=character_id,
-                relationship_summary=summary,
-                memory_notes=notes,
-            )
         self._character_intel_tracker.record_reveals(session, context, character_text)
         self._character_intel_tracker.mark_used(context, user_text)
 
@@ -227,6 +210,85 @@ class LiveChatConversationService:
             return json_util.loads(stripped)
         except Exception:
             return value
+
+    def finalize_session_memory(
+        self,
+        session_id: int,
+        character_id: int | None = None,
+        trigger_type: str = "affinity_ending",
+    ):
+        session = self._chat_session_service.get_session(session_id) if self._chat_session_service else None
+        if not session or not self._context_provider:
+            return None
+        context = self._context_provider(session_id)
+        summary = text_support.generate_final_memory_summary(self._text_ai_client, context, character_id)
+        player_profile = summary.get("player_profile") if isinstance(summary, dict) else {}
+        character_memory = summary.get("character_memory") if isinstance(summary, dict) else {}
+        if not isinstance(player_profile, dict):
+            player_profile = {}
+        if not isinstance(character_memory, dict):
+            character_memory = {}
+
+        profile_row = self._player_profile_memory_service.update_from_final_summary(
+            user_id=int(session.owner_user_id),
+            interest_notes=player_profile.get("interest_notes"),
+            dislike_notes=player_profile.get("dislike_notes"),
+            conversation_style_notes=player_profile.get("conversation_style_notes"),
+            humor_notes=player_profile.get("humor_notes"),
+            romance_notes=player_profile.get("romance_notes"),
+            goal_notes=player_profile.get("goal_notes"),
+            frustration_notes=player_profile.get("frustration_notes"),
+            recent_player_notes=player_profile.get("recent_player_notes"),
+            profile_json={
+                "source_ref": f"chat_session:{session_id}",
+                "trigger_type": trigger_type,
+                "character_id": character_id,
+            },
+        )
+
+        target_ids = set()
+        if character_id:
+            target_ids.add(int(character_id))
+        else:
+            for character in context.get("characters") or []:
+                current_id = int(character.get("id") or 0)
+                if current_id:
+                    target_ids.add(current_id)
+        updated_character_ids = []
+        for target_id in sorted(target_ids):
+            self._character_user_memory_service.update_from_event(
+                user_id=int(session.owner_user_id),
+                character_id=target_id,
+                relationship_summary=character_memory.get("relationship_summary"),
+                memory_notes=character_memory.get("memory_notes"),
+                preference_notes=character_memory.get("preference_notes"),
+                unresolved_threads=character_memory.get("unresolved_threads"),
+                important_events=character_memory.get("important_events"),
+            )
+            updated_character_ids.append(target_id)
+
+        created_notes = self._character_memory_note_service.extract_from_live_chat_context(
+            self._text_ai_client,
+            context,
+            source_ref=f"chat_session:{session_id}:final",
+        )
+
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        state_json["finalized_memory_summary"] = {
+            "trigger_type": trigger_type,
+            "character_id": character_id,
+            "updated_character_ids": updated_character_ids,
+            "character_note_count": len(created_notes or []),
+            "player_profile_updated": bool(profile_row),
+            "finalized_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        }
+        self._session_state_service.upsert_state(session_id, {"state_json": state_json})
+        return {
+            "player_profile_updated": bool(profile_row),
+            "updated_character_ids": updated_character_ids,
+            "character_note_count": len(created_notes or []),
+        }
 
     def update_line_visual_note(self, session_id: int, context: dict):
         latest = None
@@ -619,11 +681,6 @@ class LiveChatConversationService:
             updated_context = self._context_provider(session_id)
         if self._letter_service:
             self._update_character_user_memory(session, updated_context)
-            self._character_memory_note_service.extract_from_live_chat_context(
-                self._text_ai_client,
-                updated_context,
-                source_ref=f"chat_session:{session_id}",
-            )
             return None
         return None
 
@@ -698,11 +755,6 @@ class LiveChatConversationService:
         updated_context = self._context_provider(session_id)
         self.update_session_memory(session_id, updated_context)
         self._update_character_user_memory(session, updated_context)
-        self._character_memory_note_service.extract_from_live_chat_context(
-            self._text_ai_client,
-            updated_context,
-            source_ref=f"chat_session:{session_id}",
-        )
         updated_context = self._context_provider(session_id)
         self.update_conversation_evaluation(session_id, updated_context)
         updated_context = self._context_provider(session_id)
@@ -1008,11 +1060,6 @@ class LiveChatConversationService:
         self.update_conversation_evaluation(session_id, updated_context)
         updated_context = self._context_provider(session_id)
         self._update_character_user_memory(session, updated_context)
-        self._character_memory_note_service.extract_from_live_chat_context(
-            self._text_ai_client,
-            updated_context,
-            source_ref=f"chat_session:{session_id}",
-        )
         updated_context = self._context_provider(session_id)
         return {
             "location": location_payload,
@@ -2218,11 +2265,6 @@ class LiveChatConversationService:
             evaluation_result = self.update_conversation_evaluation(session_id, updated_context) or {}
             updated_context = self._context_provider(session_id)
             self._update_character_user_memory(session, updated_context)
-            self._character_memory_note_service.extract_from_live_chat_context(
-                self._text_ai_client,
-                updated_context,
-                source_ref=f"chat_session:{session_id}",
-            )
             state = self._extract_state_payload(session, updated_context)
             updated_context = self._context_provider(session_id)
             if assistant_message:

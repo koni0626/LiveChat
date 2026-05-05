@@ -1,6 +1,7 @@
 ﻿import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 from flask import Blueprint, current_app, request, session
 
@@ -74,6 +75,47 @@ def _generate_affinity_100_short_story(session_id: int):
         saved = live_chat_service.save_short_story(session_id, {"story": short_story})
         return (saved or {}).get("saved_story") or short_story
     return short_story
+
+
+def _session_state_json(session_id: int) -> dict:
+    state = session_state_service.get_state(session_id)
+    raw = getattr(state, "state_json", None)
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _session_affinity_ending_claimed(session_id: int, character_id: int) -> bool:
+    state_json = _session_state_json(session_id)
+    endings = state_json.get("affinity_100_endings") if isinstance(state_json.get("affinity_100_endings"), dict) else {}
+    ending = endings.get(str(character_id)) if isinstance(endings, dict) else None
+    return bool(isinstance(ending, dict) and ending.get("played_at"))
+
+
+def _mark_session_affinity_ending_claimed(
+    session_id: int,
+    character_id: int,
+    *,
+    event_image_id: int | None = None,
+    replayed_reward: bool = False,
+):
+    state_json = _session_state_json(session_id)
+    endings = state_json.get("affinity_100_endings") if isinstance(state_json.get("affinity_100_endings"), dict) else {}
+    endings = dict(endings or {})
+    endings[str(character_id)] = {
+        "character_id": character_id,
+        "event_image_id": event_image_id,
+        "replayed_reward": bool(replayed_reward),
+        "played_at": datetime.utcnow().isoformat(timespec="seconds"),
+    }
+    state_json["affinity_100_endings"] = endings
+    session_state_service.upsert_state(session_id, {"state_json": state_json})
 
 
 def _current_user():
@@ -620,7 +662,8 @@ def _claim_affinity_reward_payload(
 ):
     session_id = chat_session.id
     existing = character_affinity_reward_service.get_reward(user.id, character_id)
-    if existing and existing.event_claimed_at and not force_debug_replay:
+    session_ending_claimed = _session_affinity_ending_claimed(session_id, character_id)
+    if existing and existing.event_claimed_at and session_ending_claimed and not force_debug_replay:
         return (
             {
                 "claimed": False,
@@ -631,6 +674,7 @@ def _claim_affinity_reward_payload(
             },
             200,
         )
+    replay_existing_reward = bool(existing and existing.event_claimed_at and not force_debug_replay)
     app = current_app._get_current_object()
     with ThreadPoolExecutor(max_workers=2) as executor:
         event_image_future = executor.submit(
@@ -661,6 +705,9 @@ def _claim_affinity_reward_payload(
         db.session.add(reward)
         db.session.commit()
         claimed = True
+    elif replay_existing_reward:
+        reward = existing
+        claimed = True
     else:
         reward, claimed = character_affinity_reward_service.claim_affinity_100_reward(
             user_id=user.id,
@@ -671,6 +718,7 @@ def _claim_affinity_reward_payload(
     letter = None
     clear_message = None
     short_story = None
+    memory_finalization = None
     if claimed:
         speaker_name, message_text = _affinity_100_clear_line(context, character_id)
         clear_message = chat_message_service.create_message(
@@ -698,6 +746,21 @@ def _claim_affinity_reward_payload(
             character_id,
             (event_image or {}).get("asset_id"),
         )
+        try:
+            memory_finalization = live_chat_service.finalize_session_memory(
+                session_id,
+                character_id,
+                trigger_type="affinity_100_reward_replay" if replay_existing_reward else "affinity_100_reward",
+            )
+        except Exception:
+            current_app.logger.exception("live chat final memory generation failed")
+            memory_finalization = {"error": "failed"}
+        _mark_session_affinity_ending_claimed(
+            session_id,
+            character_id,
+            event_image_id=(event_image or {}).get("id"),
+            replayed_reward=replay_existing_reward,
+        )
     return (
         {
             "claimed": claimed,
@@ -706,8 +769,10 @@ def _claim_affinity_reward_payload(
             "letter": letter,
             "short_story": short_story,
             "message": live_chat_service._serialize_message(clear_message) if clear_message else None,
+            "memory_finalization": memory_finalization,
             "context": live_chat_service.get_session_context(session_id),
             "debug_replay": is_debug_replay,
+            "reward_replayed": replay_existing_reward,
         },
         201 if claimed else 200,
     )

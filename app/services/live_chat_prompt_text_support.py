@@ -499,6 +499,49 @@ def _append_world_activity_context(lines: list[str], context: dict):
     lines.append(block)
 
 
+def _append_current_costume_context(lines: list[str], context: dict):
+    state_json = (context.get("state") or {}).get("state_json") or {}
+    costume = state_json.get("current_costume") if isinstance(state_json.get("current_costume"), dict) else {}
+    selected_costume = context.get("selected_costume") if isinstance(context.get("selected_costume"), dict) else {}
+    if not costume and selected_costume:
+        selected_state = selected_costume.get("state_json") if isinstance(selected_costume.get("state_json"), dict) else {}
+        costume = {
+            "name": selected_state.get("outfit_name") or ("初期衣装" if selected_costume.get("image_type") == "costume_initial" else "選択中の衣装"),
+            "description": selected_state.get("description")
+            or selected_state.get("rewritten_instruction")
+            or selected_state.get("instruction")
+            or selected_costume.get("prompt_text")
+            or "",
+            "usage_scene": selected_state.get("usage_scene") or "",
+            "season": selected_state.get("season") or "",
+            "image_type": selected_costume.get("image_type") or "",
+        }
+    if not costume:
+        return
+    lines.append("Current costume reference. Treat this as what the active character is wearing now.")
+    lines.append(f"- costume_name: {costume.get('name') or ''}")
+    if costume.get("description"):
+        lines.append(f"- costume_description: {costume.get('description')}")
+    if costume.get("usage_scene"):
+        lines.append(f"- intended_scene: {costume.get('usage_scene')}")
+    if costume.get("season"):
+        lines.append(f"- season: {costume.get('season')}")
+    change = state_json.get("last_costume_change") if isinstance(state_json.get("last_costume_change"), dict) else {}
+    if change:
+        previous_name = str(change.get("previous_name") or "").strip()
+        current_name = str(change.get("current_name") or costume.get("name") or "").strip()
+        if previous_name and previous_name != current_name:
+            lines.append(
+                f"Recent costume change: the character just changed from {previous_name} to {current_name}. "
+                "When natural, acknowledge the change with a concrete reaction to the new outfit."
+            )
+        else:
+            lines.append(
+                "Recent costume change: the current outfit was just selected. "
+                "When natural, the character may notice or comment on how it feels/looks."
+            )
+
+
 def _active_character_names(context: dict) -> list[str]:
     return [
         str(character.get("name") or "").strip()
@@ -680,6 +723,7 @@ def build_opening_prompt(context: dict) -> str:
         lines.append(f"セッション目的: {session_objective}")
     _append_session_objective_notes(lines, context)
     _append_world_activity_context(lines, context)
+    _append_current_costume_context(lines, context)
     _append_player_visible_reaction(lines, context)
     if context["world"].get("overview"):
         lines.append(f"世界観概要: {context['world']['overview']}")
@@ -928,6 +972,7 @@ def build_idle_character_message_prompt(context: dict) -> str:
     _append_player_profile_context(lines, context)
     _append_session_objective_notes(lines, context)
     _append_world_activity_context(lines, context)
+    _append_current_costume_context(lines, context)
     _append_player_visible_reaction(lines, context)
     _append_emotional_performance_rules(lines, context)
     _append_adult_romance_tone_rules(lines)
@@ -1072,6 +1117,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     _append_player_profile_context(lines, context)
     _append_session_objective_notes(lines, context)
     _append_world_activity_context(lines, context)
+    _append_current_costume_context(lines, context)
     _append_player_visible_reaction(lines, context)
     _append_adult_romance_tone_rules(lines)
     if context["world"].get("overview"):
@@ -1874,6 +1920,118 @@ def build_session_memory(messages: list[dict], current_state_json: dict | None) 
         "last_updated_at": datetime.utcnow().isoformat(),
     }
     return {key: value for key, value in memory.items() if value}
+
+
+def build_final_memory_summary_prompt(context: dict, character_id: int | None = None) -> str:
+    state_json = (context.get("state") or {}).get("state_json") or {}
+    player_name = context.get("session", {}).get("player_name") or "player"
+    target_character = None
+    if character_id:
+        target_character = next(
+            (item for item in context.get("characters") or [] if int(item.get("id") or 0) == int(character_id)),
+            None,
+        )
+    target_character = target_character or ((context.get("characters") or [None])[0])
+    location = state_json.get("current_location") or {}
+    service = state_json.get("current_location_service") or {}
+    lines = [
+        "You summarize a completed live-chat session for long-term memory.",
+        "Return only a JSON object.",
+        "Do not store raw logs. Extract compact reusable memory only.",
+        "Required keys: player_profile, character_memory.",
+        "player_profile keys: interest_notes, dislike_notes, conversation_style_notes, humor_notes, romance_notes, goal_notes, frustration_notes, recent_player_notes.",
+        "character_memory keys: relationship_summary, memory_notes, preference_notes, unresolved_threads, important_events.",
+        "Each value must be Japanese, concise, and useful in future chats.",
+        "If a field has nothing useful, use an empty string.",
+        "recent_player_notes must be a compact 3-6 bullet summary, not individual message logs.",
+        "important_events should preserve only memorable shared events, promises, date/outing moments, emotional turns, or clear preferences.",
+        f"Player name: {player_name}",
+        f"Target character: {(target_character or {}).get('name') or ''}",
+        f"Session objective: {get_session_objective(context) or ''}",
+        f"Current location: {(location.get('name') if isinstance(location, dict) else '') or state_json.get('location') or ''}",
+        f"Current service: {(service.get('name') if isinstance(service, dict) else '') or ''}",
+        f"Scene focus: {(state_json.get('scene_progression') or {}).get('focus_summary') or ''}",
+    ]
+    previous_profile = context.get("player_profile_memory") or {}
+    if previous_profile:
+        lines.append("Existing shared player profile:")
+        for key in (
+            "interest_notes",
+            "dislike_notes",
+            "conversation_style_notes",
+            "humor_notes",
+            "romance_notes",
+            "goal_notes",
+            "frustration_notes",
+        ):
+            value = str(previous_profile.get(key) or "").strip()
+            if value:
+                lines.append(f"- {key}: {value[:600]}")
+    character_memories = context.get("character_user_memories") or {}
+    if target_character:
+        memory = character_memories.get(str(target_character.get("id") or "")) or {}
+        if memory:
+            lines.append("Existing character memory for this player:")
+            for key in ("relationship_summary", "memory_notes", "preference_notes", "unresolved_threads", "important_events"):
+                value = str(memory.get(key) or "").strip()
+                if value:
+                    lines.append(f"- {key}: {value[:700]}")
+    lines.append("Characters:")
+    for character in context.get("characters") or []:
+        lines.append(
+            f"- id={character.get('id')}, name={character.get('name')}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}"
+        )
+    lines.append("Full session transcript:")
+    for message in context.get("messages") or []:
+        speaker = message.get("speaker_name") or message.get("sender_type") or ""
+        role = message.get("message_role") or message.get("sender_type") or ""
+        text = str(message.get("message_text") or "").strip()
+        if text:
+            lines.append(f"- [{role}] {speaker}: {text[:900]}")
+    return "\n".join(lines)
+
+
+def fallback_final_memory_summary(context: dict, character_id: int | None = None) -> dict:
+    messages = [item for item in (context.get("messages") or []) if str(item.get("message_text") or "").strip()]
+    player_lines = [
+        str(item.get("message_text") or "").strip()
+        for item in messages
+        if item.get("sender_type") == "user"
+    ][-6:]
+    character = None
+    if character_id:
+        character = next((item for item in context.get("characters") or [] if int(item.get("id") or 0) == int(character_id)), None)
+    character = character or ((context.get("characters") or [None])[0])
+    character_name = (character or {}).get("name") or "キャラクター"
+    last_user = next((item for item in reversed(messages) if item.get("sender_type") == "user"), {})
+    last_character = next((item for item in reversed(messages) if item.get("sender_type") == "character"), {})
+    notable = " / ".join(
+        item
+        for item in [
+            str(last_user.get("message_text") or "").strip()[:180],
+            str(last_character.get("message_text") or "").strip()[:180],
+        ]
+        if item
+    )
+    return {
+        "player_profile": {
+            "interest_notes": "",
+            "dislike_notes": "",
+            "conversation_style_notes": "",
+            "humor_notes": "",
+            "romance_notes": "",
+            "goal_notes": "",
+            "frustration_notes": "",
+            "recent_player_notes": "\n".join(f"- {line[:120]}" for line in player_lines),
+        },
+        "character_memory": {
+            "relationship_summary": f"{character_name}とのライブチャットを完了した。",
+            "memory_notes": notable,
+            "preference_notes": "",
+            "unresolved_threads": "",
+            "important_events": notable,
+        },
+    }
 
 
 def build_conversation_evaluation_prompt(context: dict) -> str:

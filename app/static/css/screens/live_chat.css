@@ -6503,3 +6503,162 @@ body[data-screen="live-chat"] .live-chat-stage .live-chat-stage-action-button {
   outline: 3px solid rgba(0, 245, 212, 0.82);
   outline-offset: -6px;
 }
+
+.live-chat-inventory-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 3vw, 2.2rem);
+}
+
+.live-chat-inventory-modal.is-hidden {
+  display: none;
+}
+
+.live-chat-inventory-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(0, 245, 212, 0.18), transparent 34%),
+    radial-gradient(circle at 84% 78%, rgba(255, 122, 200, 0.16), transparent 32%),
+    rgba(2, 7, 16, 0.86);
+  backdrop-filter: blur(16px);
+}
+
+.live-chat-inventory-modal-dialog {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: min(880px, 96vw);
+  max-height: min(92vh, 880px);
+  overflow: hidden;
+  border: 1px solid rgba(126, 250, 255, 0.28);
+  border-radius: 1rem;
+  background:
+    linear-gradient(180deg, rgba(8, 18, 34, 0.98), rgba(4, 10, 22, 0.98)),
+    radial-gradient(circle at 18% 0%, rgba(0, 245, 212, 0.14), transparent 42%);
+  box-shadow:
+    0 34px 90px rgba(0, 0, 0, 0.58),
+    0 0 42px rgba(0, 245, 212, 0.12),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+}
+
+.live-chat-inventory-modal-close {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  z-index: 2;
+  display: inline-grid;
+  place-items: center;
+  width: 2.65rem;
+  height: 2.65rem;
+  border: 1px solid rgba(126, 250, 255, 0.24);
+  border-radius: 999px;
+  background: rgba(5, 13, 27, 0.82);
+  color: #effcff;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(10px);
+}
+
+.live-chat-inventory-modal-close:hover,
+.live-chat-inventory-modal-close:focus {
+  border-color: rgba(126, 250, 255, 0.56);
+  color: #ffffff;
+  outline: none;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.32),
+    0 0 0 3px rgba(0, 245, 212, 0.12);
+}
+
+.live-chat-inventory-modal-image-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: min(62vh, 600px);
+  padding: clamp(0.85rem, 2vw, 1.25rem);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(126, 250, 255, 0.16), transparent 52%),
+    linear-gradient(180deg, rgba(1, 6, 14, 0.78), rgba(4, 10, 20, 0.52));
+}
+
+.live-chat-inventory-modal-image {
+  display: block;
+  max-width: 100%;
+  max-height: min(64vh, 640px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.85rem;
+  background: rgba(1, 6, 14, 0.72);
+  box-shadow:
+    0 22px 58px rgba(0, 0, 0, 0.42),
+    0 0 28px rgba(0, 245, 212, 0.1);
+}
+
+.live-chat-inventory-modal-image.is-hidden,
+.live-chat-inventory-modal-fallback.is-hidden {
+  display: none;
+}
+
+.live-chat-inventory-modal-fallback {
+  display: grid;
+  place-items: center;
+  width: min(38vw, 15rem);
+  aspect-ratio: 1;
+  border: 1px solid rgba(126, 250, 255, 0.24);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 122, 200, 0.16), transparent 48%),
+    rgba(9, 22, 40, 0.8);
+  color: #9ffcff;
+  font-size: clamp(4rem, 12vw, 7rem);
+}
+
+.live-chat-inventory-modal-body {
+  display: grid;
+  gap: 0.45rem;
+  padding: clamp(1rem, 2.2vw, 1.35rem) clamp(1.05rem, 2.4vw, 1.6rem) clamp(1.1rem, 2.4vw, 1.55rem);
+  border-top: 1px solid rgba(126, 250, 255, 0.16);
+  background:
+    linear-gradient(180deg, rgba(8, 18, 34, 0.92), rgba(5, 12, 24, 0.96));
+}
+
+.live-chat-inventory-modal-body h3 {
+  margin: 0;
+  color: #f6fdff;
+  font-size: clamp(1.25rem, 2vw, 1.75rem);
+  font-weight: 900;
+}
+
+.live-chat-inventory-modal-body p {
+  margin: 0;
+  color: rgba(220, 246, 255, 0.86);
+  font-size: 0.96rem;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+body.live-chat-inventory-modal-open {
+  overflow: hidden;
+}
+
+@media (max-width: 767.98px) {
+  .live-chat-inventory-modal {
+    padding: 0.7rem;
+  }
+
+  .live-chat-inventory-modal-dialog {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 0.8rem;
+  }
+
+  .live-chat-inventory-modal-image-wrap {
+    min-height: 52vh;
+  }
+}

@@ -1,4 +1,13 @@
 (function () {
+  function normalizeDisplayText(value) {
+    return String(value || "")
+      .replace(/\\r\\n/g, "\n")
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "\n")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n");
+  }
+
   function normalizeMessageSortValue(item) {
     const createdAt = Date.parse(item?.created_at || "");
     if (Number.isFinite(createdAt)) return createdAt;
@@ -12,7 +21,7 @@
     let filtered = source;
     if (query) {
       const hitIndex = source.findIndex((item) => {
-        const text = `${item?.speaker_name || ""}\n${item?.message_text || ""}`.toLowerCase();
+        const text = `${item?.speaker_name || ""}\n${normalizeDisplayText(item?.message_text)}`.toLowerCase();
         return text.includes(query);
       });
       filtered = hitIndex >= 0 ? source.slice(hitIndex) : [];
@@ -49,7 +58,7 @@
             <div class="live-chat-bubble-speaker">${NovelUI.escape(item.speaker_name || item.sender_type)}</div>
             <button class="live-chat-bubble-delete" type="button" data-delete-message-id="${item.id}" aria-label="ログを削除" title="ログを削除">削除</button>
           </div>
-          <div class="live-chat-bubble-text">${NovelUI.escape(item.message_text || "")}</div>
+          <div class="live-chat-bubble-text">${NovelUI.escape(normalizeDisplayText(item.message_text))}</div>
           ${giftMarkup}
         </article>
       `;

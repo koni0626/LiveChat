@@ -19,6 +19,38 @@ class FeedRepository:
         statuses: list[str] | None = None,
         search: str | None = None,
         limit: int = 50,
+        offset: int = 0,
+    ):
+        query = self._post_query(project_id=project_id, character_id=character_id, statuses=statuses, search=search)
+        return (
+            query.order_by(FeedPost.published_at.desc(), FeedPost.created_at.desc(), FeedPost.id.desc())
+            .offset(max(0, int(offset or 0)))
+            .limit(max(1, min(int(limit or 50), 100)))
+            .all()
+        )
+
+    def count_posts(
+        self,
+        *,
+        project_id: int | None = None,
+        character_id: int | None = None,
+        statuses: list[str] | None = None,
+        search: str | None = None,
+    ):
+        return self._post_query(
+            project_id=project_id,
+            character_id=character_id,
+            statuses=statuses,
+            search=search,
+        ).count()
+
+    def _post_query(
+        self,
+        *,
+        project_id: int | None = None,
+        character_id: int | None = None,
+        statuses: list[str] | None = None,
+        search: str | None = None,
     ):
         query = FeedPost.query.filter(FeedPost.deleted_at.is_(None))
         if project_id:
@@ -30,11 +62,7 @@ class FeedRepository:
         if search:
             keyword = f"%{search.strip()}%"
             query = query.filter(or_(FeedPost.body.ilike(keyword), FeedPost.status.ilike(keyword)))
-        return (
-            query.order_by(FeedPost.published_at.desc(), FeedPost.created_at.desc(), FeedPost.id.desc())
-            .limit(max(1, min(int(limit or 50), 100)))
-            .all()
-        )
+        return query
 
     def get_post(self, post_id: int, include_deleted: bool = False):
         query = FeedPost.query.filter(FeedPost.id == post_id)

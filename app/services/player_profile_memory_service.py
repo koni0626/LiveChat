@@ -120,3 +120,56 @@ class PlayerProfileMemoryService:
         db.session.add(row)
         db.session.commit()
         return row
+
+    def update_from_final_summary(
+        self,
+        *,
+        user_id: int,
+        interest_notes: str | None = None,
+        dislike_notes: str | None = None,
+        conversation_style_notes: str | None = None,
+        humor_notes: str | None = None,
+        romance_notes: str | None = None,
+        goal_notes: str | None = None,
+        frustration_notes: str | None = None,
+        recent_player_notes: str | None = None,
+        profile_json: dict | None = None,
+    ):
+        if not user_id:
+            return None
+        row = self.get_or_create_memory(user_id)
+        if row.memory_enabled is False:
+            return row
+        fields = {
+            "interest_notes": interest_notes,
+            "dislike_notes": dislike_notes,
+            "conversation_style_notes": conversation_style_notes,
+            "humor_notes": humor_notes,
+            "romance_notes": romance_notes,
+            "goal_notes": goal_notes,
+            "frustration_notes": frustration_notes,
+            "recent_player_notes": recent_player_notes,
+        }
+        limits = {
+            "interest_notes": 1600,
+            "dislike_notes": 1200,
+            "conversation_style_notes": 1600,
+            "humor_notes": 1200,
+            "romance_notes": 1600,
+            "goal_notes": 1200,
+            "frustration_notes": 1200,
+            "recent_player_notes": 800,
+        }
+        for field, value in fields.items():
+            text = str(value or "").strip()
+            if text:
+                setattr(row, field, text[: limits[field]])
+        if profile_json is not None:
+            payload = dict(profile_json or {})
+            payload["updated_from"] = "live_chat_session_finalization"
+            payload["last_updated_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+            row.profile_json = json_util.dumps(payload)
+        row.last_interaction_at = datetime.utcnow()
+        db.session.add(row)
+        db.session.commit()
+        return row

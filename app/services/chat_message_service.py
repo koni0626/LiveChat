@@ -11,7 +11,7 @@ class ChatMessageService:
 
     def create_message(self, session_id: int, payload: dict | None = None):
         payload = dict(payload or {})
-        message_text = str(payload.get("message_text") or "").strip()
+        message_text = self._normalize_message_text(payload.get("message_text"))
         if not message_text:
             raise ValueError("message_text is required")
         sender_type = str(payload.get("sender_type") or "user").strip() or "user"
@@ -29,6 +29,19 @@ class ChatMessageService:
                 "message_role": (str(payload.get("message_role") or "").strip() or None),
                 "state_snapshot_json": state_snapshot,
             }
+        )
+
+    def _normalize_message_text(self, value) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        return (
+            text
+            .replace("\\r\\n", "\n")
+            .replace("\\n", "\n")
+            .replace("\\r", "\n")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
         )
 
     def delete_message(self, message_id: int):

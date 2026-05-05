@@ -6,9 +6,11 @@ import hashlib
 import ipaddress
 import mimetypes
 import os
+import random
 import re
 import socket
 import uuid
+from collections import Counter
 from datetime import datetime
 from html import unescape
 from html.parser import HTMLParser
@@ -25,6 +27,113 @@ from .asset_service import AssetService
 from .character_service import CharacterService
 from .project_service import ProjectService
 from .world_service import WorldService
+
+
+FEED_POST_PATTERNS = [
+    {
+        "name": "速報・事件型",
+        "instruction": "【速報】や【発生】のように、ラプラスシティで小事件が起きた体裁で書く。原因、現場、キャラの反応、オチを入れる。",
+    },
+    {
+        "name": "炎上しかけ型",
+        "instruction": "キャラの発言や行動が少し物議を呼びそうな体裁で書く。重くしすぎず、ツッコミで落とす。",
+    },
+    {
+        "name": "目撃情報型",
+        "instruction": "誰かがキャラを見かけたような投稿にする。場所、変な行動、最後の一言で笑いを作る。",
+    },
+    {
+        "name": "ゆるい事故報告型",
+        "instruction": "施設、発明、料理、業務などで軽い事故が起きた報告にする。大惨事ではなく笑えるトラブルにする。",
+    },
+    {
+        "name": "キャラの自爆投稿型",
+        "instruction": "キャラ本人が勢いで投稿して、うっかり本音や恥ずかしい情報が漏れる形にする。",
+    },
+    {
+        "name": "意味深ポエムからのオチ型",
+        "instruction": "最初は少し美しい、意味深な文章にして、最後にしょうもない現実やキャラの失敗で落とす。",
+    },
+    {
+        "name": "アンケート型",
+        "instruction": "Xの投票風に、3択か4択の選択肢を出す。選択肢自体で笑えるようにする。",
+    },
+    {
+        "name": "引用RT風ツッコミ型",
+        "instruction": "引用元の短い発言を先に置き、それに対してツッコむ。引用元はキャラ本人、施設、都市放送などでよい。",
+    },
+    {
+        "name": "現地レポ型",
+        "instruction": "現場からレポートしている体裁で書く。目の前で起きている異常とキャラの反応を短く伝える。",
+    },
+    {
+        "name": "怪文書型",
+        "instruction": "一見まじめなお知らせや注意喚起なのに内容が変な文章にする。都市の公式注意文っぽくしてよい。",
+    },
+    {
+        "name": "キャラ同士の小競り合い型",
+        "instruction": "2人以上の短い会話ログ風にする。言い合い、勘違い、商談、恋愛の茶化しなどでテンポを作る。",
+    },
+    {
+        "name": "お知らせなのに変型",
+        "instruction": "公式お知らせ風に始めて、条件や注意事項が変すぎる形で笑いを作る。",
+    },
+    {
+        "name": "デートスポット異常型",
+        "instruction": "デート施設で妙な仕様やイベントが発生した体裁で書く。恋愛の気まずさや照れを混ぜる。",
+    },
+    {
+        "name": "キャラの本音漏れ型",
+        "instruction": "キャラのかわいい弱点、本音、照れ、見栄が漏れた目撃情報にする。茶化しすぎず愛嬌を残す。",
+    },
+    {
+        "name": "都市伝説型",
+        "instruction": "ラプラスシティで囁かれる都市伝説風にする。噂の正体や勘違いの原因を本文内で推測し、最後に実在しそうな怖さより笑いを残す。",
+    },
+    {
+        "name": "業務連絡風コメディ型",
+        "instruction": "業務連絡や注意事項の形で、現場が混乱している様子を出す。短く、事務的な文体と内容の落差で笑わせる。",
+    },
+    {
+        "name": "失敗写真の添え文型",
+        "instruction": "写真付き投稿のキャプション風に書く。映えを狙ったのに変なものが写った、という方向で作る。",
+    },
+    {
+        "name": "小さな恋愛事件型",
+        "instruction": "恋愛っぽい一瞬を事件のように書く。照れ、距離感、都市AIの過剰反応などを入れる。",
+    },
+    {
+        "name": "食べ物事故型",
+        "instruction": "料理、屋台、スイーツ、謎メニューなどで起きた事件にする。食レポとツッコミを混ぜる。",
+    },
+    {
+        "name": "キャラ別名物ネタ型",
+        "instruction": "そのキャラ固有の持ちネタ、職業、口調、弱点、好きなものを中心にした短い事件投稿にする。",
+    },
+]
+
+FEED_DUO_POST_PATTERNS = [
+    {
+        "name": "キャラ同士の小競り合い型",
+        "instruction": "メインキャラと共演キャラの短い言い合い、勘違い、商談、観測、採点、暴露などでテンポを作る。",
+    },
+    {
+        "name": "目撃された二人型",
+        "instruction": "二人が同じ場所で変な行動をしている目撃情報にする。どちらが何をしたかを明確にする。",
+    },
+    {
+        "name": "共同事故報告型",
+        "instruction": "二人で施設、料理、装置、イベントを扱った結果、軽い事故が起きた報告にする。",
+    },
+    {
+        "name": "片方が巻き込まれる型",
+        "instruction": "メインキャラが何かを始め、共演キャラが巻き込まれてツッコむ形にする。",
+    },
+    {
+        "name": "恋愛茶化し型",
+        "instruction": "二人の距離感、照れ、誤解、周囲の過剰反応を小さな恋愛事件として書く。",
+    },
+]
 
 
 class _MetaTagParser(HTMLParser):
@@ -146,7 +255,7 @@ class FeedService:
             "updated_at": post.updated_at.isoformat() if post.updated_at else None,
         }
 
-    def list_posts(self, *, user, can_manage_project_func, project_id=None, character_id=None, search=None, status=None, limit=50):
+    def list_posts(self, *, user, can_manage_project_func, project_id=None, character_id=None, search=None, status=None, limit=50, offset=0):
         statuses = None
         if status:
             statuses = [status] if status in self.VALID_STATUSES else ["published"]
@@ -156,6 +265,7 @@ class FeedService:
             statuses=statuses,
             search=search,
             limit=limit,
+            offset=offset,
         )
         visible = []
         for row in rows:
@@ -169,6 +279,17 @@ class FeedService:
             self.serialize_post(row, liked_by_me=row.id in liked_ids, can_manage=can_manage)
             for row, can_manage in visible
         ]
+
+    def count_posts(self, *, project_id=None, character_id=None, search=None, status=None):
+        statuses = None
+        if status:
+            statuses = [status] if status in self.VALID_STATUSES else ["published"]
+        return self._repo.count_posts(
+            project_id=project_id,
+            character_id=character_id,
+            statuses=statuses,
+            search=search,
+        )
 
     def get_post(self, post_id: int):
         return self._repo.get_post(post_id)
@@ -214,7 +335,10 @@ class FeedService:
     def generate_posts(self, *, project_id: int, user_id: int, payload: dict | None = None):
         payload = dict(payload or {})
         count = max(1, min(5, int(payload.get("count") or 1)))
-        candidates = self._generate_feed_candidates(project_id, count=count)
+        interaction_mode = self._normalize_feed_interaction_mode(
+            payload.get("interaction_mode") or payload.get("mode") or "auto"
+        )
+        candidates = self._generate_feed_candidates(project_id, count=count, interaction_mode=interaction_mode)
         created = []
         for candidate in candidates[:count]:
             character_id = int(candidate.get("character_id") or 0)
@@ -514,6 +638,7 @@ class FeedService:
         character = self._character_service.get_character(post.character_id)
         project = self._project_service.get_project(post.project_id)
         world = self._world_service.get_world(post.project_id)
+        generation_state = self._load_json(post.generation_state_json)
         prompt = self._build_feed_image_prompt(post, character, project, world, payload)
         reference_paths = []
         reference_ids = []
@@ -522,6 +647,18 @@ class FeedService:
             if base_asset and os.path.exists(base_asset.file_path):
                 reference_paths.append(base_asset.file_path)
                 reference_ids.append(base_asset.id)
+        candidate = generation_state.get("candidate") if isinstance(generation_state.get("candidate"), dict) else {}
+        try:
+            co_character_id = int(candidate.get("co_character_id") or 0)
+        except (TypeError, ValueError):
+            co_character_id = 0
+        if co_character_id and co_character_id != int(getattr(character, "id", 0) or 0):
+            co_character = self._character_service.get_character(co_character_id)
+            if co_character and getattr(co_character, "base_asset_id", None):
+                co_asset = self._asset_service.get_asset(co_character.base_asset_id)
+                if co_asset and os.path.exists(co_asset.file_path) and co_asset.id not in reference_ids:
+                    reference_paths.append(co_asset.file_path)
+                    reference_ids.append(co_asset.id)
         result = self._image_ai_client.generate_image(
             prompt,
             size=payload.get("size") or "1536x1024",
@@ -557,51 +694,75 @@ class FeedService:
                 ),
             },
         )
+        generation_state.update(
+            {
+                "image_prompt": prompt,
+                "revised_prompt": result.get("revised_prompt"),
+                "generated_at": datetime.utcnow().isoformat(),
+                "reference_asset_ids": reference_ids,
+            }
+        )
         post = self._repo.update_post(
             post.id,
             {
                 "image_asset_id": asset.id,
-                "generation_state_json": json_util.dumps(
-                    {
-                        "image_prompt": prompt,
-                        "revised_prompt": result.get("revised_prompt"),
-                        "generated_at": datetime.utcnow().isoformat(),
-                        "reference_asset_ids": reference_ids,
-                    }
-                ),
+                "generation_state_json": json_util.dumps(generation_state),
             },
         )
         return post
 
-    def _generate_feed_candidates(self, project_id: int, *, count: int):
+    def _generate_feed_candidates(self, project_id: int, *, count: int, interaction_mode: str = "auto"):
         project = self._project_service.get_project(project_id)
         world = self._world_service.get_world(project_id)
-        characters = self._character_service.list_characters(project_id)[:20]
+        all_characters = self._character_service.list_characters(project_id)
+        recent_posts = self._repo.list_posts(project_id=project_id, statuses=["published"], limit=80)
+        characters = self._select_feed_characters(all_characters, recent_posts, count=count)
         if not characters:
             raise ValueError("character is required to generate Feed posts")
-        recent_posts = self._repo.list_posts(project_id=project_id, statuses=["published"], limit=20)
+        selected_ids = [character.id for character in characters]
+        post_plans = self._build_feed_post_plans(characters, all_characters, interaction_mode=interaction_mode)
         prompt = f"""
 Return only JSON.
 Create {count} public Feed posts for a Japanese character world app.
-Each item is a short official character post, not a news article and not a chat reply.
+Each item is a short X-like character/world post, not a polite diary, not a news article, and not a chat reply.
 
 Required shape:
-{{"items":[{{"character_id": 1, "body": "..."}}]}}
+{{"items":[{{"character_id": 1, "body": "...", "post_pattern": "..."}}]}}
 
 Rules:
 - Japanese only.
 - Use only provided character IDs.
+- Create exactly one item for each target character ID: {json_util.dumps(selected_ids)}.
+- Do not use any character ID outside target character IDs.
 - Keep each body 80-220 Japanese characters.
 - Match the selected character's personality and speech style.
-- Make the post feel like a public character broadcast: daily note, small discovery, place recommendation, mood, teaser, or social update.
+- Follow the assigned post_pattern for each target character.
+- The assigned target character must be the speaker or main subject of the post.
+- If a post plan has co_character, include that co_character as the interaction partner.
+- If another character appears, the target character must still appear and remain the main subject, and the co_character should be the only major partner.
+- For duo posts, make the relationship readable: who did what, who reacts, and why the interaction is funny.
+- Make the post feel like X: punchy, reactive, slightly exaggerated, easy to reply to, and with a clear hook.
+- Include at least one of: incident, sighting, quote, poll, strange notice, small scandal, romantic mishap, food accident, facility trouble, or punchline.
+- Prefer concrete nouns, named places, visible actions, and a final twist.
+- Keep one clear story spine: what happened, where it happened, why it is weird, and why the punchline follows.
+- Do not combine unrelated motifs unless the text explicitly connects them.
+- If you mention a strange sound, rumor, sign, object, or metaphor, explain what it probably is before the final joke.
+- Do not turn personality traits or moods into unexplained physical objects. For example, do not write odd phrases like "余裕ある待機席"; use normal concrete objects such as chair, sign, vending machine, microphone, door, light, or screen.
+- Avoid coined labels, poetic object names, and unclear compound nouns unless the post immediately explains what they mean.
+- Prefer plain concrete wording over clever abstractions. The funny part should come from the situation, not from a confusing invented noun.
+- The reader should understand the joke without knowing hidden lore.
+- Avoid quiet diary posts, calm mood reports, generic official announcements, and beautiful-but-empty worldbuilding.
 - Do not mention that AI generated the post.
 - Avoid duplicating recent posts.
+- Avoid overusing "今日は", "少しだけ", "落ち着く", "気がする", "また話せたら", unless they are immediately undercut by a joke.
 
 Project: {getattr(project, "title", "") or ""}
 Project summary: {getattr(project, "summary", "") or ""}
 World tone: {getattr(world, "tone", "") if world else ""}
 World overview: {getattr(world, "overview", "") if world else ""}
 Characters: {json_util.dumps([self._feed_character_context(character) for character in characters])}
+Available co-characters: {json_util.dumps([self._feed_character_context(character) for character in all_characters[:30]])}
+Post plans: {json_util.dumps(post_plans)}
 Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post.body} for post in recent_posts[:12]])}
 """.strip()
         result = self._text_ai_client.generate_text(
@@ -613,23 +774,202 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
         parsed = self._text_ai_client._try_parse_json(result.get("text")) or {}
         items = parsed.get("items") if isinstance(parsed, dict) else []
         if isinstance(items, list) and items:
-            return [item for item in items if isinstance(item, dict)]
-        return self._fallback_feed_candidates(characters, count)
+            return self._normalize_feed_candidate_characters(items, characters, post_plans)
+        return self._fallback_feed_candidates(characters, count, post_plans=post_plans)
 
-    def _fallback_feed_candidates(self, characters, count: int):
+    def _normalize_feed_interaction_mode(self, value):
+        mode = str(value or "auto").strip().lower()
+        if mode in {"solo", "single", "one", "1", "single_character"}:
+            return "solo"
+        if mode in {"duo", "pair", "two", "2", "two_character"}:
+            return "duo"
+        return "auto"
+
+    def _build_feed_post_plans(self, characters, all_characters=None, interaction_mode: str = "auto"):
+        mode = self._normalize_feed_interaction_mode(interaction_mode)
+        solo_patterns = FEED_POST_PATTERNS
+        if mode == "solo":
+            duo_pattern_names = {pattern["name"] for pattern in FEED_DUO_POST_PATTERNS}
+            solo_patterns = [pattern for pattern in FEED_POST_PATTERNS if pattern["name"] not in duo_pattern_names]
+        patterns = random.sample(solo_patterns, k=min(len(characters), len(solo_patterns)))
+        if len(patterns) < len(characters):
+            patterns.extend(random.choice(solo_patterns) for _ in range(len(characters) - len(patterns)))
+        all_characters = [character for character in (all_characters or characters) if getattr(character, "id", None)]
+        plans = []
+        for character, pattern in zip(characters, patterns):
+            use_duo = mode == "duo" or (mode == "auto" and len(all_characters) >= 2 and random.random() < 0.45)
+            use_duo = use_duo and len(all_characters) >= 2
+            co_character = None
+            if use_duo:
+                partners = [candidate for candidate in all_characters if int(candidate.id) != int(character.id)]
+                co_character = random.choice(partners) if partners else None
+                pattern = random.choice(FEED_DUO_POST_PATTERNS)
+            plans.append(
+                {
+                    "character_id": character.id,
+                    "character_name": getattr(character, "name", "") or "",
+                    "post_pattern": pattern["name"],
+                    "pattern_instruction": pattern["instruction"],
+                    "co_character_id": getattr(co_character, "id", None) if co_character else None,
+                    "co_character_name": getattr(co_character, "name", None) if co_character else None,
+                    "co_character": self._feed_character_context(co_character) if co_character else None,
+                }
+            )
+        return plans
+
+    def _select_feed_characters(self, characters, recent_posts, *, count: int):
+        available = [character for character in characters if getattr(character, "id", None)]
+        if not available:
+            return []
+        recent_counts = Counter(int(post.character_id) for post in recent_posts[:20] if getattr(post, "character_id", None))
+        total_counts = Counter(int(post.character_id) for post in recent_posts if getattr(post, "character_id", None))
+        latest_index = {}
+        for index, post in enumerate(recent_posts):
+            character_id = int(getattr(post, "character_id", 0) or 0)
+            latest_index.setdefault(character_id, index)
+        jitter = {character.id: random.random() for character in available}
+        ranked = sorted(
+            available,
+            key=lambda character: (
+                recent_counts.get(character.id, 0),
+                total_counts.get(character.id, 0),
+                latest_index.get(character.id, -1) >= 0,
+                -latest_index.get(character.id, -1),
+                jitter.get(character.id, 0),
+            ),
+        )
+        return ranked[: max(1, min(int(count or 1), len(ranked)))]
+
+    def _normalize_feed_candidate_characters(self, items, target_characters, post_plans=None):
+        target_ids = [int(character.id) for character in target_characters]
+        target_id_set = set(target_ids)
+        target_by_id = {int(character.id): character for character in target_characters}
+        plans_by_character_id = {
+            int(plan.get("character_id")): plan
+            for plan in (post_plans or [])
+            if plan.get("character_id")
+        }
+        normalized = []
+        used_ids = set()
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                character_id = int(item.get("character_id") or 0)
+            except (TypeError, ValueError):
+                character_id = 0
+            if character_id not in target_id_set or character_id in used_ids:
+                remaining = [target_id for target_id in target_ids if target_id not in used_ids]
+                if not remaining:
+                    continue
+                character_id = remaining[0]
+            body = str(item.get("body") or "").strip()
+            if not body:
+                continue
+            plan = plans_by_character_id.get(character_id)
+            if self._body_uses_wrong_primary_character(body, target_by_id.get(character_id), target_characters, plan):
+                continue
+            if self._body_has_unclear_feed_phrase(body):
+                continue
+            candidate = dict(item)
+            candidate["character_id"] = character_id
+            candidate["body"] = body
+            if plan:
+                candidate["post_pattern"] = plan.get("post_pattern")
+                candidate["pattern_instruction"] = plan.get("pattern_instruction")
+                candidate["co_character_id"] = plan.get("co_character_id")
+                candidate["co_character_name"] = plan.get("co_character_name")
+                candidate["co_character"] = plan.get("co_character")
+            normalized.append(candidate)
+            used_ids.add(character_id)
+        if len(normalized) < len(target_ids):
+            existing_bodies = {int(item["character_id"]): item.get("body") for item in normalized}
+            for character in target_characters:
+                if int(character.id) in existing_bodies:
+                    continue
+                fallback = self._fallback_feed_candidates(
+                    [character],
+                    1,
+                    post_plans=[plans_by_character_id.get(int(character.id), {})],
+                )[0]
+                normalized.append(fallback)
+        return normalized
+
+    def _body_uses_wrong_primary_character(self, body: str, target_character, target_characters, plan=None) -> bool:
+        if not target_character:
+            return False
+        target_name = str(getattr(target_character, "name", "") or "").strip()
+        target_nickname = str(getattr(target_character, "nickname", "") or "").strip()
+        target_tokens = [token for token in (target_name, target_nickname) if token]
+        allowed_partner_tokens = set()
+        plan = plan or {}
+        if plan.get("co_character_name"):
+            allowed_partner_tokens.add(str(plan.get("co_character_name")).strip())
+        co_character = plan.get("co_character") if isinstance(plan.get("co_character"), dict) else {}
+        for token in (co_character.get("name"), co_character.get("nickname")):
+            if token:
+                allowed_partner_tokens.add(str(token).strip())
+        other_tokens = []
+        for character in target_characters:
+            if int(getattr(character, "id", 0) or 0) == int(getattr(target_character, "id", 0) or 0):
+                continue
+            other_tokens.extend(
+                token
+                for token in (
+                    str(getattr(character, "name", "") or "").strip(),
+                    str(getattr(character, "nickname", "") or "").strip(),
+                )
+                if token
+            )
+        other_tokens = [token for token in other_tokens if token not in allowed_partner_tokens]
+        mentions_target = any(token in body for token in target_tokens)
+        mentions_other = any(token in body for token in other_tokens)
+        return mentions_other and not mentions_target
+
+    def _body_has_unclear_feed_phrase(self, body: str) -> bool:
+        unclear_fragments = (
+            "余裕ある待機席",
+            "余裕のある待機席",
+            "恋の事故みたい",
+            "感情の椅子",
+            "本音の装置",
+            "照れの端末",
+        )
+        return any(fragment in body for fragment in unclear_fragments)
+
+    def _fallback_feed_candidates(self, characters, count: int, *, post_plans=None):
+        plans_by_character_id = {
+            int(plan.get("character_id")): plan
+            for plan in (post_plans or [])
+            if plan.get("character_id")
+        }
         items = []
         for index in range(count):
             character = characters[index % len(characters)]
             name = getattr(character, "name", "") or "私"
+            plan = plans_by_character_id.get(int(character.id), {})
+            pattern_name = plan.get("post_pattern") or "速報・事件型"
+            co_character_name = str(plan.get("co_character_name") or "").strip()
+            if co_character_name:
+                body = f"{name}と{co_character_name}まわりで小事件発生。ラプラスシティの通路で二人が同じ端末をのぞき込んだ瞬間、警告灯だけが先に赤くなりました。原因は設定ミスらしいですが、目撃者いわく「先に照れたのは端末」。"
+            else:
+                body = f"【{pattern_name}】{name}まわりで小事件発生。ラプラスシティの通路で妙な注目を集めた結果、本人だけが平静を装っています。詳細は不明ですが、目撃者いわく「たぶんいつものやつ」。"
             items.append(
                 {
                     "character_id": character.id,
-                    "body": f"{name}です。今日は街の空気が少し違って感じられました。気になる場所をひとつ見つけたので、また近いうちに話せたらうれしいです。",
+                    "post_pattern": pattern_name,
+                    "pattern_instruction": plan.get("pattern_instruction"),
+                    "co_character_id": plan.get("co_character_id"),
+                    "co_character_name": co_character_name or None,
+                    "co_character": plan.get("co_character"),
+                    "body": body,
                 }
             )
         return items
 
     def _feed_character_context(self, character) -> dict:
+        if not character:
+            return {}
         return {
             "id": character.id,
             "name": character.name,
@@ -638,21 +978,54 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
             "personality": character.personality,
             "speech_style": character.speech_style,
             "appearance": character.appearance_summary,
+            "art_style": getattr(character, "art_style", None),
         }
 
     def _build_feed_image_prompt(self, post, character, project, world, payload: dict):
         override = str(payload.get("prompt") or "").strip()
         if override:
             return override
+        generation_state = self._load_json(getattr(post, "generation_state_json", None))
+        candidate = generation_state.get("candidate") if isinstance(generation_state.get("candidate"), dict) else {}
+        post_pattern = str(candidate.get("post_pattern") or generation_state.get("post_pattern") or "").strip()
+        pattern_instruction = str(candidate.get("pattern_instruction") or "").strip()
+        co_character = candidate.get("co_character") if isinstance(candidate.get("co_character"), dict) else {}
+        co_character_name = str(candidate.get("co_character_name") or co_character.get("name") or "").strip()
         lines = [
-            "Create a polished promotional Feed image for a character conversation app.",
-            "Use the reference image as the primary source of character identity and art style.",
-            "Keep the same face, hair, outfit design logic, linework, coloring, rendering quality, and mood.",
+            "Create a high-impact Feed image for a character conversation app.",
+            "Use the reference images as the primary source of character identity and art style.",
+            "If multiple reference images are provided, the first reference is the target character and the second reference is the co-character.",
+            "Keep the same face, hair, outfit design logic, coloring, rendering quality, material detail, and mood for every referenced character.",
+            "All characters in the image must share one unified high-end 3D, semi-realistic, cinematic game-CG style. Do not render the co-character as flat illustration, chibi, manga, sketch, or lower-detail anime art.",
             "No text, no captions, no speech bubbles, no UI, no logo, no watermark.",
-            "Show one character as the main subject. Do not show the player.",
-            "Make it feel like an official character post image, daily snapshot, or visual novel event CG.",
+            "Show the target character as the main subject. Do not show the player.",
+            "Do not make a simple standing portrait, idle pose, catalog pose, or generic promotional still.",
+            "The image must depict the incident, joke, rumor, failure, poll, strange notice, romantic mishap, or facility trouble described by the Feed post.",
+            "Make it feel like a dramatic social-media incident photo or visual novel event CG: caught-in-the-act composition, expressive reaction, visible cause of the problem, and a clear environment.",
+            "The character should be doing something specific: reacting, pointing, stumbling, holding an object, inspecting a broken device, confronting a sign, reaching toward food, shielding themselves from chaos, or being caught mid-action.",
+            "Use dynamic camera language where appropriate: dutch angle, close foreground object, motion blur, over-the-shoulder framing, dramatic lighting, cluttered evidence, or a comedic reveal in the background.",
+            "The viewer should understand the post's situation from the image alone, even without reading the text.",
             f"Feed post body: {post.body}",
         ]
+        if post_pattern:
+            lines.append(f"Feed post pattern: {post_pattern}")
+        if pattern_instruction:
+            lines.append(f"Pattern instruction: {pattern_instruction}")
+        if co_character_name:
+            lines.append(f"Co-character: {co_character_name}")
+            lines.append("This is a duo/interactions post: include the co-character if possible, and make their interaction readable through posture, distance, eye contact, gesture, or shared trouble.")
+            if co_character.get("character_summary"):
+                lines.append(f"Co-character overview: {co_character.get('character_summary')}")
+            if co_character.get("appearance"):
+                lines.append(f"Co-character appearance: {co_character.get('appearance')}")
+            if co_character.get("art_style"):
+                lines.append(f"Co-character art style: {co_character.get('art_style')}")
+            lines.append("The co-character must match the target character's rendering fidelity, lighting model, anatomy detail, and high-end 3D semi-realistic finish.")
+        else:
+            lines.append("If other characters appear, keep them secondary and do not let them replace the target character.")
+        visual_direction = self._feed_visual_direction_for_pattern(post_pattern)
+        if visual_direction:
+            lines.append(f"Visual direction: {visual_direction}")
         if project:
             lines.append(f"World: {project.title}. {project.summary or ''}")
         if world:
@@ -673,6 +1046,31 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
                 lines.append(f"Never violate: {character.ng_rules}")
         lines.append("If safety-sensitive wording appears in the post, preserve intent while converting it into tasteful, non-explicit visual novel promotional art.")
         return "\n".join(lines)
+
+    def _feed_visual_direction_for_pattern(self, post_pattern: str) -> str:
+        directions = {
+            "速報・事件型": "Show the moment after a small incident: warning lights, confused bystanders implied by framing, the character reacting to the visible cause.",
+            "炎上しかけ型": "Show the character caught after a controversial statement or mistake, with tense lighting and a comedic evidence object nearby.",
+            "目撃情報型": "Use a candid surveillance-photo feeling: the character mid-action, slightly surprised, with the odd behavior clearly visible.",
+            "ゆるい事故報告型": "Show a harmless malfunction or mess in progress, with the character trying to recover composure.",
+            "キャラの自爆投稿型": "Show the character realizing they revealed too much: embarrassed face, phone or console nearby, awkward body language.",
+            "意味深ポエムからのオチ型": "Start visually beautiful but include a clear ridiculous detail that undercuts the mood.",
+            "アンケート型": "Show the character facing three or four visible choices as objects or signs, reacting as if none are safe.",
+            "引用RT風ツッコミ型": "Show the quote source as a visible sign, terminal, or notice while the character reacts with disbelief.",
+            "現地レポ型": "Frame it like a live field report without text: character in foreground, incident unfolding behind them.",
+            "怪文書型": "Show an official-looking notice board or terminal causing absurd confusion, with the character caught reading it.",
+            "キャラ同士の小競り合い型": "Show the target character in a lively argument or standoff with another implied character, using gesture and distance.",
+            "お知らせなのに変型": "Show a formal announcement setting with one obviously absurd rule or object disrupting it.",
+            "デートスポット異常型": "Show a romantic facility malfunctioning in an awkwardly intimate way, with the character visibly flustered.",
+            "キャラの本音漏れ型": "Show a small private reaction accidentally exposed in public: blush, startled look, or hidden note/device.",
+            "都市伝説型": "Show the rumored phenomenon with a plausible funny cause visible in the same frame.",
+            "業務連絡風コメディ型": "Show workplace chaos: signs, devices, or staff-area props misbehaving while the character handles it.",
+            "失敗写真の添え文型": "Compose it as a failed photo: the character posed for a nice shot, but a ridiculous background detail ruins it.",
+            "小さな恋愛事件型": "Show a tiny romantic accident as if it were dramatic evidence: red lighting, awkward distance, hand/eye contact, flustered reaction.",
+            "食べ物事故型": "Show a food item causing trouble: strange dish, messy reaction, steam, sauce, or a ranking/diagnostic device reacting.",
+            "キャラ別名物ネタ型": "Make the character's signature theme visually central and active, not a passive portrait.",
+        }
+        return directions.get(post_pattern, "")
 
     def _store_generated_feed_image(self, project_id: int, post_id: int, image_base64: str):
         try:

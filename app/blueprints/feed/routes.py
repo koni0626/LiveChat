@@ -55,7 +55,11 @@ def list_posts():
     character_id = request.args.get("character_id", type=int)
     status = request.args.get("status")
     search = request.args.get("q") or request.args.get("search")
-    limit = request.args.get("limit", default=50, type=int)
+    include_pagination = str(request.args.get("include_pagination") or "").lower() in {"1", "true", "yes", "on"}
+    page = max(1, request.args.get("page", default=1, type=int) or 1)
+    per_page = max(1, min(request.args.get("per_page", default=request.args.get("limit", default=50, type=int), type=int) or 50, 50))
+    offset = (page - 1) * per_page if include_pagination else 0
+    limit = per_page
     posts = feed_service.list_posts(
         user=user,
         can_manage_project_func=_can_manage_project,
@@ -64,8 +68,31 @@ def list_posts():
         search=search,
         status=status,
         limit=limit,
+        offset=offset,
     )
-    return json_response(posts, meta={"count": len(posts)})
+    if not include_pagination:
+        return json_response(posts, meta={"count": len(posts)})
+    total = feed_service.count_posts(
+        project_id=project_id,
+        character_id=character_id,
+        search=search,
+        status=status,
+    )
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    return json_response(
+        {
+            "items": posts,
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "total_pages": total_pages,
+                "has_prev": page > 1,
+                "has_next": page < total_pages,
+            },
+        },
+        meta={"count": len(posts), "total": total},
+    )
 
 
 @feed_bp.route("/feed/ranking/characters", methods=["GET"])

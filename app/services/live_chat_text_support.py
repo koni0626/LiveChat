@@ -352,6 +352,43 @@ def generate_scene_choices(text_ai_client, context: dict, speaker_name: str, mes
         return prompt_support.fallback_scene_choices(context, speaker_name, message_text)
 
 
+def generate_final_memory_summary(text_ai_client, context: dict, character_id: int | None = None) -> dict:
+    try:
+        prompt = prompt_support.build_final_memory_summary_prompt(context, character_id)
+        result = text_ai_client.generate_text(
+            prompt,
+            temperature=0.25,
+            response_format={"type": "json_object"},
+            max_tokens=1400,
+        )
+        parsed = text_ai_client._try_parse_json(result.get("text"))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("final memory summary response is invalid")
+        player_profile = parsed.get("player_profile") if isinstance(parsed.get("player_profile"), dict) else {}
+        character_memory = parsed.get("character_memory") if isinstance(parsed.get("character_memory"), dict) else {}
+        return {
+            "player_profile": {
+                "interest_notes": str(player_profile.get("interest_notes") or "").strip()[:1600],
+                "dislike_notes": str(player_profile.get("dislike_notes") or "").strip()[:1200],
+                "conversation_style_notes": str(player_profile.get("conversation_style_notes") or "").strip()[:1600],
+                "humor_notes": str(player_profile.get("humor_notes") or "").strip()[:1200],
+                "romance_notes": str(player_profile.get("romance_notes") or "").strip()[:1600],
+                "goal_notes": str(player_profile.get("goal_notes") or "").strip()[:1200],
+                "frustration_notes": str(player_profile.get("frustration_notes") or "").strip()[:1200],
+                "recent_player_notes": str(player_profile.get("recent_player_notes") or "").strip()[:800],
+            },
+            "character_memory": {
+                "relationship_summary": str(character_memory.get("relationship_summary") or "").strip()[:1000],
+                "memory_notes": str(character_memory.get("memory_notes") or "").strip()[:3000],
+                "preference_notes": str(character_memory.get("preference_notes") or "").strip()[:2000],
+                "unresolved_threads": str(character_memory.get("unresolved_threads") or "").strip()[:2000],
+                "important_events": str(character_memory.get("important_events") or "").strip()[:4000],
+            },
+        }
+    except Exception:
+        return prompt_support.fallback_final_memory_summary(context, character_id)
+
+
 def generate_choice_execution(text_ai_client, context: dict, choice: dict) -> dict:
     try:
         prompt = prompt_support.build_choice_execution_prompt(context, choice)

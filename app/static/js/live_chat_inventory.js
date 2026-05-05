@@ -19,10 +19,60 @@
     const closeButton = document.getElementById("liveChatInventoryCloseButton");
     const generateButton = document.getElementById("liveChatInventoryGenerateButton");
     const promptInput = document.getElementById("liveChatInventoryPromptInput");
+    const modal = document.getElementById("liveChatInventoryModal");
+    const modalBackdrop = document.getElementById("liveChatInventoryModalBackdrop");
+    const modalCloseButton = document.getElementById("liveChatInventoryModalClose");
+    const modalImage = document.getElementById("liveChatInventoryModalImage");
+    const modalFallback = document.getElementById("liveChatInventoryModalFallback");
+    const modalTitle = document.getElementById("liveChatInventoryModalTitle");
+    const modalDescription = document.getElementById("liveChatInventoryModalDescription");
 
     let visible = false;
     let busy = false;
     let items = [];
+    let activeModalItemId = null;
+    let draggingInventoryItem = false;
+
+    function getItemImageUrl(item) {
+      return item?.asset?.media_url || item?.image_asset?.media_url || item?.media_url || item?.image_url || "";
+    }
+
+    function getItemDescription(item) {
+      return item?.description || item?.summary || item?.prompt || item?.name || "説明はまだありません。";
+    }
+
+    function setModalVisible(nextVisible) {
+      if (!modal) return;
+      modal.classList.toggle("is-hidden", !nextVisible);
+      modal.setAttribute("aria-hidden", nextVisible ? "false" : "true");
+      document.body.classList.toggle("live-chat-inventory-modal-open", nextVisible);
+      if (!nextVisible) activeModalItemId = null;
+    }
+
+    function openItemModal(itemId) {
+      const item = items.find((entry) => Number(entry.id) === Number(itemId));
+      if (!item || !modal) return;
+      const imageUrl = getItemImageUrl(item);
+      activeModalItemId = item.id;
+      if (modalTitle) modalTitle.textContent = item.name || "Item";
+      if (modalDescription) modalDescription.textContent = getItemDescription(item);
+      if (modalImage) {
+        modalImage.alt = item.name || "Inventory item";
+        modalImage.src = imageUrl || "";
+        modalImage.classList.toggle("is-hidden", !imageUrl);
+      }
+      modalFallback?.classList.toggle("is-hidden", Boolean(imageUrl));
+      setModalVisible(true);
+      window.requestAnimationFrame(() => modalCloseButton?.focus());
+    }
+
+    function closeItemModal() {
+      if (!modal || modal.classList.contains("is-hidden")) return;
+      const itemId = activeModalItemId;
+      setModalVisible(false);
+      const activeButton = list?.querySelector(`[data-inventory-item-id="${itemId}"]`);
+      activeButton?.focus();
+    }
 
     function setVisible(nextVisible) {
       visible = Boolean(nextVisible);
@@ -47,7 +97,7 @@
         return;
       }
       list.innerHTML = items.map((item) => {
-        const imageUrl = item.asset?.media_url || "";
+        const imageUrl = getItemImageUrl(item);
         return `
           <button class="live-chat-inventory-item" type="button" draggable="true" data-inventory-item-id="${item.id}" title="${NovelUI.escape(item.description || item.name || "")}">
             ${imageUrl ? `<img src="${NovelUI.escape(imageUrl)}" alt="${NovelUI.escape(item.name || "item")}">` : '<i class="bi bi-gift"></i>'}
@@ -88,6 +138,7 @@
         const result = await api.generateInventoryItem(projectId, body);
         if (result?.points?.balance !== undefined) NovelUI.setPointsBalance(result.points.balance);
         if (result?.item) items = [result.item, ...items.filter((item) => item.id !== result.item.id)];
+        window.LiveChatSound?.play("itemDone");
         NovelUI.toast("アイテムを生成しました。");
       } catch (error) {
         NovelUI.toast(error.message || "アイテム生成に失敗しました。", "danger");
@@ -146,11 +197,32 @@
 
       generateButton?.addEventListener("click", generateItem);
 
+      list?.addEventListener("click", (event) => {
+        if (draggingInventoryItem) return;
+        const itemButton = event.target.closest("[data-inventory-item-id]");
+        if (!itemButton) return;
+        event.preventDefault();
+        openItemModal(itemButton.dataset.inventoryItemId);
+      });
+
+      modalBackdrop?.addEventListener("click", closeItemModal);
+      modalCloseButton?.addEventListener("click", closeItemModal);
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeItemModal();
+      });
+
       list?.addEventListener("dragstart", (event) => {
         const itemButton = event.target.closest("[data-inventory-item-id]");
         if (!itemButton) return;
+        draggingInventoryItem = true;
         event.dataTransfer.setData("text/plain", itemButton.dataset.inventoryItemId);
         event.dataTransfer.effectAllowed = "move";
+      });
+
+      list?.addEventListener("dragend", () => {
+        window.setTimeout(() => {
+          draggingInventoryItem = false;
+        }, 0);
       });
 
       selectedImagePanel?.addEventListener("dragover", (event) => {
@@ -169,6 +241,7 @@
         event.preventDefault();
         selectedImagePanel.classList.remove("is-inventory-dragover");
         await giveItem(itemId);
+        draggingInventoryItem = false;
       });
     }
 

@@ -143,9 +143,9 @@
         <i class="bi bi-house-door"></i>
         <span>Dashboard</span>
       </a>
-      <a class="mobile-project-nav-link{% if screen_id in ['story-sessions', 'story-session'] %} active{% endif %}" href="{{ url_for('ui.story_session_list_page', project_id=project_id) }}">
-        <i class="bi bi-dice-5"></i>
-        <span>Session</span>
+      <a class="mobile-project-nav-link{% if screen_id in ['live-chat-sessions', 'live-chat'] %} active{% endif %}" href="{{ url_for('ui.live_chat_sessions_page', project_id=project_id) }}">
+        <i class="bi bi-chat-dots"></i>
+        <span>Chat</span>
       </a>
       <a class="mobile-project-nav-link{% if screen_id == 'feed' %} active{% endif %}" href="{{ url_for('ui.feed_page') }}">
         <i class="bi bi-broadcast"></i>

@@ -245,11 +245,53 @@ class WorldMapService:
             parsed = result.get("parsed_json") or {}
         except Exception:
             current_app.logger.exception("location service extraction failed")
-            return []
+            return self._fallback_character_home_services(location)
         services = parsed.get("services") if isinstance(parsed, dict) else None
         if not isinstance(services, list):
-            return []
+            return self._fallback_character_home_services(location)
         return [item for item in services if isinstance(item, dict)][:8]
+
+    def _fallback_character_home_services(self, location) -> list[dict]:
+        if getattr(location, "source_type", None) != "character_home_auto":
+            return []
+        place = str(getattr(location, "name", None) or "この家").strip()
+        return [
+            {
+                "name": "くつろぎスペース",
+                "service_type": "休憩",
+                "summary": f"{place}で落ち着いて座れる場所。距離を詰めたり、今日の気分を聞いたりしやすい。",
+                "chat_hook": "飲み物を置きながら、相手の疲れや本音を自然に聞く。",
+                "visual_prompt": "生活感のある椅子やソファ、柔らかい照明、私物が少し見える落ち着いた室内。",
+            },
+            {
+                "name": "お茶と軽食の準備台",
+                "service_type": "飲食",
+                "summary": "飲み物や軽食を出してもてなす小さな設備。味の好みや世話焼きが会話になる。",
+                "chat_hook": "何を飲みたいか相談し、失敗した味見や照れた褒め言葉につなげる。",
+                "visual_prompt": "カップ、湯気、軽食、小さな調理台、キャラクターらしい食器。",
+            },
+            {
+                "name": "衣装と小物の棚",
+                "service_type": "身支度",
+                "summary": "服、アクセサリー、小物を選ぶ場所。外見や似合うものを褒めるきっかけになる。",
+                "chat_hook": "次に出かける服や小物を一緒に選び、似合う理由を伝える。",
+                "visual_prompt": "衣装棚、アクセサリー、小物、鏡、選びかけの服が並ぶ生活空間。",
+            },
+            {
+                "name": "秘密を話す隅",
+                "service_type": "相談",
+                "summary": "弱音、悩み、誰にも言えない話を小声で共有できる落ち着いた場所。",
+                "chat_hook": "キャラクターが小さな悩みを吐露し、プレイヤーが受け止める。",
+                "visual_prompt": "窓際や部屋の隅、少し暗めの照明、静かな雰囲気、近い距離感。",
+            },
+            {
+                "name": "うっかりポイント",
+                "service_type": "笑い",
+                "summary": "物を落とす、棚が開きっぱなし、片付け途中など小さな失敗が起きる場所。",
+                "chat_hook": "ちょっとした失敗を笑いに変え、気まずさより親しさが増える。",
+                "visual_prompt": "少し散らかった小物、開いた棚、慌てた直後の生活感ある部屋。",
+            },
+        ]
 
     def _normalize_service_name(self, value) -> str:
         return re.sub(r"\s+", " ", str(value or "").strip())

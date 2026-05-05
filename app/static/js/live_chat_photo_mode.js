@@ -115,6 +115,8 @@
 
     function bind() {
       toggleButton?.addEventListener("click", () => {
+        window.LiveChatSound?.unlock?.();
+        window.LiveChatSound?.play("shutter");
         if (!canUse()) {
           NovelUI.toast("撮影モードは好感度100クリア後に開放されます。", "warning");
           return;

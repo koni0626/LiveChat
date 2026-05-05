@@ -27,13 +27,11 @@ def _project_nav(project_id: int | None, current_user: User | None = None):
         links.append({"label": "ワールドニュース", "icon": "bi-newspaper", "href": url_for("ui.world_news_page", project_id=project_id)})
         links.append({"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)})
         links.append({"label": "ルーム", "icon": "bi-chat-square-heart", "href": url_for("ui.live_chat_rooms_page", project_id=project_id)})
-        links.append({"label": "ストーリー", "icon": "bi-journal-richtext", "href": url_for("ui.story_list_page", project_id=project_id)})
     else:
         links.append({"label": "ワールドマップ", "icon": "bi-map", "href": url_for("ui.world_map_page", project_id=project_id)})
         links.append({"label": "おでかけ", "icon": "bi-signpost-split", "href": url_for("ui.outings_page", project_id=project_id)})
         links.append({"label": "ワールドニュース", "icon": "bi-newspaper", "href": url_for("ui.world_news_page", project_id=project_id)})
     links.append({"label": "チャットルーム", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)})
-    links.append({"label": "セッション", "icon": "bi-dice-5", "href": url_for("ui.story_session_list_page", project_id=project_id)})
     links.append({"label": "ノベル", "icon": "bi-film", "href": url_for("ui.cinema_novel_list_page", project_id=project_id)})
     links.append({"label": "スタジオ", "icon": "bi-palette", "href": url_for("ui.studio_page", project_id=project_id)})
     links.append({"label": "クローゼット", "icon": "bi-person-bounding-box", "href": url_for("ui.closet_page", project_id=project_id)})

@@ -108,6 +108,14 @@ def fallback_scene_choices(context: dict, speaker_name: str, message_text: str) 
     return text_prompt_support.fallback_scene_choices(context, speaker_name, message_text)
 
 
+def build_final_memory_summary_prompt(context: dict, character_id: int | None = None) -> str:
+    return text_prompt_support.build_final_memory_summary_prompt(context, character_id)
+
+
+def fallback_final_memory_summary(context: dict, character_id: int | None = None) -> dict:
+    return text_prompt_support.fallback_final_memory_summary(context, character_id)
+
+
 def build_choice_execution_prompt(context: dict, choice: dict) -> str:
     return text_prompt_support.build_choice_execution_prompt(context, choice)
 

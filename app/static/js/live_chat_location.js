@@ -126,6 +126,7 @@
         }
         moveVisible = false;
         selectedMoveId = null;
+        window.LiveChatSound?.play("move");
         if (!isInteractionLocked?.()) await capturePlayerReaction?.();
         if (result?.image_generation_error) {
           NovelUI.toast(`移動しました。画像生成は失敗しました: ${result.image_generation_error}`, "warning");
@@ -171,6 +172,7 @@
         }
         moveVisible = false;
         selectedMoveId = null;
+        window.LiveChatSound?.play("move");
         if (!isInteractionLocked?.()) await capturePlayerReaction?.();
         if (result?.image_generation_error) {
           NovelUI.toast(`サービスへ移動しました。画像生成は失敗しました: ${result.image_generation_error}`, "warning");

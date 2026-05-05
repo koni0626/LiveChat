@@ -96,6 +96,17 @@ body[data-screen="feed"] .feed-section-head h3 {
   text-transform: uppercase;
 }
 
+body[data-screen="feed"] .feed-auto-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+body[data-screen="feed"] .feed-auto-actions .btn {
+  white-space: nowrap;
+}
+
 body[data-screen="feed"] .feed-status-select {
   width: min(12rem, 100%);
 }
@@ -196,6 +207,71 @@ body[data-screen="feed"] .feed-stream {
   display: grid;
   gap: 1.15rem;
   min-width: 0;
+}
+
+body[data-screen="feed"] .feed-stream-wrap {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+body[data-screen="feed"] .feed-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(84, 177, 255, 0.18);
+  border-radius: 1rem;
+  background: rgba(8, 18, 35, 0.72);
+  box-shadow: 0 12px 28px rgba(1, 6, 18, 0.22);
+}
+
+body[data-screen="feed"] .feed-pagination-summary {
+  color: rgba(212, 236, 255, 0.72);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+body[data-screen="feed"] .feed-pagination-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+body[data-screen="feed"] .feed-page-button,
+body[data-screen="feed"] .feed-page-number {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid rgba(123, 205, 255, 0.24);
+  border-radius: 999px;
+  background: rgba(10, 26, 45, 0.86);
+  color: #d9f4ff;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+body[data-screen="feed"] .feed-page-button:hover,
+body[data-screen="feed"] .feed-page-number:hover,
+body[data-screen="feed"] .feed-page-number.is-active {
+  border-color: rgba(0, 245, 212, 0.58);
+  background: rgba(0, 245, 212, 0.16);
+  color: #ffffff;
+}
+
+body[data-screen="feed"] .feed-page-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+body[data-screen="feed"] .feed-page-ellipsis {
+  color: rgba(212, 236, 255, 0.48);
+  font-weight: 800;
+  padding: 0 0.1rem;
 }
 
 body[data-screen="feed"] .feed-content-grid {

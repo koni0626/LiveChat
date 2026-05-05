@@ -219,6 +219,48 @@ class LiveChatMediaService:
         selected_costume = self._session_image_service.get_selected_costume(session_id)
         return self.serialize_session_image(selected_costume) if selected_costume else None
 
+    def _costume_context_from_row(self, row) -> dict:
+        if not row:
+            return {}
+        state_json = self._load_json(getattr(row, "state_json", None)) or {}
+        asset = self._asset_service.get_asset(row.asset_id) if getattr(row, "asset_id", None) else None
+        outfit_name = str(state_json.get("outfit_name") or "").strip()
+        description = str(state_json.get("description") or "").strip()
+        instruction = str(state_json.get("instruction") or "").strip()
+        rewritten_instruction = str(state_json.get("rewritten_instruction") or "").strip()
+        prompt_text = str(getattr(row, "prompt_text", None) or "").strip()
+        if not outfit_name:
+            outfit_name = "初期衣装" if row.image_type == "costume_initial" else "選択中の衣装"
+        return {
+            "session_image_id": row.id,
+            "asset_id": row.asset_id,
+            "character_id": getattr(row, "character_id", None),
+            "image_type": row.image_type,
+            "name": outfit_name[:120],
+            "description": (description or rewritten_instruction or instruction or prompt_text)[:700],
+            "usage_scene": str(state_json.get("usage_scene") or "").strip()[:200],
+            "season": str(state_json.get("season") or "").strip()[:100],
+            "source": str(state_json.get("source") or "").strip()[:80],
+            "media_url": self._build_media_url(getattr(asset, "file_path", None)) if asset else None,
+        }
+
+    def _remember_selected_costume(self, session_id: int, row, *, source: str):
+        costume_context = self._costume_context_from_row(row)
+        if not costume_context:
+            return
+        state_row = self._session_state_service.get_state(session_id)
+        state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
+        previous = state_json.get("current_costume") if isinstance(state_json.get("current_costume"), dict) else {}
+        state_json["current_costume"] = costume_context
+        state_json["last_costume_change"] = {
+            "source": source,
+            "previous_name": (previous or {}).get("name") or "",
+            "current_name": costume_context.get("name") or "",
+            "current_description": costume_context.get("description") or "",
+            "character_id": costume_context.get("character_id"),
+        }
+        self._session_state_service.upsert_state(session_id, {"state_json": state_json})
+
     def _selected_scene_reference_asset(self, session_id: int, *, exclude_image_types: set[str] | None = None):
         exclude_image_types = exclude_image_types or set()
         scene_images = [
@@ -539,6 +581,7 @@ class LiveChatMediaService:
             if not row:
                 return None
         selected = self._session_image_service.select_session_image(row.id)
+        self._remember_selected_costume(session_id, selected, source="costume_select")
         return self.serialize_session_image(selected)
 
     def select_closet_outfit(self, session_id: int, outfit_id: int):
@@ -560,6 +603,7 @@ class LiveChatMediaService:
         )
         if existing:
             selected = self._session_image_service.select_session_image(existing.id)
+            self._remember_selected_costume(session_id, selected, source="closet_outfit_select")
             return self.serialize_session_image(selected)
         session_image = self._session_image_service.create_session_image(
             session_id,
@@ -582,6 +626,7 @@ class LiveChatMediaService:
             },
         )
         selected = self._session_image_service.select_session_image(session_image.id)
+        self._remember_selected_costume(session_id, selected, source="closet_outfit_select")
         return self.serialize_session_image(selected)
 
     def create_scene_from_selected_costume(self, session_id: int, *, reason: str | None = None):

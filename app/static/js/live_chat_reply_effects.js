@@ -169,6 +169,8 @@
         if (!button) return;
         event.preventDefault();
         if (isInteractionLocked?.()) return;
+        window.LiveChatSound?.unlock?.();
+        window.LiveChatSound?.play("shutter");
         generateImageFromLatestHint();
       });
     }

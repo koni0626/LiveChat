@@ -43,6 +43,10 @@ class CharacterService:
                 character = self._refresh_thumbnail(character)
             except Exception:
                 current_app.logger.exception("character portrait generation failed during character creation")
+        try:
+            self._ensure_character_home_location(character)
+        except Exception:
+            current_app.logger.exception("character home location creation failed during character creation")
         if created_by_user_id:
             try:
                 self._ensure_default_live_chat_room(character, created_by_user_id=created_by_user_id)
@@ -240,11 +244,97 @@ class CharacterService:
         existing = room_service.get_room_by_character(character.id)
         if existing:
             return existing
+        payload = room_service.build_objective_draft(character.project_id, {"character_id": character.id})
         return room_service.create_room(
             character.project_id,
-            self._build_default_live_chat_room_payload(character),
+            payload,
             created_by_user_id=created_by_user_id,
         )
+
+    def _ensure_character_home_location(self, character):
+        if not character:
+            return None
+        from .world_map_service import WorldMapService
+
+        world_map_service = WorldMapService(character_repository=self._repo)
+        existing_home = self._find_existing_character_home(world_map_service, character)
+        if existing_home:
+            return existing_home
+        payload = self._build_character_home_location_payload(character)
+        try:
+            draft = world_map_service.generate_location_draft(
+                character.project_id,
+                {"current_location": payload},
+            )
+            payload.update({key: value for key, value in draft.items() if value not in (None, "")})
+        except Exception:
+            current_app.logger.exception("character home location draft generation failed")
+        payload["owner_character_id"] = character.id
+        payload["source_type"] = "character_home_auto"
+        payload["source_note"] = "キャラクター新規追加時に自動生成"
+        payload.setdefault("status", "published")
+        return world_map_service.create_location(character.project_id, payload)
+
+    def _find_existing_character_home(self, world_map_service, character):
+        try:
+            locations = world_map_service.list_locations(character.project_id)
+        except Exception:
+            return None
+        for location in locations:
+            if int(location.get("owner_character_id") or 0) != int(character.id):
+                continue
+            text = " ".join(
+                str(location.get(key) or "")
+                for key in ("name", "location_type", "tags_text", "description", "source_type")
+            )
+            if any(keyword in text for keyword in ("家", "自宅", "住居", "部屋", "私室", "拠点", "character_home_auto")):
+                return location
+        return None
+
+    def _build_character_home_location_payload(self, character) -> dict:
+        name = str(getattr(character, "name", None) or "キャラクター").strip()
+        world = self._world_service.get_world(character.project_id)
+        character_bits = [
+            f"キャラクター名: {name}",
+            f"外見: {self._shorten_for_prompt(getattr(character, 'appearance_summary', None), limit=500)}",
+            f"性格: {self._shorten_for_prompt(getattr(character, 'personality', None), limit=500)}",
+            f"概要: {self._shorten_for_prompt(getattr(character, 'character_summary', None), limit=500)}",
+            f"話し方: {self._shorten_for_prompt(getattr(character, 'speech_style', None), limit=260)}",
+        ]
+        world_bits = []
+        if world:
+            world_bits = [
+                f"世界名: {getattr(world, 'name', '') or ''}",
+                f"トーン: {getattr(world, 'tone', '') or ''}",
+                f"時代: {getattr(world, 'era_description', '') or ''}",
+                f"概要: {self._shorten_for_prompt(getattr(world, 'overview', None), limit=700)}",
+                f"技術水準: {self._shorten_for_prompt(getattr(world, 'technology_level', None), limit=400)}",
+            ]
+        description = "\n".join(
+            [
+                f"{name}の生活拠点として使える家または個室を、キャラクターの外見、性格、趣味、世界観に合わせて具体化する。",
+                "ライブチャットのデートコースや相談イベントに使えるよう、部屋の雰囲気、家具、照明、香り、窓から見える景色、保管している私物、来客時に案内する場所を含める。",
+                "設備として、くつろぐ場所、飲み物や軽食を出す場所、衣装や小物を選ぶ場所、秘密や悩みを話せる場所、ちょっとした失敗や笑いが起きる仕掛けを入れる。",
+                "恋愛会話に使える距離感の変化、相手を褒めるきっかけ、キャラクター本人が弱音を吐ける要素も入れる。",
+                "",
+                "キャラクター材料:",
+                *[line for line in character_bits if not line.endswith(": ")],
+                "",
+                "世界観材料:",
+                *[line for line in world_bits if not line.endswith(": ")],
+            ]
+        )
+        return {
+            "name": f"{name}の家",
+            "region": "キャラクター居住区",
+            "location_type": "住居・自宅",
+            "owner_character_id": character.id,
+            "tags_text": "\n".join(["家", "自宅", "生活拠点", "個室", "デート"]),
+            "description": description,
+            "source_type": "character_home_auto",
+            "source_note": "キャラクター新規追加時に自動生成",
+            "status": "published",
+        }
 
     def _build_default_live_chat_room_payload(self, character) -> dict:
         name = str(getattr(character, "name", None) or "このキャラクター").strip()

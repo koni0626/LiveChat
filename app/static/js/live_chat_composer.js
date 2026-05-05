@@ -23,6 +23,7 @@
     const shellElement = document.getElementById("liveChatComposeShell");
     const toggleButton = document.getElementById("liveChatToggleComposeButton");
     const proxyButton = document.getElementById("liveChatProxyMessageButton");
+    const sendButton = document.getElementById("liveChatSendButton");
     const modeButtons = Array.from(document.querySelectorAll("[data-composer-mode]"));
     const actionPanel = document.getElementById("liveChatActionPanel");
     const actionButtons = Array.from(document.querySelectorAll("[data-action-id]"));
@@ -32,6 +33,7 @@
     let visible = true;
     let composeMode = "chat";
     let selectedAction = null;
+    let lastSendSoundAt = 0;
 
     const actionDefinitions = {
       smile_at: { id: "smile_at", label: "微笑みかける", minAffinity: 0 },
@@ -205,6 +207,15 @@
       return Boolean(form?.message_text?.value?.trim() || selectedAction);
     }
 
+    function playSendSound() {
+      if (!hasPendingText()) return;
+      const currentTime = Date.now();
+      if (currentTime - lastSendSoundAt < 180) return;
+      lastSendSoundAt = currentTime;
+      window.LiveChatSound?.unlock?.();
+      window.LiveChatSound?.play("send");
+    }
+
     function focus() {
       form?.message_text?.focus();
     }
@@ -227,10 +238,16 @@
       shell?.setReplyLoading(true, currentContext());
       if (isPhotoMode()) {
         await generatePhotoShoot?.(rawMessage);
+        if (isInteractionLocked?.()) return;
+        shell?.setReplyLoading(false, currentContext(), { render: false });
+        await loadContext?.();
         handledBySpecialMode = true;
       } else {
         const result = await api.postMessage(sessionId, buildMessagePayload(rawMessage, playerIntent));
         if (isInteractionLocked?.()) return;
+        if (playerIntent?.type === "action") {
+          window.LiveChatSound?.play("action");
+        }
         if (result?.new_letter) {
           NovelUI.toast("キャラクターからメールが届きました。");
           NovelUI.refreshLetterBadge?.();
@@ -274,6 +291,7 @@
           NovelUI.toast(`${selectedAction.label}はまだ解放されていません。`, "warning");
           return;
         }
+        playSendSound();
         triggerReplyEffect?.(null);
         await submitMessage(messageText, playerIntent);
       } catch (error) {
@@ -317,6 +335,7 @@
 
     function bind() {
       form?.addEventListener("submit", handleSubmit);
+      sendButton?.addEventListener("pointerdown", playSendSound);
       input?.addEventListener("input", markActivity);
       input?.addEventListener("focus", () => scheduleIdleTalk?.());
       proxyButton?.addEventListener("click", generateProxyMessage);

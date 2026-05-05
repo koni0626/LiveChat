@@ -1,9 +1,18 @@
 (function () {
+  function normalizeDisplayText(value) {
+    return String(value || "")
+      .replace(/\\r\\n/g, "\n")
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "\n")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n");
+  }
+
   function getLatestDisplayMessage(messages) {
     const items = Array.isArray(messages) ? [...messages] : [];
     for (let index = items.length - 1; index >= 0; index -= 1) {
       const item = items[index];
-      const text = (item?.message_text || "").trim();
+      const text = normalizeDisplayText(item?.message_text).trim();
       if (text) return item;
     }
     return null;
@@ -41,7 +50,7 @@
   function paginateNovelText(text, elements) {
     const { novelBox, novelText, novelSpeaker } = elements;
     if (!novelBox || !novelText || !novelSpeaker) return [String(text || "")];
-    const normalized = String(text || "").replace(/\r\n/g, "\n").trim();
+    const normalized = normalizeDisplayText(text).trim();
     if (!normalized) return [""];
 
     const measurer = ensureNovelTextMeasurer(novelText);

@@ -11,7 +11,13 @@
       generateSessionImage,
     } = options;
 
+    function playShutter() {
+      window.LiveChatSound?.unlock?.();
+      window.LiveChatSound?.play("shutter");
+    }
+
     document.getElementById("liveChatGenerateImageButton")?.addEventListener("click", async () => {
+      playShutter();
       try {
         await generateSessionImage(false, "generate");
         NovelUI.toast("\u753b\u50cf\u3092\u751f\u6210\u3057\u307e\u3057\u305f\u3002");
@@ -21,6 +27,7 @@
     });
 
     document.getElementById("liveChatRegenerateImageButton")?.addEventListener("click", async () => {
+      playShutter();
       try {
         await generateSessionImage(true, "regenerate");
         NovelUI.toast("\u30d7\u30ed\u30f3\u30d7\u30c8\u3092\u5143\u306b\u753b\u50cf\u3092\u518d\u751f\u6210\u3057\u307e\u3057\u305f\u3002");

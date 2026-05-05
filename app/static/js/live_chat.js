@@ -115,6 +115,7 @@
     endingInProgress = true;
     interactionEpoch += 1;
     document.body.classList.add("live-chat-ending-in-progress");
+    window.LiveChatSound?.play("ending");
   }
 
   function endEndingInteraction() {
@@ -566,6 +567,7 @@
   function triggerAffinityHeartBurst(delta = 1) {
     const stage = selectedImagePanel?.closest(".live-chat-stage");
     if (!stage) return;
+    window.LiveChatSound?.play("affinity");
     const count = Math.max(3, Math.min(9, Math.ceil(Number(delta || 1) / 2) + 2));
     for (let index = 0; index < count; index += 1) {
       const heart = document.createElement("span");
@@ -583,6 +585,7 @@
   function triggerAffinityMaxHeartBurst() {
     const stage = selectedImagePanel?.closest(".live-chat-stage");
     if (!stage) return;
+    window.LiveChatSound?.play("affinityMilestone");
     for (let index = 0; index < 34; index += 1) {
       const heart = document.createElement("span");
       heart.className = "live-chat-affinity-heart is-max-reward";
@@ -624,7 +627,11 @@
       triggerAffinityMaxHeartBurst();
       await endingController.playAffinityEndingSequence(result);
       if (result?.letter) NovelUI.refreshLetterBadge?.();
-      NovelUI.toast("好感度100達成。衣装チケットを1枚獲得しました。");
+      NovelUI.toast(
+        result?.reward_replayed
+          ? "好感度100達成。エンディングを再生しました。"
+          : "好感度100達成。衣装チケットを1枚獲得しました。"
+      );
     } catch (error) {
       NovelUI.toast(error.message || "好感度100報酬を受け取れませんでした。", "danger");
     } finally {
@@ -667,17 +674,25 @@
       if (visibleCharacterIds.size && !visibleCharacterIds.has(String(characterId))) return;
       const score = Math.max(0, Math.min(100, Number(memory?.affinity_score || 0)));
       nextScores.set(String(characterId), score);
+      const sessionEndings = context?.state?.state_json?.affinity_100_endings || {};
+      const sessionEnding = sessionEndings[String(characterId)] || {};
+      if (
+        score >= 100
+        && !sessionEnding.played_at
+      ) {
+        claimAffinityReward(characterId);
+      }
       if (!affinityScoresInitialized) return;
       const previous = lastAffinityScores.get(String(characterId));
       if (previous !== undefined && score > previous) {
+        if (
+          (previous < 60 && score >= 60)
+          || (previous < 80 && score >= 80)
+          || (previous < 100 && score >= 100)
+        ) {
+          window.LiveChatSound?.play("affinityMilestone");
+        }
         triggerAffinityHeartBurst(score - previous);
-      }
-      const reward = (context?.affinity_rewards || {})[String(characterId)] || {};
-      if (
-        score >= 100
-        && !reward.event_claimed
-      ) {
-        claimAffinityReward(characterId);
       }
     });
     lastAffinityScores.clear();
@@ -1017,6 +1032,7 @@
       const generatedImage = await LiveChatApi.generateSessionImage(sessionId, body);
       if (isStaleInteraction(epoch)) return null;
       if (generatedImage?.asset?.media_url) {
+        window.LiveChatSound?.play("imageDone");
         currentContext = {
           ...(currentContext || {}),
           selected_image: generatedImage,
@@ -1217,6 +1233,8 @@
   });
 
   cameraToggleButton?.addEventListener("click", () => {
+    window.LiveChatSound?.unlock?.();
+    window.LiveChatSound?.play("shutter");
     if (!cameraFeatureEnabled) return;
     setCameraEnabled(!cameraEnabled);
   });
@@ -1243,6 +1261,8 @@
       event.preventDefault();
       return;
     }
+    window.LiveChatSound?.unlock?.();
+    window.LiveChatSound?.play("choice");
     setSceneChoiceLoading(true, button);
     shell.setImageLoading(true, "auto");
     const epoch = interactionEpoch;
