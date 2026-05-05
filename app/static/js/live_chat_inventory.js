@@ -9,6 +9,7 @@
       getCurrentContext,
       getTargetCharacterId,
       loadContext,
+      isInteractionLocked,
       playAffinityFeedback,
     } = options;
 
@@ -106,6 +107,7 @@
           character_id: getTargetCharacterId?.(),
           message_text: item?.name ? `${item.name}を渡した。` : "アイテムを渡した。",
         });
+        if (isInteractionLocked?.()) return;
         playAffinityFeedback?.(result?.affinity_feedback);
         items = items.filter((entry) => Number(entry.id) !== Number(itemId));
         NovelUI.toast("アイテムを渡しました。");
@@ -113,8 +115,10 @@
       } catch (error) {
         NovelUI.toast(error.message || "アイテムを渡せませんでした。", "danger");
       } finally {
-        shell?.setReplyLoading(false, getCurrentContext?.());
-        render();
+        if (!isInteractionLocked?.()) {
+          shell?.setReplyLoading(false, getCurrentContext?.());
+          render();
+        }
       }
     }
 

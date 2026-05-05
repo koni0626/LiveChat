@@ -4,12 +4,14 @@ import os
 
 from flask import current_app
 
+from ..utils import json_util
 from ..repositories.chat_session_repository import ChatSessionRepository
 from ..repositories.live_chat_room_repository import LiveChatRoomRepository
 from .asset_service import AssetService
 from .character_service import CharacterService
 from .closet_service import ClosetService
 from .project_service import ProjectService
+from .session_state_service import SessionStateService
 from ..clients.text_ai_client import TextAIClient
 
 
@@ -24,6 +26,7 @@ class LiveChatRoomService:
         chat_session_repository: ChatSessionRepository | None = None,
         asset_service: AssetService | None = None,
         closet_service: ClosetService | None = None,
+        session_state_service: SessionStateService | None = None,
         text_ai_client: TextAIClient | None = None,
     ):
         self._repo = repository or LiveChatRoomRepository()
@@ -32,6 +35,7 @@ class LiveChatRoomService:
         self._chat_session_repo = chat_session_repository or ChatSessionRepository()
         self._asset_service = asset_service or AssetService()
         self._closet_service = closet_service or ClosetService()
+        self._session_state_service = session_state_service or SessionStateService()
         self._text_ai_client = text_ai_client or TextAIClient()
 
     def list_rooms(self, project_id: int, *, include_unpublished: bool = False):
@@ -188,6 +192,59 @@ class LiveChatRoomService:
         if not normalized:
             raise ValueError("payload must not be empty")
         return self._repo.update(room_id, normalized)
+
+    def _load_json_dict(self, value) -> dict:
+        if not value:
+            return {}
+        if isinstance(value, dict):
+            return dict(value)
+        if not isinstance(value, str):
+            return {}
+        try:
+            parsed = json_util.loads(value)
+        except Exception:
+            return {}
+        return dict(parsed) if isinstance(parsed, dict) else {}
+
+    def _build_room_settings(self, room) -> dict:
+        return {
+            "selected_character_ids": [room.character_id],
+            "conversation_objective": room.conversation_objective,
+            "proxy_player_objective": getattr(room, "proxy_player_objective", None),
+            "proxy_player_gender": getattr(room, "proxy_player_gender", None),
+            "proxy_player_speech_style": getattr(room, "proxy_player_speech_style", None),
+        }
+
+    def sync_room_to_sessions(self, room_id: int, *, owner_user_id: int | None = None) -> dict | None:
+        room = self.get_room(room_id)
+        if not room:
+            return None
+        snapshot = self.build_room_snapshot(room)
+        room_settings = self._build_room_settings(room)
+        sessions = self._chat_session_repo.list_by_room(room_id, owner_user_id=owner_user_id)
+        synced_ids = []
+        for session in sessions:
+            settings = self._load_json_dict(getattr(session, "settings_json", None))
+            settings.pop("selected_character_id", None)
+            settings.update(room_settings)
+            self._chat_session_repo.update(
+                session.id,
+                {
+                    "room_snapshot_json": json_util.dumps(snapshot),
+                    "settings_json": json_util.dumps(settings),
+                },
+            )
+            state_row = self._session_state_service.get_state(session.id)
+            state_json = self._load_json_dict(getattr(state_row, "state_json", None))
+            state_json["active_character_ids"] = [room.character_id]
+            state_json["room_id"] = room.id
+            self._session_state_service.upsert_state(session.id, {"state_json": state_json})
+            synced_ids.append(session.id)
+        return {
+            "room_id": room_id,
+            "session_count": len(synced_ids),
+            "session_ids": synced_ids,
+        }
 
     def _build_description_draft_prompt(self, character, payload: dict) -> str:
         title = str(payload.get("title") or "").strip()

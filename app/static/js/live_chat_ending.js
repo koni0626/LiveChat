@@ -192,7 +192,9 @@
       return new Promise((resolve) => {
         let done = false;
         let timer = null;
-        const finish = () => {
+        const finish = (event) => {
+          event?.preventDefault?.();
+          event?.stopPropagation?.();
           if (done) return;
           done = true;
           window.clearTimeout(timer);
@@ -281,6 +283,12 @@
       const reel = document.createElement("div");
       reel.className = "live-chat-ending-reel";
       reel.setAttribute("aria-hidden", "true");
+      ["click", "pointerdown", "pointerup"].forEach((eventName) => {
+        reel.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        });
+      });
       reel.innerHTML = `
         <div class="live-chat-ending-reel-vignette"></div>
         <div class="live-chat-ending-reel-track">
@@ -322,7 +330,7 @@
     function renderEndingFinalImage(result) {
       const context = result?.context || getCurrentContext?.();
       const shouldRestoreBlackout = Boolean(selectedImagePanel?.querySelector(".live-chat-ending-blackout.is-visible"));
-      if (context) applyContext?.(context);
+      if (context) applyContext?.(context, { force: true });
       if (result?.event_image) {
         shell?.renderSelectedImage(result.event_image, context || getCurrentContext?.());
         const frame = selectedImagePanel?.querySelector(".live-chat-stage-frame");

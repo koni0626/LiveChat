@@ -179,13 +179,6 @@
     });
   }
 
-  async function revealCharacterIntel(sessionId, body = {}) {
-    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/intel/reveal`, {
-      method: "POST",
-      body,
-    });
-  }
-
   async function selectImage(sessionId, imageId) {
     return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/images/${imageId}/select`, {
       method: "POST",
@@ -222,7 +215,6 @@
     loadInventory,
     generateInventoryItem,
     giveInventoryItem,
-    revealCharacterIntel,
     selectImage,
     selectCostume,
     loadClosetOutfits,

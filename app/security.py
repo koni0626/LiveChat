@@ -59,6 +59,7 @@ def test_point_purchase_enabled() -> bool:
         current_app.config.get("TEST_POINT_PURCHASE_ENABLED")
         or current_app.debug
         or current_app.testing
+        or str(current_app.config.get("SECRET_KEY") or "") == "dev-secret"
     )
 
 

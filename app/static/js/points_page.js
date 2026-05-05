@@ -24,7 +24,7 @@
       const roundedAmount = Math.trunc(amount);
       const result = await NovelUI.api("/api/v1/auth/points/test-purchase", {
         method: "POST",
-        body: { amount: roundedAmount },
+        body: { amount: roundedAmount, note: "local point purchase" },
       });
       NovelUI.toast(`${roundedAmount.toLocaleString("ja-JP")} ptを追加しました。`);
       if (result?.points?.balance !== undefined) NovelUI.setPointsBalance(result.points.balance);

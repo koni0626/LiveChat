@@ -17,10 +17,12 @@
         || "";
     }
 
-    function compactText(value, limit = 74) {
+    function compactText(value, limit = 84) {
       const text = String(value || "").replace(/\s+/g, " ").trim();
       if (!text) return "";
-      return text.length > limit ? `${text.slice(0, limit - 1)}...` : text;
+      const firstSentence = text.split(/[。.!?！？]/).find((item) => item.trim()) || text;
+      const compact = firstSentence.trim();
+      return compact.length > limit ? `${compact.slice(0, limit - 1)}...` : compact;
     }
 
     function normalizeList(value) {
@@ -37,18 +39,27 @@
         .filter(Boolean);
     }
 
+    function cleanGuideFact(value) {
+      return String(value || "")
+        .replace(/^[\s\-・#]+/, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
     function guideFacts(character) {
       const profile = character?.memory_profile && typeof character.memory_profile === "object"
         ? character.memory_profile
         : {};
-      const favoriteItems = normalizeList(character?.favorite_items);
-      const likes = normalizeList(profile.likes);
-      const hobbies = normalizeList(profile.hobbies);
-      return [...favoriteItems, ...likes, ...hobbies].filter((item, index, array) => array.indexOf(item) === index).slice(0, 3);
+      const likes = normalizeList(profile.likes).map(cleanGuideFact);
+      const hobbies = normalizeList(profile.hobbies).map(cleanGuideFact);
+      return [...likes, ...hobbies]
+        .filter(Boolean)
+        .filter((item, index, array) => array.indexOf(item) === index)
+        .slice(0, 3);
     }
 
     function guidePrompts(character) {
-      const name = character?.nickname || character?.name || "キャラクター";
+      const name = character?.name || "キャラクター";
       return [
         { icon: "bi-clock-history", text: `${name}、最近何してた？` },
         { icon: "bi-chat-heart", text: `${name}は何の話が好き？` },
@@ -57,6 +68,21 @@
         { icon: "bi-geo-alt", text: `${name}はこの場所をどう思う？` },
         { icon: "bi-stars", text: `${name}の好きなものを教えて` },
       ];
+    }
+
+    function moodIcon(emotion) {
+      return {
+        happy: "bi-stars",
+        shy: "bi-heart-fill",
+        thinking: "bi-three-dots",
+        surprised: "bi-exclamation-lg",
+        sad: "bi-cloud-drizzle",
+        angry: "bi-lightning-charge-fill",
+        excited: "bi-stars",
+        lonely: "bi-moon-stars",
+        relieved: "bi-brightness-alt-high",
+        neutral: "bi-chat-heart",
+      }[emotion] || "bi-chat-heart";
     }
 
     function render(context = currentContext) {
@@ -70,11 +96,11 @@
       }
       const memoryMap = context?.character_user_memories || {};
       list.innerHTML = characters.map((character, index) => {
-        const name = character.name || character.nickname || "Character";
+        const name = character.name || "Character";
         const imageUrl = characterAssetUrl(character);
         const intro = compactText(
-          character.introduction_text
-            || character.character_summary
+          character.character_summary
+            || character.introduction_text
             || character.feed_profile_text
             || character.personality
             || "",
@@ -89,6 +115,7 @@
             <button class="live-chat-character-guide-toggle" type="button" data-character-guide-toggle aria-expanded="${index === 0 ? "true" : "false"}">
               <span class="live-chat-character-guide-avatar">
                 ${imageUrl ? `<img src="${NovelUI.escape(imageUrl)}" alt="${NovelUI.escape(name)}">` : '<i class="bi bi-person-heart" aria-hidden="true"></i>'}
+                ${mood ? `<span class="live-chat-character-guide-mood-icon is-${NovelUI.escape(mood.emotion || "neutral")}" title="${NovelUI.escape(mood.label || "反応している")}"><i class="bi ${NovelUI.escape(moodIcon(mood.emotion || "neutral"))}" aria-hidden="true"></i></span>` : ""}
               </span>
               <span class="live-chat-character-guide-summary">
                 <strong>${NovelUI.escape(name)}</strong>

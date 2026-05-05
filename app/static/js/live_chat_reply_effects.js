@@ -5,11 +5,24 @@
       imageForm,
       generateSessionImage,
       getActiveCharacters,
+      hasSceneChoices,
+      isInteractionLocked,
       onMoodChange,
     } = options;
 
     let latestVisualMomentHint = "";
     let replyEffectTimer = null;
+
+    function clearReplyEffectTimer() {
+      window.clearTimeout(replyEffectTimer);
+      replyEffectTimer = null;
+    }
+
+    function hideReplyEffect() {
+      clearReplyEffectTimer();
+      const layer = selectedImagePanel?.closest(".live-chat-stage")?.querySelector(".live-chat-reply-effect");
+      layer?.classList.remove("is-visible");
+    }
 
     function normalize(effect) {
       if (!effect || typeof effect !== "object") return null;
@@ -104,22 +117,26 @@
       const layer = ensureLayer();
       if (layer) {
         latestVisualMomentHint = normalized.visualMomentHint;
+        const canSuggestImage = normalized.suggestImage && normalized.visualMomentHint && !hasSceneChoices?.() && !isInteractionLocked?.();
         layer.className = `live-chat-reply-effect is-visible is-${normalized.emotion}`;
         layer.innerHTML = `
           <div class="live-chat-reply-effect-badge">
             <i class="bi ${icon(normalized.emotion)}" aria-hidden="true"></i>
             <span>${NovelUI.escape(normalized.moodLabel)}</span>
           </div>
-          ${normalized.suggestImage && normalized.visualMomentHint ? `
+          ${canSuggestImage ? `
             <button class="live-chat-reply-effect-image" type="button" data-reply-effect-image title="シャッターチャンス" aria-label="シャッターチャンス">
               <i class="bi bi-camera-fill" aria-hidden="true"></i>
             </button>
           ` : ""}
         `;
-        window.clearTimeout(replyEffectTimer);
-        replyEffectTimer = window.setTimeout(() => {
-          layer.classList.remove("is-visible");
-        }, normalized.suggestImage ? 9000 : 3600 + normalized.intensity * 400);
+        clearReplyEffectTimer();
+        if (!canSuggestImage) {
+          replyEffectTimer = window.setTimeout(() => {
+            layer.classList.remove("is-visible");
+            replyEffectTimer = null;
+          }, 3600 + normalized.intensity * 400);
+        }
       }
       triggerParticles(normalized.emotion, normalized.intensity);
       if (normalized.showNovelSpotlight) {
@@ -139,6 +156,7 @@
       if (imageForm?.prompt_text) imageForm.prompt_text.value = prompt;
       try {
         await generateSessionImage?.(false, "auto", { prompt_text: prompt });
+        hideReplyEffect();
         NovelUI.toast("シャッターチャンスを撮影しました。");
       } catch (error) {
         NovelUI.toast(error.message || "今の表情の画像化に失敗しました。", "danger");
@@ -150,12 +168,14 @@
         const button = event.target.closest("[data-reply-effect-image]");
         if (!button) return;
         event.preventDefault();
+        if (isInteractionLocked?.()) return;
         generateImageFromLatestHint();
       });
     }
 
     return {
       bind,
+      hide: hideReplyEffect,
       trigger,
       generateImageFromLatestHint,
     };

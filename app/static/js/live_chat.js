@@ -54,7 +54,6 @@
   const objectiveCount = document.getElementById("liveChatObjectiveDebugCount");
   const affinityCard = document.getElementById("liveChatAffinityCard");
   const affinityList = document.getElementById("liveChatAffinityList");
-  const intelRail = document.getElementById("liveChatIntelRail");
   const cameraToggleButton = document.getElementById("liveChatCameraToggleButton");
   const cameraStatus = document.getElementById("liveChatCameraStatus");
   const cameraStatusText = document.getElementById("liveChatCameraStatusText");
@@ -83,6 +82,8 @@
   let idleTalkTimer = null;
   let idleTalkBusy = false;
   let idleTalksSincePlayerInput = 0;
+  let endingInProgress = false;
+  let interactionEpoch = 0;
   const stageActionIcons = {
     dressUp: '<i class="bi bi-person-standing-dress" aria-hidden="true"></i>',
     conversation: '<i class="bi bi-chat-dots-fill" aria-hidden="true"></i>',
@@ -96,6 +97,67 @@
   const stageActionsStorageKey = `liveChatStageActionsPosition:${sessionId}`;
   let stageActionsPosition = loadStageActionsPosition();
   let stageActionsDragState = null;
+
+  function hasActiveSceneChoices() {
+    const choiceState = currentContext?.state?.state_json?.scene_choices || {};
+    return Array.isArray(choiceState.choices) && choiceState.choices.length > 0;
+  }
+
+  function isInteractionLocked() {
+    return endingInProgress;
+  }
+
+  function isStaleInteraction(epoch) {
+    return endingInProgress || epoch !== interactionEpoch;
+  }
+
+  function beginEndingInteraction() {
+    endingInProgress = true;
+    interactionEpoch += 1;
+    document.body.classList.add("live-chat-ending-in-progress");
+  }
+
+  function endEndingInteraction() {
+    endingInProgress = false;
+    document.body.classList.remove("live-chat-ending-in-progress");
+  }
+
+  function isAllowedDuringEnding(target) {
+    return Boolean(target?.closest?.(".live-chat-ending-story"));
+  }
+
+  function isLockableInteractionTarget(target) {
+    if (!target?.closest) return false;
+    return Boolean(target.closest([
+      ".live-chat-image-panel",
+      ".live-chat-stage-frame",
+      ".live-chat-stage-image",
+      ".live-chat-compose",
+      ".live-chat-stage-actions",
+      ".live-chat-location-panel",
+      ".live-chat-location-service-panel",
+      ".live-chat-lccd-panel",
+      ".live-chat-inventory-panel",
+      ".live-chat-choice-panel",
+      ".live-chat-reply-effect",
+      ".live-chat-ending-reel",
+      ".live-chat-ending-blackout",
+      "#liveChatImageForm",
+      "#liveChatImageUploadForm",
+      "#liveChatCostumeForm",
+      "#liveChatClosetSelectButton",
+      "#liveChatRegenerateImageButton",
+      "[data-scene-choice-id]",
+      "[data-reply-effect-image]",
+    ].join(",")));
+  }
+
+  function blockEndingInteraction(event) {
+    if (!endingInProgress || isAllowedDuringEnding(event.target) || !isLockableInteractionTarget(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+  }
 
   function loadStageActionsPosition() {
     try {
@@ -280,6 +342,8 @@
     imageForm,
     generateSessionImage,
     getActiveCharacters: () => activeCharacters(currentContext),
+    hasSceneChoices: hasActiveSceneChoices,
+    isInteractionLocked,
     onMoodChange: (speakerName, mood) => characterGuideController.setMood(speakerName, mood),
   });
   const inventoryController = LiveChatInventory.createInventoryController({
@@ -291,6 +355,7 @@
     getCurrentContext: () => currentContext,
     getTargetCharacterId: () => activeCharacterId(currentContext),
     loadContext,
+    isInteractionLocked,
     playAffinityFeedback,
   });
   const locationController = LiveChatLocation.createLocationController({
@@ -301,6 +366,7 @@
     getCurrentContext: () => currentContext,
     applyContext,
     loadContext,
+    isInteractionLocked,
     capturePlayerReaction: capturePlayerReactionIfEnabled,
   });
   const photoModeController = LiveChatPhotoMode.createPhotoModeController({
@@ -312,6 +378,7 @@
     getReward: (context) => activeAffinityReward(context || currentContext),
     applyContext,
     loadContext,
+    isInteractionLocked,
     onDeactivateConversation: () => setConversationModeActive(false, { keepPhotoMode: true }),
     onModeChanged: () => {
       refreshModeBadge();
@@ -331,12 +398,23 @@
     loadContext,
     capturePlayerReaction: capturePlayerReactionIfEnabled,
     playAffinityFeedback,
-    triggerReplyEffect: (effect) => replyEffectsController.trigger(effect),
+    triggerReplyEffect: (effect) => {
+      if (endingInProgress) {
+        replyEffectsController.hide?.();
+        return;
+      }
+      if (effect) {
+        replyEffectsController.trigger(effect);
+      } else {
+        replyEffectsController.hide?.();
+      }
+    },
     onActivity: () => {
       idleTalksSincePlayerInput = 0;
     },
     clearIdleTalkTimer,
     scheduleIdleTalk,
+    isInteractionLocked,
   });
 
   function setPanelExpanded(card, body, button, expanded) {
@@ -358,7 +436,8 @@
     galleryCount.textContent = `${count}枚`;
   }
 
-  function applyContext(context) {
+  function applyContext(context, options = {}) {
+    if (!options.force && endingInProgress) return false;
     currentContext = context;
     const title = context.session.title || "\u30e9\u30a4\u30d6\u30c1\u30e3\u30c3\u30c8";
     document.getElementById("liveChatTitle").textContent = title;
@@ -387,10 +466,11 @@
     renderObjectiveNotes(context);
     characterGuideController.render(context);
     renderCharacterAffinity(context);
-    renderCharacterIntelRail(context);
+    composerController?.render(context);
     renderPlayerReaction(context);
     shortStoryPanel.renderSavedShortStories(context);
     inventoryController.render();
+    return true;
   }
 
   function activeCharacterId(context = currentContext) {
@@ -534,7 +614,11 @@
     const key = String(characterId || "");
     if (!key || affinityRewardClaiming.has(key)) return;
     affinityRewardClaiming.add(key);
+    beginEndingInteraction();
+    clearIdleTalkTimer();
+    replyEffectsController.hide?.();
     shell.setImageLoading(true, "ending");
+    shell.setReplyLoading(true, currentContext, { render: false });
     try {
       const result = await LiveChatApi.claimAffinityReward(sessionId, characterId);
       triggerAffinityMaxHeartBurst();
@@ -545,6 +629,8 @@
       NovelUI.toast(error.message || "好感度100報酬を受け取れませんでした。", "danger");
     } finally {
       shell.setImageLoading(false, currentContext);
+      shell.setReplyLoading(false, currentContext);
+      endEndingInteraction();
       affinityRewardClaiming.delete(key);
     }
   }
@@ -553,7 +639,11 @@
     if (!LiveChatApi.debugAffinityClear) return;
     const password = window.prompt("DEBUG password");
     if (!password) return;
+    beginEndingInteraction();
+    clearIdleTalkTimer();
+    replyEffectsController.hide?.();
     shell.setImageLoading(true, "ending");
+    shell.setReplyLoading(true, currentContext, { render: false });
     try {
       const result = await LiveChatApi.debugAffinityClear(sessionId, { password });
       triggerAffinityMaxHeartBurst();
@@ -564,6 +654,8 @@
       NovelUI.toast(error.message || "デバッグクリアに失敗しました。", "danger");
     } finally {
       shell.setImageLoading(false, currentContext);
+      shell.setReplyLoading(false, currentContext);
+      endEndingInteraction();
     }
   }
 
@@ -598,6 +690,9 @@
     detectAffinityIncreases(context);
     const characters = activeCharacters(context);
     const memoryMap = context?.character_user_memories || {};
+    const cleanAffinityNote = (note) => String(note || "")
+      .replace(/^\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?\s*[:：-]?\s*/, "")
+      .trim();
     const rows = characters
       .map((character) => {
         const memory = memoryMap[String(character.id)] || {};
@@ -606,7 +701,7 @@
         const closenessLevel = Math.max(0, Math.min(5, Number(memory.physical_closeness_level || 0)));
         const closenessLevelLabel = closenessLevel >= 5 ? "Max" : String(closenessLevel);
         const closenessLabel = memory.physical_closeness_label || "距離を保つ";
-        const note = memory.affinity_notes || "";
+        const note = cleanAffinityNote(memory.affinity_notes);
         const toneClass = score >= 70 ? "is-high" : score >= 40 ? "is-mid" : "is-low";
         return {
           name: character.name || character.nickname || "Character",
@@ -645,13 +740,6 @@
     `).join("");
   }
 
-  function characterAssetUrl(character) {
-    return character?.bromide_asset?.media_url
-      || character?.thumbnail_asset?.media_url
-      || character?.base_asset?.media_url
-      || "";
-  }
-
   function sendCharacterGuidePrompt(messageText) {
     const text = String(messageText || "").trim();
     if (!text) return;
@@ -662,60 +750,6 @@
     photoModeController.setActive(false, { silent: true });
     setConversationModeActive(true);
     composerController?.submitText(text);
-  }
-
-  function renderCharacterIntelRail(context) {
-    if (!intelRail) return;
-    const hints = ((context?.character_intel || {}).available_hints || []);
-    const characters = new Map((context?.project_characters || []).map((character) => [Number(character.id), character]));
-    const byTarget = [];
-    const seenTargets = new Set();
-    hints.forEach((hint) => {
-      const targetId = Number(hint.target_character_id || 0);
-      if (!targetId || seenTargets.has(targetId)) return;
-      seenTargets.add(targetId);
-      byTarget.push(hint);
-    });
-    intelRail.classList.toggle("is-hidden", byTarget.length === 0);
-    if (!byTarget.length) {
-      intelRail.innerHTML = "";
-      return;
-    }
-    intelRail.innerHTML = byTarget.slice(0, 6).map((hint) => {
-      const character = characters.get(Number(hint.target_character_id || 0)) || {};
-      const imageUrl = characterAssetUrl(character);
-      const name = hint.target_character_name || character.name || "Character";
-      return `
-        <button class="live-chat-intel-button" type="button"
-          data-source-character-id="${Number(hint.source_character_id || 0)}"
-          data-target-character-id="${Number(hint.target_character_id || 0)}"
-          data-topic="${NovelUI.escape(hint.topic || "")}"
-          title="${NovelUI.escape(name)}の情報">
-          ${imageUrl ? `<img src="${NovelUI.escape(imageUrl)}" alt="${NovelUI.escape(name)}">` : '<i class="bi bi-person-heart" aria-hidden="true"></i>'}
-          <span class="live-chat-intel-dot" aria-hidden="true"></span>
-        </button>
-      `;
-    }).join("");
-  }
-
-  async function revealCharacterIntelHint(button) {
-    if (!button || button.disabled) return;
-    button.disabled = true;
-    try {
-      const result = await LiveChatApi.revealCharacterIntel(sessionId, {
-        source_character_id: Number(button.dataset.sourceCharacterId || 0),
-        target_character_id: Number(button.dataset.targetCharacterId || 0),
-        topic: button.dataset.topic || "",
-      });
-      if (result?.context) {
-        applyContext(result.context);
-      } else {
-        await loadContext();
-      }
-    } catch (error) {
-      NovelUI.toast(error.message || "キャラクター情報を開示できませんでした。", "danger");
-      button.disabled = false;
-    }
   }
 
   function getInitialObjective(context) {
@@ -846,6 +880,7 @@
   }
 
   async function capturePlayerReactionIfEnabled() {
+    if (endingInProgress) return;
     if (!cameraFeatureEnabled) return;
     if (!cameraEnabled || cameraBusy || !cameraVideo || !cameraCanvas) return;
     if (!cameraVideo.videoWidth || !cameraVideo.videoHeight) return;
@@ -881,10 +916,14 @@
   }
 
   async function loadContext() {
+    const epoch = interactionEpoch;
     const context = await LiveChatApi.loadContext(sessionId);
+    if (isStaleInteraction(epoch)) return null;
     applyContext(context);
     await inventoryController.loadItems();
+    if (isStaleInteraction(epoch)) return context;
     scheduleIdleTalk();
+    return context;
   }
 
   function randomIdleTalkDelay() {
@@ -923,24 +962,26 @@
       scheduleIdleTalk();
       return;
     }
+    const epoch = interactionEpoch;
     idleTalkBusy = true;
     idleTalksSincePlayerInput += 1;
     try {
       shell.setReplyLoading(true, currentContext);
       const result = await LiveChatApi.postIdleMessage(sessionId);
+      if (isStaleInteraction(epoch)) return;
       if (result?.context) {
         applyContext(result.context);
       } else {
         await loadContext();
       }
-      await capturePlayerReactionIfEnabled();
+      if (!isStaleInteraction(epoch)) await capturePlayerReactionIfEnabled();
     } catch (error) {
       idleTalksSincePlayerInput = Math.max(0, idleTalksSincePlayerInput - 1);
       NovelUI.toast(error.message || "自動発話に失敗しました。", "warning");
       scheduleIdleTalk();
     } finally {
       idleTalkBusy = false;
-      shell.setReplyLoading(false, currentContext);
+      if (!isStaleInteraction(epoch)) shell.setReplyLoading(false, currentContext);
     }
   }
 
@@ -961,6 +1002,7 @@
   }
 
   async function generateSessionImage(useExistingPrompt = false, mode = "generate", overrides = {}) {
+    const epoch = interactionEpoch;
     shell.setImageLoading(true, mode);
     try {
       const body = {
@@ -973,6 +1015,7 @@
         body.use_existing_prompt = true;
       }
       const generatedImage = await LiveChatApi.generateSessionImage(sessionId, body);
+      if (isStaleInteraction(epoch)) return null;
       if (generatedImage?.asset?.media_url) {
         currentContext = {
           ...(currentContext || {}),
@@ -985,8 +1028,11 @@
         updateGalleryCount(currentContext.images || []);
       }
       await loadContext();
+      return generatedImage;
     } finally {
-      shell.setImageLoading(false, mode);
+      if (!isStaleInteraction(epoch)) {
+        shell.setImageLoading(false, mode);
+      }
     }
   }
 
@@ -1092,6 +1138,7 @@
     closetSelectModalElement,
     closetPicker,
     loadContext,
+    isInteractionLocked,
   });
   costumeRoomController.bind();
 
@@ -1129,11 +1176,13 @@
   inventoryController.bind();
   locationController.bind();
 
-  intelRail?.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-target-character-id]");
-    if (!button) return;
-    revealCharacterIntelHint(button);
-  });
+  document.addEventListener("click", blockEndingInteraction, true);
+  document.addEventListener("submit", blockEndingInteraction, true);
+  document.addEventListener("keydown", (event) => {
+    if (!endingInProgress || isAllowedDuringEnding(event.target)) return;
+    if (event.key !== "Enter" && event.key !== " ") return;
+    blockEndingInteraction(event);
+  }, true);
 
   toggleLccdButton?.addEventListener("click", () => {
     if (!conversationModeActive && !photoModeController.isActive() && isCurrentLocationLccd()) {
@@ -1190,25 +1239,35 @@
   document.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-scene-choice-id]");
     if (!button) return;
+    if (endingInProgress) {
+      event.preventDefault();
+      return;
+    }
     setSceneChoiceLoading(true, button);
     shell.setImageLoading(true, "auto");
+    const epoch = interactionEpoch;
     try {
       const result = await LiveChatApi.executeSceneChoice(sessionId, button.dataset.sceneChoiceId);
+      if (isStaleInteraction(epoch)) return;
       if (result?.context) {
         applyContext(result.context);
       } else {
         await loadContext();
       }
-      await capturePlayerReactionIfEnabled();
+      if (!isStaleInteraction(epoch)) await capturePlayerReactionIfEnabled();
       idleTalksSincePlayerInput = 0;
-      scheduleIdleTalk();
-      NovelUI.toast("選択した場面を生成しました。");
+      if (!isStaleInteraction(epoch)) {
+        scheduleIdleTalk();
+        NovelUI.toast("選択した場面を生成しました。");
+      }
     } catch (error) {
       NovelUI.toast(error.message || "選択肢の実行に失敗しました。", "danger");
       await loadContext().catch(() => {});
     } finally {
-      setSceneChoiceLoading(false);
-      shell.setImageLoading(false, "auto");
+      if (!isStaleInteraction(epoch)) {
+        setSceneChoiceLoading(false);
+        shell.setImageLoading(false, "auto");
+      }
     }
   });
 

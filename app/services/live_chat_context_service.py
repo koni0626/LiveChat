@@ -14,6 +14,7 @@ from .session_state_service import SessionStateService
 from .world_service import WorldService
 from .world_map_service import WorldMapService
 from .character_user_memory_service import CharacterUserMemoryService
+from .player_profile_memory_service import PlayerProfileMemoryService
 from .character_memory_note_service import CharacterMemoryNoteService
 from .character_intel_hint_service import CharacterIntelHintService
 from .character_affinity_reward_service import CharacterAffinityRewardService
@@ -46,6 +47,7 @@ class LiveChatContextService:
         select_characters,
         text_ai_client: TextAIClient,
         character_user_memory_service: CharacterUserMemoryService | None = None,
+        player_profile_memory_service: PlayerProfileMemoryService | None = None,
         character_memory_note_service: CharacterMemoryNoteService | None = None,
         character_intel_hint_service: CharacterIntelHintService | None = None,
         character_affinity_reward_service: CharacterAffinityRewardService | None = None,
@@ -71,6 +73,7 @@ class LiveChatContextService:
         self._select_characters = select_characters
         self._text_ai_client = text_ai_client
         self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
+        self._player_profile_memory_service = player_profile_memory_service or PlayerProfileMemoryService()
         self._character_memory_note_service = character_memory_note_service or CharacterMemoryNoteService()
         self._character_intel_hint_service = character_intel_hint_service or CharacterIntelHintService()
         self._character_affinity_reward_service = (
@@ -314,6 +317,10 @@ class LiveChatContextService:
             characters=characters,
         )
         long_term_character_user_memories = {}
+        player_profile_memory = self._player_profile_memory_service.serialize_memory(
+            self._player_profile_memory_service.get_memory(session.owner_user_id)
+        )
+        player_profile_prompt_block = self._player_profile_memory_service.build_prompt_block(session.owner_user_id)
         character_ids = []
         for character in characters:
             character_id = int(character.get("id") or 0)
@@ -355,13 +362,7 @@ class LiveChatContextService:
             self._serializer.serialize_character(row)
             for row in self._character_repository.list_by_project(session.project_id)
         ]
-        character_intel = self._build_character_intel_context(
-            user_id=session.owner_user_id,
-            project_id=session.project_id,
-            active_characters=characters,
-            project_characters=project_characters,
-            character_user_memories=character_user_memories,
-        )
+        character_intel = {"available_hints": [], "learned_hints_for_active_targets": []}
         world = self._world_service.get_world(session.project_id)
         world_context = self._serialize_world_context(world)
         world_map_context = self._world_map_context(session.project_id)
@@ -380,6 +381,8 @@ class LiveChatContextService:
                 "session": self._serializer.serialize_session(session),
                 "character_user_memories": character_user_memories,
                 "long_term_character_user_memories": long_term_character_user_memories,
+                "player_profile_memory": player_profile_memory,
+                "player_profile_prompt_block": player_profile_prompt_block,
                 "affinity_rewards": affinity_rewards,
                 "closet_outfits": closet_outfits,
                 "character_intel": character_intel,
@@ -406,6 +409,8 @@ class LiveChatContextService:
             "session": self._serializer.serialize_session(session),
             "character_user_memories": character_user_memories,
             "long_term_character_user_memories": long_term_character_user_memories,
+            "player_profile_memory": player_profile_memory,
+            "player_profile_prompt_block": player_profile_prompt_block,
             "affinity_rewards": affinity_rewards,
             "closet_outfits": closet_outfits,
             "character_intel": character_intel,

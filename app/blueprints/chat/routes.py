@@ -1,6 +1,5 @@
 ﻿import json
 import os
-import re
 from concurrent.futures import ThreadPoolExecutor
 
 from flask import Blueprint, current_app, request, session
@@ -13,7 +12,6 @@ from ...services.authorization_service import AuthorizationService
 from ...services.chat_message_service import ChatMessageService
 from ...services.chat_session_service import ChatSessionService
 from ...services.character_affinity_reward_service import CharacterAffinityRewardService
-from ...services.character_intel_hint_service import CharacterIntelHintService
 from ...services.live_chat_room_service import LiveChatRoomService
 from ...services.live_chat_service import LiveChatService
 from ...services.inventory_service import InventoryService
@@ -34,7 +32,6 @@ asset_service = AssetService()
 chat_session_service = ChatSessionService()
 chat_message_service = ChatMessageService()
 character_affinity_reward_service = CharacterAffinityRewardService()
-character_intel_hint_service = CharacterIntelHintService()
 live_chat_room_service = LiveChatRoomService()
 session_character_affinity_service = SessionCharacterAffinityService()
 session_state_service = SessionStateService()
@@ -202,26 +199,6 @@ def _affinity_100_clear_line(context: dict | None, character_id: int) -> tuple[s
     )
 
 
-def _character_intel_line(selected: dict, *, source_name: str | None = None, target_name: str | None = None) -> str:
-    def plain(value: str | None) -> str:
-        text = str(value or "").strip()
-        text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
-        text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
-        text = re.sub(r"(`{1,3})(.*?)\1", r"\2", text)
-        text = re.sub(r"[*_~#>`|-]+", "", text)
-        return re.sub(r"\s+", " ", text).strip()
-
-    source = plain(source_name or selected.get("source_character_name") or "私")
-    target = plain(target_name or selected.get("target_character_name") or "あの子")
-    topic = plain(selected.get("topic") or "")
-    hint_text = plain(selected.get("hint_text") or "")
-    if hint_text:
-        return f"そういえば、{target}のことなんだけど。{hint_text} 覚えておくと、きっと話しやすくなると思う。"
-    if topic:
-        return f"そういえば、{target}は「{topic}」の話題に反応しやすいみたい。{source}から見ても、そこは大事にしてあげるといいと思う。"
-    return f"そういえば、{target}のことで少し話しておきたいことがあるんだ。"
-
-
 def _extract_outfit_id(result: dict | None) -> int | None:
     if not isinstance(result, dict):
         return None
@@ -319,13 +296,30 @@ def get_chat_room(room_id: int):
 def update_chat_room(room_id: int):
     _require_room(room_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
+    sync_existing_sessions = bool(payload.pop("sync_existing_sessions", False))
     try:
         room = live_chat_room_service.update_room(room_id, payload)
     except ValueError as exc:
         raise ValidationError(str(exc))
     if not room:
         raise NotFoundError()
-    return json_response(live_chat_room_service.serialize_room(room, include_counts=True))
+    response = live_chat_room_service.serialize_room(room, include_counts=True)
+    if sync_existing_sessions:
+        response["sync_result"] = live_chat_room_service.sync_room_to_sessions(room_id) or {
+            "room_id": room_id,
+            "session_count": 0,
+            "session_ids": [],
+        }
+    return json_response(response)
+
+
+@chat_bp.route("/chat/rooms/<int:room_id>/sync-sessions", methods=["POST"])
+def sync_chat_room_sessions(room_id: int):
+    _require_room(room_id, for_manage=True)
+    result = live_chat_room_service.sync_room_to_sessions(room_id)
+    if result is None:
+        raise NotFoundError()
+    return json_response(result)
 
 
 @chat_bp.route("/chat/rooms/<int:room_id>", methods=["DELETE"])
@@ -995,81 +989,6 @@ def give_inventory_item(session_id: int, item_id: int):
     )
     result["inventory_item"] = used_item
     return json_response(result, status=201)
-
-
-@chat_bp.route("/chat/sessions/<int:session_id>/intel/reveal", methods=["POST"])
-def reveal_character_intel_hint(session_id: int):
-    chat_session, project, user = _require_session(session_id, for_manage=True)
-    payload = request.get_json(silent=True) or {}
-    context = live_chat_service.get_session_context(chat_session.id)
-    available = ((context.get("character_intel") or {}).get("available_hints") or [])
-    try:
-        source_character_id = int(payload.get("source_character_id") or 0)
-        target_character_id = int(payload.get("target_character_id") or 0)
-    except (TypeError, ValueError):
-        raise ValidationError("invalid character intel request")
-    topic = str(payload.get("topic") or "").strip()
-    selected = None
-    for hint in available:
-        if int(hint.get("source_character_id") or 0) != source_character_id:
-            continue
-        if int(hint.get("target_character_id") or 0) != target_character_id:
-            continue
-        if str(hint.get("topic") or "").strip() != topic:
-            continue
-        selected = hint
-        break
-    if not selected:
-        raise NotFoundError()
-    row = character_intel_hint_service.upsert_revealed_hint(
-        user_id=int(user.id),
-        project_id=int(project.id),
-        target_character_id=target_character_id,
-        source_character_id=source_character_id,
-        topic=topic,
-        hint_text=str(selected.get("hint_text") or "").strip(),
-        reveal_threshold=int(selected.get("reveal_threshold") or 40),
-    )
-    if not row:
-        raise ValidationError("character intel hint could not be revealed")
-    characters = {int(item.get("id") or 0): item.get("name") for item in context.get("project_characters") or []}
-    hint = character_intel_hint_service.serialize_hint(
-        row,
-        target_name=characters.get(target_character_id),
-        source_name=characters.get(source_character_id),
-    )
-    message = chat_message_service.create_message(
-        chat_session.id,
-        {
-            "sender_type": "character",
-            "speaker_name": hint.get("source_character_name") or selected.get("source_character_name") or "Character",
-            "message_text": _character_intel_line(
-                selected,
-                source_name=hint.get("source_character_name"),
-                target_name=hint.get("target_character_name"),
-            ),
-            "message_role": "assistant",
-            "state_snapshot_json": {
-                "character_intel_reveal": True,
-                "hint_id": row.id,
-                "source_character_id": source_character_id,
-                "target_character_id": target_character_id,
-                "topic": topic,
-            },
-        },
-    )
-    updated_context = live_chat_service.get_session_context(chat_session.id)
-    live_chat_service._update_session_memory(chat_session.id, updated_context)
-    updated_context = live_chat_service.get_session_context(chat_session.id)
-    live_chat_service._update_conversation_evaluation(chat_session.id, updated_context)
-    updated_context = live_chat_service.get_session_context(chat_session.id)
-    return json_response(
-        {
-            "hint": hint,
-            "message": live_chat_service._serialize_message(message),
-            "context": updated_context,
-        }
-    )
 
 
 @chat_bp.route("/chat/sessions/<int:session_id>/images/<int:image_id>/select", methods=["POST"])

@@ -411,6 +411,33 @@ def _character_user_memory_blocks(context: dict) -> list[str]:
     return blocks
 
 
+def _append_player_profile_context(lines: list[str], context: dict):
+    prompt_block = str(context.get("player_profile_prompt_block") or "").strip()
+    if prompt_block:
+        lines.append(prompt_block)
+        return
+    memory = context.get("player_profile_memory") or {}
+    if not isinstance(memory, dict) or memory.get("memory_enabled") is False:
+        return
+    fields = [
+        ("interests", memory.get("interest_notes")),
+        ("dislikes_or_avoid_topics", memory.get("dislike_notes")),
+        ("preferred_conversation_style", memory.get("conversation_style_notes")),
+        ("humor_preferences", memory.get("humor_notes")),
+        ("romance_boundaries_and_preferences", memory.get("romance_notes")),
+        ("current_goals_or_interests", memory.get("goal_notes")),
+        ("recurring_frustrations", memory.get("frustration_notes")),
+        ("recent_player_signals", memory.get("recent_player_notes")),
+    ]
+    if not any(str(value or "").strip() for _, value in fields):
+        return
+    lines.append("Shared player profile for all characters:")
+    for label, value in fields:
+        if str(value or "").strip():
+            lines.append(f"- {label}: {value}")
+    lines.append("Use this quietly to adapt clarity, topic choice, humor, pacing, and romantic distance.")
+
+
 def _append_character_growth_notes(lines: list[str], character: dict):
     block = str(character.get("ai_memory_prompt_block") or "").strip()
     if not block:
@@ -734,6 +761,7 @@ def build_player_proxy_message_prompt(context: dict) -> str:
     ]
     if session_objective:
         lines.append(f"Character/AI instruction: {session_objective}")
+    _append_player_profile_context(lines, context)
     if proxy_player_objective:
         lines.append(f"Proxy player objective: {proxy_player_objective}")
         lines.append(
@@ -897,6 +925,7 @@ def build_idle_character_message_prompt(context: dict) -> str:
     ]
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
+    _append_player_profile_context(lines, context)
     _append_session_objective_notes(lines, context)
     _append_world_activity_context(lines, context)
     _append_player_visible_reaction(lines, context)
@@ -1040,6 +1069,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     ]
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
+    _append_player_profile_context(lines, context)
     _append_session_objective_notes(lines, context)
     _append_world_activity_context(lines, context)
     _append_player_visible_reaction(lines, context)
@@ -1896,7 +1926,12 @@ def build_character_affinity_evaluation_prompt(context: dict) -> str:
         "items は character_id, affinity_delta, physical_closeness_delta, reason を持つ配列にしてください。",
         "affinity_delta は -12 から 12 の整数。通常は -3 から 3 に抑え、重要な出来事だけ大きく動かしてください。",
         "physical_closeness_delta は -2 から 2 の整数。拒否や強引さがあれば下げ、相互に自然な親密さがあれば上げてください。",
+        "構造化されたプレイヤーアクションは短文でも意味の薄い入力ではありません。特に手をつなぐ、抱きしめる、寄り添う、指を絡める等は、相手が受け入れた場合に関係変化として評価してください。",
+        "親密アクションが自然に受け入れられた場合の目安: 手をつなぐ/頭をなでるは affinity_delta 1〜3, physical_closeness_delta 0〜1。抱きしめる/寄り添うは 2〜4, 1〜2。頬に触れる/指を絡めるは 3〜5, 1〜2。",
+        "ただしキャラクターが戸惑い、拒否、境界線、強引さを示した場合は加点せず、必要なら下げてください。",
         "単語の有無だけで判定しないでください。否定文、冗談、照れ隠し、拒否、文脈を必ず見てください。",
+        "プレイヤー入力が「あああ」「いいい」「aaa」「ｗｗｗ」「...」など意味の薄い短文・連打・ノイズの場合、キャラクターが好意的に返していても affinity_delta と physical_closeness_delta は0以下にしてください。",
+        "意味の薄い入力を、励まし・照れ隠し・暗黙の好意として勝手に補完して加点してはいけません。",
         "プレイヤーがキャラの好み、記憶、約束、境界線を尊重した場合は上げてください。",
         "プレイヤーが強引、雑、拒否を無視、NGに触れた場合は下げてください。",
         "理由は短い日本語で1文にしてください。",
@@ -1931,6 +1966,21 @@ def build_character_affinity_evaluation_prompt(context: dict) -> str:
         text = str(message.get("message_text") or "").strip()
         if text:
             lines.append(f"- {speaker}: {text}")
+        snapshot = message.get("state_snapshot_json") if isinstance(message, dict) else None
+        if isinstance(snapshot, dict):
+            player_intent = snapshot.get("player_intent")
+            if isinstance(player_intent, dict) and player_intent.get("type") in {"action", "emotion"}:
+                lines.append(
+                    "  structured_player_intent="
+                    f"type={player_intent.get('type')}, id={player_intent.get('id')}, "
+                    f"label={player_intent.get('label')}, description={player_intent.get('description')}, "
+                    f"event_narration={player_intent.get('event_narration')}, "
+                    f"relationship_meaning={player_intent.get('relationship_meaning')}, "
+                    f"accepted_result={player_intent.get('accepted_result')}, "
+                    f"boundary_result={player_intent.get('boundary_result')}, "
+                    f"tone={player_intent.get('tone')}, intensity={player_intent.get('intensity')}, "
+                    f"target_character_id={player_intent.get('target_character_id')}"
+                )
     return "\n".join(lines)
 
 

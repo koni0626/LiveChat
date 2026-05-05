@@ -1,3 +1,5 @@
+{% extends "base.html" %}
+{% block content %}
 <section class="points-purchase-page">
   <div class="points-purchase-panel">
     <div class="points-purchase-summary">
@@ -25,10 +27,11 @@
         <button type="button" data-points-preset="3000">3,000 pt</button>
         <button type="button" data-points-preset="10000">10,000 pt</button>
       </div>
-      <p class="points-purchase-note">テスト用の入金です。外部の課金APIは呼びません。</p>
+      <p class="points-purchase-note">ローカル開発用のテスト購入です。外部の課金APIは呼びません。</p>
     </form>
   </div>
 </section>
+{% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/points_page.js') }}"></script>

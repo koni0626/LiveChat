@@ -12,6 +12,7 @@ from .character_affinity_reward import CharacterAffinityReward
 from .character_user_memory import CharacterUserMemory
 from .character_feed_profile import CharacterFeedProfile
 from .character_outfit import CharacterOutfit
+from .player_profile_memory import PlayerProfileMemory
 from .cinema_novel import CinemaNovel
 from .cinema_novel_chapter import CinemaNovelChapter
 from .cinema_novel_character_impression import CinemaNovelCharacterImpression
@@ -59,6 +60,7 @@ __all__ = [
     "CharacterUserMemory",
     "CharacterFeedProfile",
     "CharacterOutfit",
+    "PlayerProfileMemory",
     "CinemaNovel",
     "CinemaNovelChapter",
     "CinemaNovelCharacterImpression",

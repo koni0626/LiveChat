@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import threading
 from datetime import datetime
 from types import SimpleNamespace
@@ -19,6 +20,7 @@ from .live_chat_player_intent_service import LiveChatPlayerIntentService
 from .session_state_service import SessionStateService
 from .user_setting_service import UserSettingService
 from .character_user_memory_service import CharacterUserMemoryService
+from .player_profile_memory_service import PlayerProfileMemoryService
 from .session_character_affinity_service import SessionCharacterAffinityService
 from .character_memory_note_service import CharacterMemoryNoteService
 from .character_intel_hint_service import CharacterIntelHintService
@@ -26,6 +28,113 @@ from .live_chat_character_intel_tracker import LiveChatCharacterIntelTracker
 from .session_objective_note_service import SessionObjectiveNoteService
 from ..repositories.world_location_repository import WorldLocationRepository
 from ..repositories.world_location_service_repository import WorldLocationServiceRepository
+
+
+_LOW_INFORMATION_SHORT_WHITELIST = {
+    "好き",
+    "すき",
+    "大好き",
+    "だいすき",
+    "可愛い",
+    "かわいい",
+    "綺麗",
+    "きれい",
+    "ありがとう",
+    "ありがと",
+    "ごめん",
+    "ごめんね",
+    "お願い",
+    "おねがい",
+}
+
+_ACTION_AFFINITY_FLOORS = {
+    "hold_hands": (2, 1),
+    "pat_head": (2, 1),
+    "hug_softly": (3, 1),
+    "snuggle": (3, 1),
+    "touch_cheek": (4, 1),
+    "interlace_fingers": (4, 1),
+}
+
+_ACTION_REJECTION_MARKERS = (
+    "だめ",
+    "ダメ",
+    "嫌",
+    "いや",
+    "やめ",
+    "無理",
+    "離れ",
+    "待って",
+    "まだ",
+    "困",
+    "怖",
+    "拒",
+    "強引",
+)
+
+
+def is_low_information_player_text(text: str | None) -> bool:
+    value = str(text or "").strip()
+    if not value:
+        return True
+    compact = re.sub(r"[\s\u3000、。,.!?！？ー〜~…・♡♥❤💕💖✨⭐☆♪ｗw笑草]+", "", value)
+    if not compact:
+        return True
+    if compact in _LOW_INFORMATION_SHORT_WHITELIST:
+        return False
+    if len(compact) <= 1:
+        return True
+    unique_chars = set(compact)
+    if len(unique_chars) == 1 and len(compact) >= 2:
+        return True
+    if len(compact) <= 4 and unique_chars <= set("あいうえおアイウエオaiueoAIUEO"):
+        return True
+    if len(compact) <= 4 and not re.search(r"[一-龯ぁ-んァ-ンA-Za-z0-9]", compact):
+        return True
+    return False
+
+
+def _coerce_snapshot(value) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json_util.loads(value)
+        except Exception:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _accepted_action_floor(context: dict, last_user_message: dict) -> tuple[int | None, int, int]:
+    snapshot = _coerce_snapshot(last_user_message.get("state_snapshot_json"))
+    player_intent = snapshot.get("player_intent") if isinstance(snapshot, dict) else None
+    if not isinstance(player_intent, dict) or player_intent.get("type") != "action":
+        return (None, 0, 0)
+    floor = _ACTION_AFFINITY_FLOORS.get(str(player_intent.get("id") or ""))
+    if not floor:
+        return (None, 0, 0)
+    try:
+        target_character_id = int(player_intent.get("target_character_id") or 0) or None
+    except (TypeError, ValueError):
+        target_character_id = None
+    messages = context.get("messages") or []
+    last_user_id = last_user_message.get("id")
+    following = []
+    seen_user = False
+    for message in messages:
+        if last_user_id and message.get("id") == last_user_id:
+            seen_user = True
+            continue
+        if not seen_user:
+            continue
+        if message.get("sender_type") == "user":
+            break
+        following.append(str(message.get("message_text") or ""))
+    reaction_text = "\n".join(following)
+    if reaction_text and any(marker in reaction_text for marker in _ACTION_REJECTION_MARKERS):
+        return (None, 0, 0)
+    return (target_character_id, floor[0], floor[1])
 
 
 class LiveChatConversationService:
@@ -44,6 +153,7 @@ class LiveChatConversationService:
         serialize_message=None,
         serialize_state=None,
         character_user_memory_service: CharacterUserMemoryService | None = None,
+        player_profile_memory_service: PlayerProfileMemoryService | None = None,
         session_character_affinity_service: SessionCharacterAffinityService | None = None,
         character_memory_note_service: CharacterMemoryNoteService | None = None,
         character_intel_hint_service: CharacterIntelHintService | None = None,
@@ -62,6 +172,7 @@ class LiveChatConversationService:
         self._serialize_message = serialize_message
         self._serialize_state = serialize_state
         self._character_user_memory_service = character_user_memory_service or CharacterUserMemoryService()
+        self._player_profile_memory_service = player_profile_memory_service or PlayerProfileMemoryService()
         self._session_character_affinity_service = (
             session_character_affinity_service or SessionCharacterAffinityService()
         )
@@ -82,6 +193,11 @@ class LiveChatConversationService:
         character_text = str((last_character or {}).get("message_text") or "").strip()
         if not user_text and not character_text:
             return
+        if user_text:
+            self._player_profile_memory_service.update_from_user_message(
+                user_id=int(session.owner_user_id),
+                user_text=user_text,
+            )
         for character in context.get("characters") or []:
             character_id = int(character.get("id") or 0)
             if not character_id:
@@ -148,6 +264,15 @@ class LiveChatConversationService:
         session = self._chat_session_service.get_session(session_id) if self._chat_session_service else None
         if not session:
             return None
+        last_user_message = next(
+            (item for item in reversed(context.get("messages") or []) if item.get("sender_type") == "user"),
+            {},
+        )
+        low_information_player_input = is_low_information_player_text(last_user_message.get("message_text"))
+        action_target_character_id, action_affinity_floor, action_closeness_floor = _accepted_action_floor(
+            context,
+            last_user_message,
+        )
         previous_scores = {}
         for character_id, memory in (context.get("character_user_memories") or {}).items():
             try:
@@ -172,13 +297,38 @@ class LiveChatConversationService:
                 closeness_delta = int(item.get("physical_closeness_delta") or 0)
             except (TypeError, ValueError):
                 closeness_delta = 0
+            reason = str(item.get("reason") or "").strip()
+            if low_information_player_input:
+                if affinity_delta > 0:
+                    affinity_delta = 0
+                if closeness_delta > 0:
+                    closeness_delta = 0
+                if not reason or affinity_delta == 0 or closeness_delta == 0:
+                    reason = "プレイヤー入力が意味の薄い短文だったため、好感度の加点は行いません。"
+            elif (
+                (action_affinity_floor or action_closeness_floor)
+                and (not action_target_character_id or action_target_character_id == character_id)
+            ):
+                original_affinity_delta = affinity_delta
+                original_closeness_delta = closeness_delta
+                if affinity_delta >= 0:
+                    affinity_delta = max(affinity_delta, action_affinity_floor)
+                if closeness_delta >= 0:
+                    closeness_delta = max(closeness_delta, action_closeness_floor)
+                if (
+                    (affinity_delta != original_affinity_delta or closeness_delta != original_closeness_delta)
+                    and reason
+                ):
+                    reason = f"{reason} 親密アクションが自然に受け入れられたため、関係変化として反映しました。"
+                elif affinity_delta or closeness_delta:
+                    reason = "親密アクションが自然に受け入れられたため、関係変化として反映しました。"
             row = self._session_character_affinity_service.update_affinity_from_ai_evaluation(
                 session_id=int(session.id),
                 user_id=int(session.owner_user_id),
                 project_id=int(session.project_id),
                 character_id=character_id,
                 affinity_delta=affinity_delta,
-                reason=str(item.get("reason") or "").strip(),
+                reason=reason,
                 physical_closeness_delta=closeness_delta,
             )
             previous_score = int(previous_scores.get(str(character_id)) or 0)
@@ -192,7 +342,7 @@ class LiveChatConversationService:
                         "previous_score": previous_score,
                         "next_score": next_score,
                         "at_max": bool(getattr(row, "locked_at_100", False) or next_score >= 100),
-                        "reason": str(item.get("reason") or "").strip(),
+                        "reason": reason,
                     }
                 )
             for threshold in (60, 80):
@@ -510,15 +660,23 @@ class LiveChatConversationService:
             trigger_type=trigger_type,
         )
 
-    def post_directed_scene_message(self, session, session_id: int, user_message, intent: dict):
+    def post_directed_scene_message(
+        self,
+        session,
+        session_id: int,
+        user_message,
+        intent: dict,
+        player_prompt_text: str | None = None,
+    ):
+        scene_user_text = str(player_prompt_text or user_message.message_text or "").strip()
         context = self._context_provider(session_id)
-        self.apply_directed_scene(session_id, context, user_message.message_text, intent)
+        self.apply_directed_scene(session_id, context, scene_user_text, intent)
         context = self._context_provider(session_id)
         scene_update = ((context.get("state") or {}).get("state_json") or {}).get("directed_scene") or {}
         reply = text_support.generate_narration_reaction(
             self._text_ai_client,
             context,
-            user_message.message_text,
+            scene_user_text,
             scene_update,
         )
         assistant_message = self._chat_message_service.create_message(
@@ -1993,7 +2151,13 @@ class LiveChatConversationService:
             },
         )
         if is_directed_scene:
-            return self.post_directed_scene_message(session, session_id, user_message, input_intent)
+            return self.post_directed_scene_message(
+                session,
+                session_id,
+                user_message,
+                input_intent,
+                player_prompt_text=player_prompt_text,
+            )
 
         created = [self._serialize_message(user_message)]
         defer_post_processing = self._defer_post_processing_enabled()

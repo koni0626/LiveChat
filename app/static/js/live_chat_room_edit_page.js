@@ -30,6 +30,7 @@
   const proxyPlayerObjectiveMarkdownInput = document.getElementById("liveChatRoomProxyPlayerObjectiveMarkdownInput");
   const proxyPlayerObjectiveMarkdownPreview = document.getElementById("liveChatRoomProxyPlayerObjectiveMarkdownPreview");
   const proxyPlayerObjectiveApplyButton = document.getElementById("liveChatRoomProxyPlayerObjectiveApplyButton");
+  const syncSessionsInput = document.getElementById("liveChatRoomSyncSessionsInput");
 
   function escapeHtml(value) {
     return NovelUI.escape(value ?? "");
@@ -240,6 +241,9 @@
       proxy_player_gender: roomForm.proxy_player_gender.value.trim(),
       proxy_player_speech_style: roomForm.proxy_player_speech_style.value.trim(),
     };
+    if (roomId && syncSessionsInput?.checked) {
+      body.sync_existing_sessions = true;
+    }
     if (!body.conversation_objective) {
       NovelUI.toast("キャラクターへの指示を入力してください。", "warning");
       openObjectiveEditor();
@@ -250,6 +254,12 @@
       : `/api/v1/projects/${projectId}/chat/rooms`;
     const method = roomId ? "PATCH" : "POST";
     const saved = await NovelUI.api(path, { method, body });
+    if (roomId && body.sync_existing_sessions) {
+      const syncedCount = Number(saved?.sync_result?.session_count || 0);
+      NovelUI.toast(`ルームを更新し、既存チャット${syncedCount}件にも反映しました。`);
+      window.location.href = `/projects/${projectId}/live-chat/rooms`;
+      return saved;
+    }
     NovelUI.toast(roomId ? "ルームを更新しました。" : "ルームを作成しました。");
     window.location.href = `/projects/${projectId}/live-chat/rooms`;
     return saved;

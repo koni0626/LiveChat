@@ -106,6 +106,7 @@
     selectedImagePanel.innerHTML = `
       <div class="live-chat-stage-frame ${imageLoading ? "is-loading" : ""}">
         ${modeBadgeMarkup}
+        ${imageLoading ? '<span class="live-chat-generation-status is-visible" aria-live="polite">\u751f\u6210\u4e2d\u2026\u2026</span>' : ""}
         ${stageBody}
         ${imageLoading ? '<div class="live-chat-loading-heart" aria-hidden="true"><i class="bi bi-heart-fill"></i></div>' : ""}
         ${novelMarkup}

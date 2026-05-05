@@ -8,6 +8,7 @@
       getCurrentContext,
       applyContext,
       loadContext,
+      isInteractionLocked,
       capturePlayerReaction,
     } = options;
 
@@ -117,6 +118,7 @@
           size: imageForm?.size?.value || "1536x1024",
           quality: imageForm?.quality?.value || "low",
         });
+        if (isInteractionLocked?.()) return;
         if (result?.context) {
           applyContext?.(result.context);
         } else {
@@ -124,7 +126,7 @@
         }
         moveVisible = false;
         selectedMoveId = null;
-        await capturePlayerReaction?.();
+        if (!isInteractionLocked?.()) await capturePlayerReaction?.();
         if (result?.image_generation_error) {
           NovelUI.toast(`移動しました。画像生成は失敗しました: ${result.image_generation_error}`, "warning");
         } else {
@@ -132,16 +134,18 @@
         }
       } catch (error) {
         NovelUI.toast(error.message || "移動に失敗しました。", "danger");
-        await loadContext?.().catch?.(() => {});
+        if (!isInteractionLocked?.()) await loadContext?.().catch?.(() => {});
       } finally {
         moveBusy = false;
-        if (button && originalHtml) {
+        if (!isInteractionLocked?.() && button && originalHtml) {
           button.innerHTML = originalHtml;
           button.disabled = false;
         }
-        shell?.setImageLoading(false, "auto");
-        renderMovePanel(getCurrentContext?.());
-        renderServicePanel();
+        if (!isInteractionLocked?.()) {
+          shell?.setImageLoading(false, "auto");
+          renderMovePanel(getCurrentContext?.());
+          renderServicePanel();
+        }
       }
     }
 
@@ -159,6 +163,7 @@
           size: imageForm?.size?.value || "1536x1024",
           quality: imageForm?.quality?.value || "low",
         });
+        if (isInteractionLocked?.()) return;
         if (result?.context) {
           applyContext?.(result.context);
         } else {
@@ -166,7 +171,7 @@
         }
         moveVisible = false;
         selectedMoveId = null;
-        await capturePlayerReaction?.();
+        if (!isInteractionLocked?.()) await capturePlayerReaction?.();
         if (result?.image_generation_error) {
           NovelUI.toast(`サービスへ移動しました。画像生成は失敗しました: ${result.image_generation_error}`, "warning");
         } else {
@@ -174,16 +179,18 @@
         }
       } catch (error) {
         NovelUI.toast(error.message || "サービス移動に失敗しました。", "danger");
-        await loadContext?.().catch?.(() => {});
+        if (!isInteractionLocked?.()) await loadContext?.().catch?.(() => {});
       } finally {
         serviceBusy = false;
-        if (button && originalHtml) {
+        if (!isInteractionLocked?.() && button && originalHtml) {
           button.innerHTML = originalHtml;
           button.disabled = false;
         }
-        shell?.setImageLoading(false, "auto");
-        renderMovePanel(getCurrentContext?.());
-        renderServicePanel();
+        if (!isInteractionLocked?.()) {
+          shell?.setImageLoading(false, "auto");
+          renderMovePanel(getCurrentContext?.());
+          renderServicePanel();
+        }
       }
     }
 

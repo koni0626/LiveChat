@@ -9,6 +9,7 @@
       getReward,
       applyContext,
       loadContext,
+      isInteractionLocked,
       onDeactivateConversation,
       onModeChanged,
     } = options;
@@ -93,6 +94,7 @@
           photo_size: imageForm?.size?.value || "1536x1024",
           quality: imageForm?.quality?.value || "low",
         });
+        if (isInteractionLocked?.()) return false;
         if (result?.context) {
           applyContext?.(result.context);
         } else {
@@ -101,11 +103,13 @@
         return true;
       } catch (error) {
         NovelUI.toast(error.message || "撮影に失敗しました。", "danger");
-        await loadContext?.().catch?.(() => {});
+        if (!isInteractionLocked?.()) await loadContext?.().catch?.(() => {});
         return false;
       } finally {
-        setLoading(false);
-        shell?.setImageLoading(false, "auto");
+        if (!isInteractionLocked?.()) {
+          setLoading(false);
+          shell?.setImageLoading(false, "auto");
+        }
       }
     }
 

@@ -11,6 +11,7 @@
       closetSelectModalElement,
       closetPicker,
       loadContext,
+      isInteractionLocked,
     } = options;
 
     const closetSelectModal = closetSelectModalElement ? new bootstrap.Modal(closetSelectModalElement) : null;
@@ -142,7 +143,9 @@
       button.classList.add("is-loading");
       try {
         await api.selectClosetOutfit(getSessionId(), button.dataset.closetOutfitId);
+        if (isInteractionLocked?.()) return;
         await loadContext();
+        if (isInteractionLocked?.()) return;
         renderClosetPicker(await api.loadClosetOutfits(getSessionId()));
         NovelUI.toast("クローゼット衣装をこのルームの基準にしました。");
       } catch (error) {
@@ -165,13 +168,15 @@
           size: costumeForm.size.value,
           quality: costumeForm.quality.value,
         });
+        if (isInteractionLocked?.()) return;
         costumeForm.prompt_text.value = "";
         await loadContext();
+        if (isInteractionLocked?.()) return;
         NovelUI.toast("衣装を生成し、基準画像に設定しました。");
       } catch (error) {
         NovelUI.toast(error.message || "衣装生成に失敗しました。", "danger");
       } finally {
-        setLoading(false);
+        if (!isInteractionLocked?.()) setLoading(false);
       }
     }
 
@@ -190,6 +195,7 @@
       if (!button) return;
       try {
         await api.selectCostume(getSessionId(), button.dataset.costumeId);
+        if (isInteractionLocked?.()) return;
         await loadContext();
         NovelUI.toast("衣装の基準画像を変更しました。");
       } catch (error) {

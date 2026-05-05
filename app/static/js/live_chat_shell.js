@@ -36,6 +36,20 @@
       textboxOff: '<i class="bi bi-chat-left" aria-hidden="true"></i>',
     };
 
+    function getImageLoadingStatus(frame) {
+      if (!frame) return null;
+      let status = frame.querySelector(".live-chat-generation-status");
+      if (!status) {
+        status = document.createElement("span");
+        status.className = "live-chat-generation-status";
+        status.setAttribute("aria-live", "polite");
+        status.hidden = true;
+        status.textContent = "\u751f\u6210\u4e2d\u2026\u2026";
+        frame.appendChild(status);
+      }
+      return status;
+    }
+
     function renderNovel(messages, currentContext) {
       state.novelPageState = view.renderNovelBox(messages, {
         replyLoading: state.replyLoading,
@@ -91,12 +105,25 @@
       const frame = selectedImagePanel?.querySelector(".live-chat-stage-frame");
       if (frame) {
         frame.classList.toggle("is-loading", active);
+        const imageLoadingStatus = getImageLoadingStatus(frame);
+        if (imageLoadingStatus) {
+          imageLoadingStatus.hidden = !active;
+          imageLoadingStatus.classList.toggle("is-visible", active);
+        }
         if (active) {
           frame.dataset.loadingLabel = loadingLabel;
           frame.dataset.loadingMode = mode || "generate";
+          if (!frame.querySelector(".live-chat-loading-heart")) {
+            const heart = document.createElement("div");
+            heart.className = "live-chat-loading-heart";
+            heart.setAttribute("aria-hidden", "true");
+            heart.innerHTML = '<i class="bi bi-heart-fill"></i>';
+            frame.appendChild(heart);
+          }
         } else {
           delete frame.dataset.loadingLabel;
           delete frame.dataset.loadingMode;
+          frame.querySelectorAll(".live-chat-loading-heart").forEach((item) => item.remove());
         }
       }
     }
