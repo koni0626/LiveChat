@@ -234,6 +234,54 @@ def update_cinema_novel_status(novel_id: int):
     return json_response(cinema_novel_service.serialize_novel(updated, include_chapters=True, user_id=user.id))
 
 
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/image-edit", methods=["POST"])
+def edit_cinema_novel_display_image(novel_id: int):
+    novel, _project, user = _require_novel(novel_id)
+    if int(user.id) != int(novel.created_by_user_id):
+        raise ForbiddenError()
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = cinema_novel_service.edit_display_image(novel.id, payload)
+    except (RuntimeError, ValueError) as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/image-upload", methods=["POST"])
+def upload_cinema_novel_display_image(novel_id: int):
+    novel, _project, user = _require_novel(novel_id)
+    if int(user.id) != int(novel.created_by_user_id):
+        raise ForbiddenError()
+    payload = dict(request.form)
+    upload_file = request.files.get("file")
+    if upload_file:
+        payload["upload_file"] = upload_file
+    try:
+        result = cinema_novel_service.upload_scene_display_image(novel.id, payload)
+    except (RuntimeError, ValueError) as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/image", methods=["DELETE"])
+def delete_cinema_novel_display_image(novel_id: int):
+    novel, _project, user = _require_novel(novel_id)
+    if int(user.id) != int(novel.created_by_user_id):
+        raise ForbiddenError()
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = cinema_novel_service.delete_scene_display_image(novel.id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result)
+
+
 @cinema_novels_bp.route("/cinema-novels/<int:novel_id>/reviews", methods=["GET"])
 def list_cinema_novel_reviews(novel_id: int):
     novel, _project, user = _require_novel(novel_id)

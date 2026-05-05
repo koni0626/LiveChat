@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="cinema-reader-shell" data-project-id="{{ project_id }}" data-novel-id="{{ novel_id }}">
+<section class="cinema-reader-shell" data-project-id="{{ project_id }}" data-novel-id="{{ novel_id }}" data-current-user-id="{{ current_user_id or '' }}">
   <section class="cinema-reader-stage">
     <div class="cinema-reader-screen" id="cinemaReaderScreen">
       <div class="cinema-reader-still-wrap" id="cinemaReaderStillWrap">
@@ -8,6 +8,16 @@
           <i class="bi bi-film"></i>
           <span>Prebuilt Novel</span>
         </div>
+      </div>
+      <div class="cinema-reader-image-tools" id="cinemaReaderImageTools" hidden>
+        <button class="cinema-reader-image-tool-button" type="button" id="cinemaReaderImageEditButton">
+          <i class="bi bi-magic"></i>
+          変更
+        </button>
+        <button class="cinema-reader-image-tool-button cinema-reader-image-delete-button" type="button" id="cinemaReaderImageDeleteButton" disabled>
+          <i class="bi bi-trash"></i>
+          削除
+        </button>
       </div>
       <div class="cinema-reader-textbox">
         <div class="cinema-reader-speaker" id="cinemaReaderSpeaker" hidden></div>
@@ -45,6 +55,39 @@
     <div class="cinema-reader-chapter-list" id="cinemaReaderChapterList"></div>
   </aside>
 </section>
+
+<div class="modal fade cinema-reader-edit-modal" id="cinemaReaderImageEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content" id="cinemaReaderImageEditForm">
+      <div class="modal-header">
+        <h5 class="modal-title">画像を変更</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label" for="cinemaReaderImageEditPrompt">変更内容</label>
+        <textarea class="form-control" id="cinemaReaderImageEditPrompt" rows="5" placeholder="例: ノアの衣装をドレスに変更する。背景のネオンを強める。"></textarea>
+        <p class="cinema-reader-edit-help">
+          現在表示中の画像をベースに再生成します。キャラクター名が入っている場合は、そのキャラクターの基準画像も参照します。
+        </p>
+        <label class="cinema-reader-upload-drop" id="cinemaReaderImageUploadDrop" for="cinemaReaderImageUploadInput">
+          <input class="visually-hidden" id="cinemaReaderImageUploadInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+          <i class="bi bi-cloud-arrow-up"></i>
+          <span>
+            <strong id="cinemaReaderImageUploadLabel">画像を選択、またはドラッグ&ドロップ</strong>
+            <small>現在のシーン画像として差し替えます</small>
+          </span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">キャンセル</button>
+        <button type="submit" class="btn btn-primary" id="cinemaReaderImageEditSubmit">
+          <span class="spinner-border spinner-border-sm me-2" hidden></span>
+          変更する
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/cinema_novel_reader.js') }}"></script>

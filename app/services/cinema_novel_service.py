@@ -75,8 +75,8 @@ class CinemaNovelService:
 
     def _novel_image_layout_instruction(self, novel) -> str:
         if bool(getattr(novel, "mobile_visible", False)):
-            return "スマホ版向けの縦長9:16キービジュアル。縦長画面で主要人物と背景が自然に収まる構図。"
-        return "横長16:9。"
+            return "Portrait mobile composition, 9:16 key visual. Keep main characters and the background naturally framed for a tall phone screen."
+        return "Landscape cinematic composition, 16:9 key visual."
 
     def delete_novel(self, novel_id: int) -> bool:
         novel = self.get_novel(novel_id)
@@ -1610,6 +1610,221 @@ class CinemaNovelService:
             },
         }
 
+    def edit_display_image(self, novel_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        prompt = str(payload.get("prompt") or "").strip()
+        if not prompt:
+            raise ValueError("prompt is required")
+
+        source_asset_id = payload.get("source_asset_id")
+        try:
+            source_asset_id = int(source_asset_id)
+        except (TypeError, ValueError):
+            source_asset_id = None
+        if not source_asset_id:
+            raise ValueError("source_asset_id is required")
+        source_asset = Asset.query.get(source_asset_id)
+        if (
+            not source_asset
+            or getattr(source_asset, "deleted_at", None)
+            or int(source_asset.project_id) != int(novel.project_id)
+            or not source_asset.file_path
+            or not os.path.exists(source_asset.file_path)
+        ):
+            raise ValueError("source image was not found")
+
+        options = self._user_setting_service.apply_cinema_novel_image_generation_settings(
+            payload.get("image_options") or payload
+        )
+        options = self._apply_mobile_novel_image_options(novel, options)
+
+        chapter = None
+        scene_index = None
+        scenes = None
+        chapter_id = payload.get("chapter_id")
+        if chapter_id is not None:
+            try:
+                chapter_id = int(chapter_id)
+                scene_index = int(payload.get("scene_index") or 0)
+            except (TypeError, ValueError):
+                raise ValueError("chapter_id and scene_index are invalid")
+            chapter = self.get_chapter(chapter_id)
+            if not chapter or int(chapter.novel_id) != int(novel.id):
+                raise ValueError("chapter was not found")
+            scenes = self._load_json(chapter.scene_json, default=[])
+            if not isinstance(scenes, list) or scene_index < 0 or scene_index >= len(scenes):
+                raise ValueError("scene was not found")
+
+        character_references = self._matching_character_references(novel.project_id, prompt, limit=4)
+        reference_ids = [source_asset.id]
+        reference_ids.extend(
+            item.get("base_asset_id")
+            for item in character_references
+            if item.get("base_asset_id") and int(item.get("base_asset_id")) != int(source_asset.id)
+        )
+        reference_paths, reference_asset_ids = self._resolve_reference_image_paths(reference_ids)
+        if not reference_paths:
+            raise ValueError("source image was not found")
+
+        context_lines = [
+            f"Novel title: {novel.title or ''}",
+            f"User edit instruction: {prompt}",
+            "Use the first reference image as the current displayed novel image.",
+            "Keep the current composition, scene mood, background continuity, and readable story context unless the edit instruction explicitly changes them.",
+            "When the instruction includes a character name, use the additional character reference images to preserve that character's face, hair, outfit identity, and body silhouette.",
+            "Produce one polished high-end 3D cinematic visual-novel still. Do not add UI, watermarks, signatures, random logos, or unintended readable text.",
+            self._novel_image_layout_instruction(novel),
+        ]
+        if chapter:
+            scene = scenes[scene_index] if isinstance(scenes[scene_index], dict) else {}
+            context_lines.extend(
+                [
+                    f"Chapter: {chapter.chapter_no} {chapter.title or ''}",
+                    f"Scene text: {str(scene.get('text') or '')[:1200]}",
+                    f"Speaker: {str(scene.get('speaker') or '')[:120]}",
+                ]
+            )
+        generation_prompt = "\n".join(context_lines)
+
+        asset_type = "cinema_novel_scene_still_edit" if chapter else "cinema_novel_title_image_edit"
+        file_prefix = f"cinema_novel_{novel.id}_image_edit"
+        if chapter:
+            file_prefix = f"cinema_novel_{novel.id}_chapter_{chapter.id}_scene_{scene_index + 1}_edit"
+        asset = self._generate_cinema_asset(
+            project_id=novel.project_id,
+            asset_type=asset_type,
+            file_prefix=file_prefix,
+            prompt=generation_prompt,
+            image_options=options,
+            metadata={
+                "source": asset_type,
+                "novel_id": novel.id,
+                "chapter_id": chapter.id if chapter else None,
+                "chapter_no": chapter.chapter_no if chapter else None,
+                "scene_index": scene_index,
+                "source_asset_id": source_asset.id,
+                "reference_asset_ids": reference_asset_ids,
+                "edit_instruction": prompt,
+            },
+            reference_paths=reference_paths,
+        )
+
+        if chapter and scenes is not None and scene_index is not None:
+            scene = scenes[scene_index]
+            if not isinstance(scene, dict):
+                scene = {}
+                scenes[scene_index] = scene
+            scene["still_asset_id"] = asset.id
+            chapter.scene_json = json_util.dumps(scenes)
+            db.session.add(chapter)
+        else:
+            novel.cover_asset_id = asset.id
+            novel.poster_asset_id = asset.id
+            db.session.add(novel)
+        db.session.commit()
+
+        return {
+            "novel": self.serialize_novel(novel, include_chapters=True),
+            "chapter": self.serialize_chapter(chapter) if chapter else None,
+            "asset": self._serialize_asset(asset.id),
+            "reference_asset_ids": reference_asset_ids,
+            "image_options": {
+                "provider": options.get("provider"),
+                "model": options.get("model"),
+                "quality": options.get("quality"),
+                "size": options.get("size"),
+            },
+        }
+
+    def upload_scene_display_image(self, novel_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        chapter, scenes, scene_index = self._resolve_scene_payload(novel, payload)
+        upload_file = payload.get("upload_file")
+        if not upload_file:
+            raise ValueError("file is required")
+
+        asset = self._asset_service.create_asset(
+            novel.project_id,
+            {
+                "upload_file": upload_file,
+                "asset_type": "cinema_novel_scene_still_upload",
+                "metadata_json": json_util.dumps(
+                    {
+                        "source": "cinema_novel_scene_still_upload",
+                        "novel_id": novel.id,
+                        "chapter_id": chapter.id,
+                        "chapter_no": chapter.chapter_no,
+                        "scene_index": scene_index,
+                    }
+                ),
+            },
+        )
+        scene = scenes[scene_index]
+        if not isinstance(scene, dict):
+            scene = {}
+            scenes[scene_index] = scene
+        scene["still_asset_id"] = asset.id
+        chapter.scene_json = json_util.dumps(scenes)
+        db.session.add(chapter)
+        db.session.commit()
+        return {
+            "novel": self.serialize_novel(novel, include_chapters=True),
+            "chapter": self.serialize_chapter(chapter),
+            "asset": self._serialize_asset(asset.id),
+        }
+
+    def delete_scene_display_image(self, novel_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        chapter, scenes, scene_index = self._resolve_scene_payload(novel, payload)
+        try:
+            asset_id = int(payload.get("asset_id") or 0)
+        except (TypeError, ValueError):
+            asset_id = 0
+        if not asset_id:
+            raise ValueError("asset_id is required")
+        scene = scenes[scene_index]
+        if not isinstance(scene, dict):
+            raise ValueError("scene image does not match the current scene")
+        if int(scene.get("still_asset_id") or 0) == asset_id:
+            scene["still_asset_id"] = None
+        elif int(scene.get("background_asset_id") or 0) == asset_id:
+            scene["background_asset_id"] = None
+        else:
+            raise ValueError("scene image does not match the current scene")
+        chapter.scene_json = json_util.dumps(scenes)
+        db.session.add(chapter)
+        db.session.commit()
+        return {
+            "novel": self.serialize_novel(novel, include_chapters=True),
+            "chapter": self.serialize_chapter(chapter),
+            "deleted_asset_id": asset_id,
+        }
+
+    def _resolve_scene_payload(self, novel, payload: dict):
+        try:
+            chapter_id = int(payload.get("chapter_id") or 0)
+            scene_index = int(payload.get("scene_index") or 0)
+        except (TypeError, ValueError):
+            raise ValueError("chapter_id and scene_index are invalid")
+        if not chapter_id:
+            raise ValueError("chapter_id is required")
+        chapter = self.get_chapter(chapter_id)
+        if not chapter or int(chapter.novel_id) != int(novel.id):
+            raise ValueError("chapter was not found")
+        scenes = self._load_json(chapter.scene_json, default=[])
+        if not isinstance(scenes, list) or scene_index < 0 or scene_index >= len(scenes):
+            raise ValueError("scene was not found")
+        return chapter, scenes, scene_index
+
     def _chapter_outline_hint(self, novel, chapter):
         return "\n".join(
             [
@@ -1937,6 +2152,15 @@ class CinemaNovelService:
                     "",
                     "添付された参照画像のキャラクターデザイン、顔立ち、髪型、服装の特徴を優先して維持してください。",
                     "別人に見える改変を避け、映画スチルとして構図・光・背景だけを場面に合わせてください。",
+                ]
+            )
+        if reference_paths:
+            final_prompt = "\n".join(
+                [
+                    prompt,
+                    "",
+                    "Prioritize the attached reference images for character design, facial features, hairstyle, clothing, and identity.",
+                    "Avoid changes that make the characters look like different people. Adapt only composition, lighting, and background to the scene unless instructed otherwise.",
                 ]
             )
         result = None

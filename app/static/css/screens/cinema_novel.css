@@ -604,11 +604,67 @@
   inset: 0;
 }
 
+.cinema-reader-image-tools {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 4;
+  display: inline-flex;
+  gap: .45rem;
+}
+
+.cinema-reader-image-tools[hidden] {
+  display: none;
+}
+
+.cinema-reader-image-tool-button {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  min-height: 2.5rem;
+  padding: .45rem .9rem;
+  border: 1px solid rgba(103, 232, 249, .72);
+  border-radius: 999px;
+  background: rgba(4, 15, 28, .72);
+  color: #e7f9ff;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(12px);
+}
+
+.cinema-reader-image-tool-button:hover,
+.cinema-reader-image-tool-button:focus {
+  border-color: rgba(45, 212, 191, .95);
+  background: rgba(8, 47, 73, .82);
+  color: #fff;
+}
+
+.cinema-reader-image-tool-button:disabled {
+  border-color: rgba(148, 163, 184, .28);
+  background: rgba(15, 23, 42, .42);
+  color: rgba(226, 232, 240, .48);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.cinema-reader-image-delete-button:not(:disabled) {
+  border-color: rgba(248, 113, 113, .7);
+  color: #fee2e2;
+}
+
+.cinema-reader-image-delete-button:not(:disabled):hover,
+.cinema-reader-image-delete-button:not(:disabled):focus {
+  border-color: rgba(252, 165, 165, .95);
+  background: rgba(127, 29, 29, .82);
+}
+
 .cinema-reader-textbox {
   position: absolute;
   left: 1rem;
   right: 1rem;
   bottom: 1rem;
+  z-index: 2;
   min-height: 9.5rem;
   padding: 1rem 1.1rem;
   border: 1px solid rgba(255, 255, 255, .28);
@@ -709,6 +765,94 @@
   border-color: rgba(0, 245, 212, .72);
   background: rgba(0, 245, 212, .12);
   color: #e7f9ff;
+}
+
+body[data-screen="cinema-novel-reader"] .modal-backdrop {
+  z-index: 2980;
+}
+
+.cinema-reader-edit-modal {
+  z-index: 2990;
+  pointer-events: auto;
+}
+
+.cinema-reader-edit-modal .modal-content {
+  position: relative;
+  z-index: 2991;
+  pointer-events: auto;
+  border: 1px solid rgba(103, 232, 249, .32);
+  border-radius: .9rem;
+  background: rgba(3, 10, 22, .96);
+  color: #e7f9ff;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .48);
+}
+
+.cinema-reader-edit-modal .modal-header,
+.cinema-reader-edit-modal .modal-footer {
+  border-color: rgba(103, 232, 249, .16);
+}
+
+.cinema-reader-edit-modal textarea {
+  min-height: 132px;
+  border-color: rgba(103, 232, 249, .28);
+  background: rgba(8, 20, 38, .95);
+  color: #e7f9ff;
+}
+
+.cinema-reader-edit-modal textarea:focus {
+  border-color: rgba(45, 212, 191, .82);
+  box-shadow: 0 0 0 .2rem rgba(45, 212, 191, .12);
+}
+
+.cinema-reader-edit-help {
+  margin: .75rem 0 0;
+  color: #9fb7d1;
+  font-size: .86rem;
+  line-height: 1.7;
+}
+
+.cinema-reader-upload-drop {
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+  margin-top: .9rem;
+  padding: .85rem .95rem;
+  border: 1px dashed rgba(103, 232, 249, .42);
+  border-radius: .75rem;
+  background: rgba(8, 20, 38, .64);
+  color: #e7f9ff;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, color .16s ease;
+}
+
+.cinema-reader-upload-drop i {
+  font-size: 1.35rem;
+  color: #67e8f9;
+}
+
+.cinema-reader-upload-drop span,
+.cinema-reader-upload-drop strong,
+.cinema-reader-upload-drop small {
+  display: block;
+}
+
+.cinema-reader-upload-drop strong {
+  font-size: .92rem;
+  font-weight: 800;
+}
+
+.cinema-reader-upload-drop small {
+  margin-top: .1rem;
+  color: rgba(180, 221, 255, .72);
+  font-size: .78rem;
+}
+
+.cinema-reader-upload-drop:hover,
+.cinema-reader-upload-drop:focus-within,
+.cinema-reader-upload-drop.is-dragover {
+  border-color: rgba(45, 212, 191, .9);
+  background: rgba(20, 184, 166, .14);
+  color: #fff;
 }
 
 @media (max-width: 980px) {
