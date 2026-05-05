@@ -207,6 +207,11 @@
   display: block;
 }
 
+.cinema-reader-still-wrap img {
+  object-fit: contain;
+  background: #030712;
+}
+
 .cinema-novel-poster img.cinema-novel-title-poster {
   object-fit: contain;
   padding: .35rem;

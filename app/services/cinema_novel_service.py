@@ -623,6 +623,19 @@ class CinemaNovelService:
                 "説明だけでなく、このまま制作ジョブに渡せる具体度にしてください。",
             ]
         )
+        prompt = "\n".join(
+            [
+                prompt,
+                "",
+                "Machine-readable chapter list rules:",
+                "Under the heading '## 章立て一覧', include one chapter header per chapter in exactly this format:",
+                "- 第1章: 章タイトル",
+                "  - 概要: 章の内容を1〜3文で書く",
+                "  - 目的: この章の物語上の役割を書く",
+                "Do not put the chapter title on a separate line. Do not use '# 第1章' as the only chapter line.",
+                f"Create exactly {chapter_count} chapter header lines in this format.",
+            ]
+        )
         result = self._text_ai_client.generate_text(
             prompt,
             model=settings.get("model"),
@@ -1279,10 +1292,10 @@ class CinemaNovelService:
         in_chapter_section = False
         for line in lines:
             stripped = line.strip()
-            if "章立て一覧" in stripped:
+            if "章立て一覧" in stripped or "CHAPTER_LIST_FOR_SYSTEM" in stripped:
                 in_chapter_section = True
                 continue
-            if in_chapter_section and stripped.startswith("#") and re.match(r"^#{1,6}\s*\d+\.", stripped):
+            if in_chapter_section and re.match(r"^#{1,6}\s*\d+\.", stripped):
                 break
             if in_chapter_section:
                 chapter_section_lines.append(line)
@@ -1291,23 +1304,48 @@ class CinemaNovelService:
         items = []
         current = None
         chapter_pattern = re.compile(
-            r"^\s*(?:#{1,6}\s*)?(?:[-\*]\s*)?第\s*(\d{1,2})\s*(?:章|話|幕)\s*(.+?)\s*$"
+            r"^\s*(?:#{1,6}\s*)?(?:[-\*]\s*)?第\s*([0-9０-９]{1,2})\s*(?:章|話|幕)\s*(.*)$"
         )
+        title_only_pattern = re.compile(r"^\s*(?:#{1,6}\s*)?(?:章タイトル|タイトル)\s*[:：]?\s*(.+?)\s*$")
+
+        def normalize_number(value: str) -> int:
+            return int(str(value).translate(str.maketrans("０１２３４５６７８９", "0123456789")))
+
+        def clean_title(value: str) -> str:
+            title = str(value or "").strip()
+            title = re.sub(r"^[\s:：\-・|｜]+", "", title)
+            title = re.sub(r"^\*\*(.+?)\*\*$", r"\1", title)
+            title = re.sub(r"^第\s*[0-9０-９]{1,2}\s*(?:章|話|幕)\s*[:：\-・|｜]*", "", title).strip()
+            title = re.sub(r"^[「『【\[]|[」』】\]]$", "", title.strip(" -:："))
+            title = re.split(r"\s{2,}|[｜|]", title, 1)[0].strip()
+            return title
+
         for line in lines:
             stripped = line.strip()
             match = chapter_pattern.match(stripped)
             if match and not re.search(r"(章数|目標文字数|ターン|ステップ|候補|画像|章扉|劇中スチル|案)$", stripped):
                 if current:
                     items.append(current)
-                title = re.sub(r"^[「『【\[]|[」』】\]]$", "", match.group(2).strip(" -:："))
-                title = re.split(r"\s{2,}|[｜|]", title, 1)[0].strip()
+                chapter_no = normalize_number(match.group(1))
+                title = clean_title(match.group(2))
                 current = {
-                    "chapter_no": int(match.group(1)),
-                    "title": title[:120] or f"第{int(match.group(1))}章",
+                    "chapter_no": chapter_no,
+                    "title": title[:120] or f"第{chapter_no}章",
                     "outline_lines": [stripped],
                 }
                 continue
+            title_match = title_only_pattern.match(stripped)
+            if current and title_match:
+                title = clean_title(title_match.group(1))
+                if title and not re.search(r"(概要|目的|主要シーン|目標文字数)$", title):
+                    current["title"] = title[:120]
+                current["outline_lines"].append(stripped)
+                continue
             if current and stripped:
+                if not current.get("title") or re.fullmatch(r"第\d{1,2}章", str(current.get("title") or "")):
+                    fallback_title = clean_title(stripped)
+                    if fallback_title and fallback_title != stripped and not re.search(r"(概要|目的|主要シーン|目標文字数)$", fallback_title):
+                        current["title"] = fallback_title[:120]
                 current["outline_lines"].append(stripped)
         if current:
             items.append(current)
