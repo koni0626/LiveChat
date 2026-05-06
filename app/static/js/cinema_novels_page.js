@@ -10,6 +10,13 @@
   const mainCharacterSelect = document.getElementById("cinemaMainCharacterSelect");
   const outlineResult = document.getElementById("cinemaProductionResult");
   const suggestPremiseButton = document.getElementById("cinemaSuggestPremiseButton");
+  const createShortComicButton = document.getElementById("cinemaCreateShortComicButton");
+  const productionModeHelp = document.getElementById("cinemaProductionModeHelp");
+  const productionModeButtons = Array.from(document.querySelectorAll("[data-production-mode]"));
+  const productionModeFields = Array.from(document.querySelectorAll("[data-production-field]"));
+  const bgmSelect = document.getElementById("cinemaBgmSelect");
+  const bgmVolumeSelect = document.getElementById("cinemaBgmVolumeSelect");
+  const bgmUploadInput = document.getElementById("cinemaBgmUploadInput");
   const chapterPanel = document.getElementById("cinemaChapterProductionPanel");
   const chapterPanelTitle = document.getElementById("cinemaChapterProductionTitle");
   const chapterSelect = document.getElementById("cinemaProductionChapterSelect");
@@ -38,6 +45,8 @@
   let latestProductionOutline = null;
   let latestProductionInput = null;
   let productionCharacters = [];
+  let bgmAssets = [];
+  let productionMode = "novel";
 
   function escape(value) {
     return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
@@ -51,7 +60,7 @@
 
   async function api(path, options = {}) {
     const headers = { ...(options.headers || {}) };
-    if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+    if (options.body && !(options.body instanceof FormData) && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
     const response = await fetch(path, { ...options, headers });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(cleanErrorMessage(payload?.data?.message || "request failed"));
@@ -88,12 +97,24 @@
   }
 
   function productionFormBody() {
-    const body = Object.fromEntries(new FormData(outlineForm).entries());
+    const formData = new FormData(outlineForm);
+    const body = Object.fromEntries(formData.entries());
+    body.reference_sources = formData.getAll("reference_sources");
     const character = selectedMainCharacter();
     body.main_character = character?.name || "";
     if (character?.nickname) body.main_character_nickname = character.nickname;
     body.mobile_visible = Boolean(outlineForm.querySelector('[name="mobile_visible"]')?.checked);
     return body;
+  }
+
+  function selectedBgmQuery() {
+    const bgmAssetId = Number(bgmSelect?.value || 0);
+    if (!bgmAssetId) return "";
+    const params = new URLSearchParams({
+      bgm_asset_id: String(bgmAssetId),
+      bgm_volume: String(bgmVolumeSelect?.value || "0.45"),
+    });
+    return `?${params.toString()}`;
   }
 
   function statusLabel(status) {
@@ -102,6 +123,30 @@
 
   function statusClass(status) {
     return status === "published" ? "is-published" : "is-draft";
+  }
+
+  function isShortComicNovel(novel) {
+    return novel?.mode === "short_comic_video";
+  }
+
+  function setProductionMode(mode) {
+    productionMode = mode === "comic" ? "comic" : "novel";
+    productionModeButtons.forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.productionMode === productionMode);
+    });
+    productionModeFields.forEach((field) => {
+      const visible = field.dataset.productionField === productionMode;
+      field.hidden = !visible;
+      if ("disabled" in field) field.disabled = !visible;
+      field.querySelectorAll?.("input, select, textarea, button").forEach((control) => {
+        control.disabled = !visible;
+      });
+    });
+    if (productionModeHelp) {
+      productionModeHelp.textContent = productionMode === "comic"
+        ? "ショート漫画を作成します。作成後に漫画動画として出力できます。"
+        : "ノベルゲームを作成します。作成後にPPT化や動画化ができます。";
+    }
   }
 
   function mobileVisibleLabel(visible) {
@@ -134,6 +179,54 @@
     }
   }
 
+  function renderBgmOptions() {
+    if (!bgmSelect) return;
+    const current = bgmSelect.value;
+    bgmSelect.innerHTML = [
+      `<option value="">BGMなし</option>`,
+      ...bgmAssets.map((asset) => `<option value="${asset.id}">${escape(asset.file_name || `BGM ${asset.id}`)}</option>`),
+    ].join("");
+    if ([...bgmSelect.options].some((option) => option.value === current)) {
+      bgmSelect.value = current;
+    }
+  }
+
+  async function loadBgmAssets() {
+    if (!bgmSelect) return;
+    bgmAssets = await api(`/api/v1/projects/${projectId}/cinema-novels/bgm`);
+    renderBgmOptions();
+  }
+
+  async function uploadBgmAsset(file) {
+    if (!file || !bgmUploadInput) return;
+    const label = bgmUploadInput.closest("label");
+    const labelSpan = label?.querySelector("span");
+    const originalHtml = labelSpan?.innerHTML;
+    if (labelSpan) {
+      labelSpan.innerHTML = `<span class="spinner-border spinner-border-sm"></span> アップロード中`;
+    }
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const asset = await api(`/api/v1/projects/${projectId}/cinema-novels/bgm`, {
+        method: "POST",
+        body: formData,
+      });
+      await loadBgmAssets();
+      if (bgmSelect) bgmSelect.value = String(asset.id);
+    } catch (error) {
+      if (outlineResult) {
+        outlineResult.hidden = false;
+        outlineResult.innerHTML = `<div class="alert alert-danger">${escape(cleanErrorMessage(error.message))}</div>`;
+      }
+    } finally {
+      bgmUploadInput.value = "";
+      if (labelSpan) {
+        labelSpan.innerHTML = originalHtml || `<i class="bi bi-music-note-beamed"></i> BGMをアップロード`;
+      }
+    }
+  }
+
   async function waitProductionOutlineJob(job) {
     let current = job;
     while (current?.status === "queued" || current?.status === "running") {
@@ -151,6 +244,27 @@
     }
     if (current?.status === "failed") {
       throw new Error(current.error || "生成に失敗しました。");
+    }
+    return current?.result || {};
+  }
+
+  async function waitShortComicJob(job) {
+    let current = job;
+    while (current?.status === "queued" || current?.status === "running") {
+      if (outlineResult) {
+        outlineResult.hidden = false;
+        outlineResult.innerHTML = `
+          <div class="cinema-production-result-meta">
+            ショート漫画を生成中です / status: ${escape(current.status)} / elapsed: ${escape(formatElapsed(current.started_at || current.created_at))}
+          </div>
+          <pre>台本、文字入りコマ画像、DB保存をまとめて進めています。画像生成があるため少し時間がかかります。</pre>
+        `;
+      }
+      await sleep(5000);
+      current = await api(`/api/v1/projects/${projectId}/cinema-novels/short-comic-jobs/${current.id}`);
+    }
+    if (current?.status === "failed") {
+      throw new Error(current.error || "ショート漫画生成に失敗しました。");
     }
     return current?.result || {};
   }
@@ -216,8 +330,16 @@
   function renderNovel(novel) {
     const href = `/projects/${projectId}/cinema-novels/${novel.id}`;
     const progressCopy = novel.progress ? "続きあり" : "未読";
-    const posterUrl = novel.poster_asset?.media_url || novel.cover_asset?.media_url || "";
+    const posterAsset = novel.poster_asset?.media_url ? novel.poster_asset : novel.cover_asset;
+    const posterUrl = posterAsset?.media_url || "";
+    const posterClasses = [
+      posterAsset?.asset_type === "cinema_novel_title_image" ? "cinema-novel-title-poster" : "",
+      Number(posterAsset?.height || 0) > Number(posterAsset?.width || 0) ? "cinema-novel-poster-portrait" : "",
+    ].filter(Boolean).join(" ");
     const reviews = Array.isArray(novel.reviews) ? novel.reviews : [];
+    const shortComic = isShortComicNovel(novel);
+    const progressText = shortComic ? "漫画動画用" : `${progressCopy} / ${novel.chapter_count || 0}章`;
+    const workTypeBadge = `<span class="cinema-novel-status-badge ${shortComic ? "is-mobile-visible" : "is-draft"}">${shortComic ? "ショート漫画" : "ノベルゲーム"}</span>`;
     const statusBadge = `<span class="cinema-novel-status-badge ${statusClass(novel.status)}">${statusLabel(novel.status)}</span>`;
     const mobileBadge = canManageProject ? `<span class="cinema-novel-status-badge ${novel.mobile_visible ? "is-mobile-visible" : "is-mobile-hidden"}">${mobileVisibleLabel(novel.mobile_visible)}</span>` : "";
     const reviewersHtml = reviews.length ? `
@@ -231,26 +353,46 @@
         }).join("")}
       </div>
     ` : "";
-    return `
-      <article class="cinema-novel-card">
-        <a class="cinema-novel-card-link" href="${href}">
-          <div class="cinema-novel-poster">
-            ${posterUrl
-              ? `<img class="${novel.poster_asset?.asset_type === "cinema_novel_title_image" ? "cinema-novel-title-poster" : ""}" src="${posterUrl}" alt="">`
-              : `<div class="cinema-novel-poster-empty"><i class="bi bi-film"></i></div>`}
-          </div>
-          <div class="cinema-novel-card-body">
-            <div class="cinema-novel-status">${statusBadge}${mobileBadge}<span>${progressCopy} / ${novel.chapter_count || 0}章</span></div>
-            <h3>${escape(novel.title)}</h3>
-            <p>${escape(novel.subtitle || novel.description || "ノベル作品")}</p>
-          </div>
-        </a>
-        ${canManageProject ? `<div class="cinema-novel-card-actions">
+    const actionsHtml = shortComic ? `
+          <button class="btn btn-sm btn-outline-dark" type="button" data-comic-video-novel-id="${novel.id}">
+            <i class="bi bi-badge-cc"></i>
+            漫画動画
+          </button>
+    ` : `
           <button class="btn btn-sm btn-outline-dark" type="button" data-production-novel-id="${novel.id}">
             <i class="bi bi-tools"></i>
             制作
           </button>
-        </div>` : ""}
+          <button class="btn btn-sm btn-outline-dark" type="button" data-export-novel-id="${novel.id}">
+            <i class="bi bi-file-earmark-ppt"></i>
+            PPT
+          </button>
+          <button class="btn btn-sm btn-outline-dark" type="button" data-video-novel-id="${novel.id}">
+            <i class="bi bi-file-earmark-play"></i>
+            動画
+          </button>
+    `;
+    const publicationButton = `
+          <button class="btn btn-sm btn-outline-dark" type="button" data-toggle-status-novel-id="${novel.id}" data-next-status="${novel.status === "published" ? "draft" : "published"}">
+            <i class="bi ${novel.status === "published" ? "bi-eye-slash" : "bi-eye"}"></i>
+            ${novel.status === "published" ? "非公開にする" : "公開にする"}
+          </button>
+    `;
+    return `
+      <article class="cinema-novel-card" data-novel-id="${novel.id}" data-novel-mode="${escape(novel.mode || "")}">
+        <a class="cinema-novel-card-link" href="${href}">
+          <div class="cinema-novel-poster">
+            ${posterUrl
+              ? `<img class="${posterClasses}" src="${posterUrl}" alt="">`
+              : `<div class="cinema-novel-poster-empty"><i class="bi bi-film"></i></div>`}
+          </div>
+          <div class="cinema-novel-card-body">
+            <div class="cinema-novel-status">${workTypeBadge}${statusBadge}${mobileBadge}<span>${progressText}</span></div>
+            <h3>${escape(novel.title)}</h3>
+            <p>${escape(novel.subtitle || novel.description || "ノベル作品")}</p>
+          </div>
+        </a>
+        ${canManageProject ? `<div class="cinema-novel-card-actions">${actionsHtml}${publicationButton}</div>` : ""}
       </article>
     `;
   }
@@ -268,9 +410,9 @@
     const novelById = new Map((novels || []).map((novel) => [Number(novel.id), novel]));
     list.querySelectorAll(".cinema-novel-card").forEach((card) => {
       const productionButton = card.querySelector("[data-production-novel-id]");
-      const novelId = Number(productionButton?.dataset.productionNovelId || 0);
+      const novelId = Number(card.dataset.novelId || productionButton?.dataset.productionNovelId || 0);
       const novel = novelById.get(novelId);
-      if (!novel || !productionButton) return;
+      if (!novel) return;
       const body = card.querySelector(".cinema-novel-card-body");
       const actions = card.querySelector(".cinema-novel-card-actions");
       const reviews = Array.isArray(novel.reviews) ? novel.reviews : [];
@@ -288,12 +430,14 @@
         body.appendChild(reviewers);
       }
       if (actions) {
-        const reviewButton = document.createElement("button");
-        reviewButton.className = "btn btn-sm btn-outline-dark";
-        reviewButton.type = "button";
-        reviewButton.dataset.reviewNovelId = String(novel.id);
-        reviewButton.innerHTML = `<i class="bi bi-chat-square-quote"></i> 映画レビュー`;
-        actions.insertBefore(reviewButton, productionButton);
+        if (!isShortComicNovel(novel) && productionButton) {
+          const reviewButton = document.createElement("button");
+          reviewButton.className = "btn btn-sm btn-outline-dark";
+          reviewButton.type = "button";
+          reviewButton.dataset.reviewNovelId = String(novel.id);
+          reviewButton.innerHTML = `<i class="bi bi-chat-square-quote"></i> 映画レビュー`;
+          actions.insertBefore(reviewButton, productionButton);
+        }
         const deleteButton = document.createElement("button");
         deleteButton.className = "btn btn-sm btn-outline-danger cinema-novel-delete-button";
         deleteButton.type = "button";
@@ -397,6 +541,35 @@
       await loadNovels();
     } catch (error) {
       window.alert(error.message || "削除に失敗しました");
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = originalHtml;
+      }
+    }
+  }
+
+  async function toggleNovelPublication(novelId, nextStatus) {
+    const novel = (window.__cinemaNovels || []).find((item) => Number(item.id) === Number(novelId));
+    const button = list?.querySelector(`[data-toggle-status-novel-id="${CSS.escape(String(novelId))}"]`);
+    const originalHtml = button?.innerHTML;
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 更新中`;
+    }
+    try {
+      await api(`/api/v1/cinema-novels/${novelId}/status`, {
+        method: "PUT",
+        body: JSON.stringify({
+          status: nextStatus === "published" ? "published" : "draft",
+          mobile_visible: Boolean(novel?.mobile_visible ?? true),
+        }),
+      });
+      await loadNovels();
+    } catch (error) {
+      if (outlineResult) {
+        outlineResult.hidden = false;
+        outlineResult.innerHTML = `<div class="alert alert-danger">${escape(cleanErrorMessage(error.message))}</div>`;
+      }
       if (button) {
         button.disabled = false;
         button.innerHTML = originalHtml;
@@ -744,8 +917,53 @@
     }
   }
 
+  async function createShortComic() {
+    if (!outlineForm || !createShortComicButton) return;
+    const body = productionFormBody();
+    body.target_panel_count = Number(body.target_panel_count || 20);
+    body.generate_images = true;
+    const originalHtml = createShortComicButton.innerHTML;
+    createShortComicButton.disabled = true;
+    if (suggestPremiseButton) suggestPremiseButton.disabled = true;
+    createShortComicButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 生成中`;
+    try {
+      const job = await api(`/api/v1/projects/${projectId}/cinema-novels/short-comic-jobs`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      const novel = await waitShortComicJob(job);
+      await loadNovels();
+      if (outlineResult) {
+        const panelCount = (novel.chapters?.[0]?.scene_json || []).length;
+        outlineResult.hidden = false;
+        outlineResult.innerHTML = `
+          <div class="cinema-production-result-meta">
+            ショート漫画を作成しました。${panelCount}コマ / 画像つき
+          </div>
+          <pre>${escape(novel.title || "")}\n${escape(novel.subtitle || "")}</pre>
+        `;
+      }
+    } catch (error) {
+      if (outlineResult) {
+        outlineResult.hidden = false;
+        outlineResult.innerHTML = `<div class="alert alert-danger">${escape(cleanErrorMessage(error.message))}</div>`;
+      }
+    } finally {
+      createShortComicButton.disabled = false;
+      if (suggestPremiseButton) suggestPremiseButton.disabled = false;
+      createShortComicButton.innerHTML = originalHtml;
+    }
+  }
+
   importButton?.addEventListener("click", importAkagane);
   suggestPremiseButton?.addEventListener("click", suggestProductionPremise);
+  createShortComicButton?.addEventListener("click", createShortComic);
+  bgmUploadInput?.addEventListener("change", () => {
+    uploadBgmAsset(bgmUploadInput.files?.[0]);
+  });
+  productionModeButtons.forEach((button) => {
+    button.addEventListener("click", () => setProductionMode(button.dataset.productionMode));
+  });
   list.addEventListener("click", (event) => {
     const reviewButton = event.target.closest("[data-review-novel-id]");
     if (reviewButton) {
@@ -757,6 +975,34 @@
     if (deleteButton) {
       event.preventDefault();
       deleteNovel(Number(deleteButton.dataset.deleteNovelId));
+      return;
+    }
+    const statusButton = event.target.closest("[data-toggle-status-novel-id]");
+    if (statusButton) {
+      event.preventDefault();
+      toggleNovelPublication(Number(statusButton.dataset.toggleStatusNovelId), statusButton.dataset.nextStatus);
+      return;
+    }
+    const exportButton = event.target.closest("[data-export-novel-id]");
+    if (exportButton) {
+      event.preventDefault();
+      window.location.href = `/api/v1/cinema-novels/${Number(exportButton.dataset.exportNovelId)}/powerpoint`;
+      return;
+    }
+    const videoButton = event.target.closest("[data-video-novel-id]");
+    if (videoButton) {
+      event.preventDefault();
+      window.location.href = `/api/v1/cinema-novels/${Number(videoButton.dataset.videoNovelId)}/short-video${selectedBgmQuery()}`;
+      return;
+    }
+    const comicVideoButton = event.target.closest("[data-comic-video-novel-id]");
+    if (comicVideoButton) {
+      event.preventDefault();
+      const novelId = Number(comicVideoButton.dataset.comicVideoNovelId);
+      window.location.href = `/api/v1/cinema-novels/${novelId}/comic-short-video${selectedBgmQuery()}`;
+      window.setTimeout(() => {
+        loadNovels().catch(() => {});
+      }, 8000);
       return;
     }
     const button = event.target.closest("[data-production-novel-id]");
@@ -784,9 +1030,14 @@
   createReviewButton?.addEventListener("click", createReview);
   outlineForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    suggestProductionPremise();
+    if (productionMode === "comic") {
+      createShortComic();
+    } else {
+      suggestProductionPremise();
+    }
   });
-  Promise.all([loadProductionCharacters(), loadNovels()]).catch((error) => {
+  setProductionMode("novel");
+  Promise.all([loadProductionCharacters(), loadBgmAssets(), loadNovels()]).catch((error) => {
     list.innerHTML = `<div class="alert alert-danger">${escape(error.message)}</div>`;
   });
 })();

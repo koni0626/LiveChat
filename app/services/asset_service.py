@@ -1,5 +1,6 @@
 import hashlib
 import io
+import mimetypes
 import os
 import uuid
 from pathlib import Path
@@ -41,8 +42,8 @@ class AssetService:
         file_bytes = upload_file.read()
         if not file_bytes:
             raise ValueError("file is required")
-        image_info = self._validate_upload_file(file_bytes, upload_file.mimetype)
-        file_ext = self._extension_for_mime_type(image_info.get("mime_type")) or file_ext.lower()
+        file_info = self._validate_upload_file(file_bytes, upload_file.mimetype, original_name=original_name)
+        file_ext = self._extension_for_mime_type(file_info.get("mime_type")) or file_ext.lower()
         stored_name = f"{file_root or 'upload'}_{uuid.uuid4().hex[:12]}{file_ext}"
         file_path = os.path.join(upload_directory, stored_name)
 
@@ -52,11 +53,11 @@ class AssetService:
         normalized = dict(payload)
         normalized["file_name"] = original_name
         normalized["file_path"] = file_path
-        normalized["mime_type"] = image_info.get("mime_type")
+        normalized["mime_type"] = file_info.get("mime_type")
         normalized["file_size"] = len(file_bytes)
         normalized["checksum"] = hashlib.sha256(file_bytes).hexdigest()
-        normalized["width"] = image_info.get("width")
-        normalized["height"] = image_info.get("height")
+        normalized["width"] = file_info.get("width")
+        normalized["height"] = file_info.get("height")
         normalized.pop("upload_file", None)
         return normalized
 
@@ -66,15 +67,39 @@ class AssetService:
             "image/png": ".png",
             "image/webp": ".webp",
             "image/gif": ".gif",
+            "audio/mpeg": ".mp3",
+            "audio/mp3": ".mp3",
+            "audio/wav": ".wav",
+            "audio/x-wav": ".wav",
+            "audio/mp4": ".m4a",
+            "audio/aac": ".aac",
+            "audio/ogg": ".ogg",
+            "application/ogg": ".ogg",
         }.get(str(mime_type or "").split(";", 1)[0].strip().lower())
 
-    def _validate_upload_file(self, file_bytes: bytes, mime_type: str | None):
+    def _validate_upload_file(self, file_bytes: bytes, mime_type: str | None, *, original_name: str = ""):
+        allowed_types = set(current_app.config.get("ASSET_ALLOWED_IMAGE_MIME_TYPES") or set())
+        declared_mime = str(mime_type or "").split(";", 1)[0].strip().lower()
+        guessed_mime = str(mimetypes.guess_type(original_name or "")[0] or "").split(";", 1)[0].strip().lower()
+        audio_types = set(current_app.config.get("ASSET_ALLOWED_AUDIO_MIME_TYPES") or {
+            "audio/mpeg",
+            "audio/mp3",
+            "audio/wav",
+            "audio/x-wav",
+            "audio/mp4",
+            "audio/aac",
+            "audio/ogg",
+            "application/ogg",
+        })
+        if declared_mime in audio_types or guessed_mime in audio_types:
+            audio_max_bytes = int(current_app.config.get("ASSET_MAX_AUDIO_BYTES", 80 * 1024 * 1024))
+            if len(file_bytes) > audio_max_bytes:
+                raise ValueError("audio file is too large")
+            return {"width": None, "height": None, "mime_type": declared_mime or guessed_mime}
+
         max_bytes = int(current_app.config.get("ASSET_MAX_UPLOAD_BYTES", 10 * 1024 * 1024))
         if len(file_bytes) > max_bytes:
             raise ValueError("file is too large")
-
-        allowed_types = set(current_app.config.get("ASSET_ALLOWED_IMAGE_MIME_TYPES") or set())
-        declared_mime = str(mime_type or "").split(";", 1)[0].strip().lower()
 
         try:
             with Image.open(io.BytesIO(file_bytes)) as image:

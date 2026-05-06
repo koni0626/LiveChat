@@ -18,39 +18,126 @@
   <section class="cinema-production-panel">
     <div>
       <h3>制作モード</h3>
-      <p>時間をかけて、章立て・各章の深掘り・事前生成画像を作るための設計を生成します。</p>
+      <p id="cinemaProductionModeHelp">ノベルゲームを作成します。作成後にPPT化や動画化ができます。</p>
+    </div>
+    <div class="cinema-production-mode-tabs" role="tablist" aria-label="制作タイプ">
+      <button class="is-active" type="button" data-production-mode="novel">
+        <i class="bi bi-controller"></i>
+        ノベルゲーム
+      </button>
+      <button type="button" data-production-mode="comic">
+        <i class="bi bi-badge-cc"></i>
+        ショート漫画
+      </button>
     </div>
     <form class="cinema-production-form" id="cinemaProductionOutlineForm">
-      <input class="form-control" name="title" placeholder="作品タイトル。空欄ならAIが提案します">
-      <select class="form-select" name="status" id="cinemaProductionStatusSelect" aria-label="公開状態">
-        <option value="draft">非公開</option>
-        <option value="published">公開</option>
-      </select>
+      <label class="cinema-production-field">
+        <span>作品タイトル</span>
+        <input class="form-control" name="title" placeholder="空欄ならAIが提案します">
+      </label>
+      <label class="cinema-production-field">
+        <span>公開状態</span>
+        <select class="form-select" name="status" id="cinemaProductionStatusSelect" aria-label="公開状態">
+          <option value="draft">非公開</option>
+          <option value="published">公開</option>
+        </select>
+      </label>
       <label class="cinema-production-check">
         <input class="form-check-input" type="checkbox" name="mobile_visible" value="1" checked>
         <span>スマホ版に表示</span>
       </label>
-      <select class="form-select" name="main_character_id" id="cinemaMainCharacterSelect">
-        <option value="">主役はAIが選定</option>
-      </select>
-      <select class="form-select" name="genre" id="cinemaGenreSelect">
-        <option value="">ジャンルをAIが提案</option>
-        <option value="面白いコメディ">面白い</option>
-        <option value="恋愛">恋愛</option>
-        <option value="サスペンス">サスペンス</option>
-        <option value="SF">SF</option>
-        <option value="ホラー">ホラー</option>
-        <option value="切ないドラマ">切ない</option>
-        <option value="バトル">バトル</option>
-        <option value="日常">日常</option>
-        <option value="風刺">風刺</option>
-      </select>
-      <input class="form-control" name="chapter_count" type="number" min="3" max="12" value="5">
+      <label class="cinema-production-field">
+        <span>主人公</span>
+        <select class="form-select" name="main_character_id" id="cinemaMainCharacterSelect">
+          <option value="">主役はAIが選定</option>
+        </select>
+      </label>
+      <label class="cinema-production-field">
+        <span>ジャンル</span>
+        <select class="form-select" name="genre" id="cinemaGenreSelect">
+          <option value="">AIが提案</option>
+          <option value="面白いコメディ">面白い</option>
+          <option value="写真集">写真集</option>
+          <option value="恋愛">恋愛</option>
+          <option value="サスペンス">サスペンス</option>
+          <option value="SF">SF</option>
+          <option value="ホラー">ホラー</option>
+          <option value="切ないドラマ">切ない</option>
+          <option value="バトル">バトル</option>
+          <option value="日常">日常</option>
+          <option value="風刺">風刺</option>
+        </select>
+      </label>
+      <label class="cinema-production-field" data-production-field="novel">
+        <span>作成する章数</span>
+        <input class="form-control" name="chapter_count" type="number" min="3" max="12" value="5">
+      </label>
+      <label class="cinema-production-field" data-production-field="comic" hidden>
+        <span>目安コマ数</span>
+        <input class="form-control" name="target_panel_count" type="number" min="6" max="40" value="20">
+      </label>
+      <label class="cinema-production-field" data-production-field="comic" hidden>
+        <span>画風</span>
+        <select class="form-select" name="short_comic_art_style" aria-label="ショート漫画の画風">
+          <option value="reference_image">基準画像</option>
+          <option value="anime">アニメ調</option>
+        </select>
+      </label>
       <input type="hidden" name="chapter_target_chars" value="3500">
-      <textarea class="form-control" name="theme" rows="2" placeholder="テーマ。空欄なら世界観とDBキャラからAIが提案します"></textarea>
-      <button class="btn btn-outline-dark" type="button" id="cinemaSuggestPremiseButton">
+      <label class="cinema-production-field cinema-production-field-wide">
+        <span>テーマ</span>
+        <textarea class="form-control" name="theme" rows="2" placeholder="空欄なら世界観とDBキャラからAIが提案します"></textarea>
+      </label>
+      <fieldset class="cinema-production-reference-field">
+        <legend>参照するデータ</legend>
+        <label>
+          <input class="form-check-input" type="checkbox" name="reference_sources" value="worldbuilding" checked>
+          <span>世界観</span>
+        </label>
+        <label>
+          <input class="form-check-input" type="checkbox" name="reference_sources" value="characters" checked>
+          <span>キャラクター設定</span>
+        </label>
+        <label>
+          <input class="form-check-input" type="checkbox" name="reference_sources" value="world" checked>
+          <span>ワールド</span>
+        </label>
+        <label>
+          <input class="form-check-input" type="checkbox" name="reference_sources" value="feed">
+          <span>Feed</span>
+        </label>
+        <label>
+          <input class="form-check-input" type="checkbox" name="reference_sources" value="news">
+          <span>ニュース</span>
+        </label>
+        <label>
+          <input class="form-check-input" type="checkbox" name="reference_sources" value="short_stories">
+          <span>キャラクターのショートストーリー</span>
+        </label>
+      </fieldset>
+      <fieldset class="cinema-production-bgm-field">
+        <legend>動画BGM</legend>
+        <select class="form-select" id="cinemaBgmSelect" aria-label="動画BGM">
+          <option value="">BGMなし</option>
+        </select>
+        <select class="form-select" id="cinemaBgmVolumeSelect" aria-label="BGM音量">
+          <option value="0.3">音量 30%</option>
+          <option value="0.45" selected>音量 45%</option>
+          <option value="0.6">音量 60%</option>
+          <option value="0.8">音量 80%</option>
+        </select>
+        <label class="cinema-bgm-upload-button">
+          <input type="file" id="cinemaBgmUploadInput" accept="audio/*">
+          <span><i class="bi bi-music-note-beamed"></i> BGMをアップロード</span>
+        </label>
+      </fieldset>
+      <button class="btn btn-outline-dark" type="button" id="cinemaSuggestPremiseButton" data-production-field="novel">
         <i class="bi bi-stars"></i>
-        企画を自動提案
+        ノベルゲームを生成
+      </button>
+      <button class="btn btn-dark" type="button" id="cinemaCreateShortComicButton" data-production-field="comic" hidden>
+        <i class="bi bi-badge-cc"></i>
+        ショート漫画を生成
       </button>
     </form>
     <div class="cinema-production-result" id="cinemaProductionResult" hidden></div>

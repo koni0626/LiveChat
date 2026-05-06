@@ -5,6 +5,7 @@ import binascii
 import hashlib
 import os
 import re
+import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -15,6 +16,7 @@ from flask import current_app
 from ..extensions import db
 from ..models import (
     Asset,
+    ChatSession,
     Character,
     CharacterMemoryNote,
     CinemaNovel,
@@ -26,6 +28,7 @@ from ..models import (
     FeedPost,
     Project,
     World,
+    WorldNewsItem,
 )
 from ..utils import json_util
 from ..clients.image_ai_client import ImageAIClient
@@ -36,6 +39,15 @@ from .user_setting_service import UserSettingService
 
 class CinemaNovelService:
     VALID_STATUSES = {"draft", "building", "published", "archived"}
+    DEFAULT_REFERENCE_SOURCES = ("worldbuilding", "characters", "world")
+    VALID_REFERENCE_SOURCES = {
+        "worldbuilding",
+        "characters",
+        "world",
+        "feed",
+        "news",
+        "short_stories",
+    }
 
     def list_novels(self, project_id: int, *, include_unpublished: bool = False, mobile_only: bool = False):
         query = CinemaNovel.query.filter(
@@ -64,6 +76,1359 @@ class CinemaNovelService:
         db.session.add(novel)
         db.session.commit()
         return novel
+
+    def list_bgm_assets(self, project_id: int):
+        assets = self._asset_service.list_assets(project_id, asset_type="cinema_novel_bgm")
+        return [self._serialize_asset(asset.id) for asset in assets]
+
+    def upload_bgm_asset(self, project_id: int, user_id: int, upload_file):
+        if not upload_file:
+            raise ValueError("file is required")
+        asset = self._asset_service.create_asset(
+            project_id,
+            {
+                "asset_type": "cinema_novel_bgm",
+                "upload_file": upload_file,
+                "metadata_json": json_util.dumps(
+                    {
+                        "source": "cinema_novel_bgm_upload",
+                        "uploaded_by_user_id": user_id,
+                    }
+                ),
+            },
+        )
+        mime_type = str(asset.mime_type or "").split(";", 1)[0].strip().lower()
+        if not (mime_type.startswith("audio/") or mime_type == "application/ogg"):
+            self._asset_service.delete_asset(asset.id)
+            raise ValueError("audio file is required")
+        return self._serialize_asset(asset.id)
+
+    def export_powerpoint(self, novel_id: int):
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+
+        try:
+            from pptx import Presentation
+            from pptx.dml.color import RGBColor
+            from pptx.enum.shapes import MSO_SHAPE
+            from pptx.enum.text import PP_ALIGN
+            from pptx.util import Inches, Pt
+        except ImportError as exc:
+            raise RuntimeError("python-pptx is required to export PowerPoint files") from exc
+
+        from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+
+        chapters = self.list_chapters(novel.id)
+        storage_root = Path(current_app.config["STORAGE_ROOT"]).resolve()
+        export_dir = storage_root / "projects" / str(novel.project_id) / "exports" / "cinema_novels"
+        work_dir = export_dir / "_work" / f"novel_{novel.id}"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        work_dir.mkdir(parents=True, exist_ok=True)
+
+        prs = Presentation()
+        prs.slide_width = Inches(13.333)
+        prs.slide_height = Inches(7.5)
+        blank_layout = prs.slide_layouts[6]
+
+        def add_background(slide, image_path: str | None, key: str):
+            canvas_path = self._prepare_powerpoint_canvas(
+                image_path,
+                work_dir / f"{key}.jpg",
+                Image,
+                ImageOps,
+                ImageFilter,
+                ImageEnhance,
+            )
+            if canvas_path:
+                slide.shapes.add_picture(str(canvas_path), 0, 0, width=prs.slide_width, height=prs.slide_height)
+                return
+            bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, prs.slide_width, prs.slide_height)
+            bg.fill.solid()
+            bg.fill.fore_color.rgb = RGBColor(18, 22, 30)
+            bg.line.fill.background()
+
+        def add_bottom_dialog(slide, text: str, speaker: str = "", *, footer: str = ""):
+            overlay = slide.shapes.add_shape(
+                MSO_SHAPE.ROUNDED_RECTANGLE,
+                Inches(0.55),
+                Inches(5.28),
+                Inches(12.25),
+                Inches(1.72),
+            )
+            overlay.fill.solid()
+            overlay.fill.fore_color.rgb = RGBColor(8, 10, 16)
+            overlay.fill.transparency = 45
+            overlay.line.fill.background()
+
+            if speaker:
+                name_box = slide.shapes.add_shape(
+                    MSO_SHAPE.ROUNDED_RECTANGLE,
+                    Inches(0.8),
+                    Inches(5.02),
+                    Inches(2.45),
+                    Inches(0.44),
+                )
+                name_box.fill.solid()
+                name_box.fill.fore_color.rgb = RGBColor(38, 56, 92)
+                name_box.fill.transparency = 20
+                name_box.line.fill.background()
+                name_frame = name_box.text_frame
+                name_frame.clear()
+                name_frame.margin_left = Inches(0.12)
+                name_frame.margin_right = Inches(0.12)
+                paragraph = name_frame.paragraphs[0]
+                paragraph.alignment = PP_ALIGN.CENTER
+                run = paragraph.add_run()
+                run.text = speaker[:18]
+                run.font.name = "Yu Gothic"
+                run.font.size = Pt(13)
+                run.font.bold = True
+                run.font.color.rgb = RGBColor(255, 255, 255)
+
+            text_box = slide.shapes.add_textbox(Inches(0.86), Inches(5.52), Inches(11.72), Inches(1.08))
+            frame = text_box.text_frame
+            frame.clear()
+            frame.word_wrap = True
+            frame.margin_left = Inches(0.04)
+            frame.margin_right = Inches(0.04)
+            paragraph = frame.paragraphs[0]
+            paragraph.alignment = PP_ALIGN.LEFT
+            run = paragraph.add_run()
+            run.text = self._powerpoint_scene_text(text)
+            run.font.name = "Yu Gothic"
+            run.font.size = Pt(self._powerpoint_scene_font_size(text))
+            run.font.color.rgb = RGBColor(255, 255, 255)
+
+            if footer:
+                footer_box = slide.shapes.add_textbox(Inches(10.85), Inches(6.62), Inches(1.75), Inches(0.24))
+                footer_frame = footer_box.text_frame
+                footer_frame.clear()
+                footer_paragraph = footer_frame.paragraphs[0]
+                footer_paragraph.alignment = PP_ALIGN.RIGHT
+                footer_run = footer_paragraph.add_run()
+                footer_run.text = footer
+                footer_run.font.name = "Yu Gothic"
+                footer_run.font.size = Pt(8)
+                footer_run.font.color.rgb = RGBColor(188, 198, 215)
+
+        title_image = self._asset_file_path(novel.poster_asset_id or novel.cover_asset_id)
+        title_slide = prs.slides.add_slide(blank_layout)
+        add_background(title_slide, title_image, "title")
+        add_bottom_dialog(
+            title_slide,
+            "\n".join([part for part in [novel.title or "Untitled", novel.subtitle or novel.description or ""] if part]),
+            "",
+            footer="title",
+        )
+
+        for chapter in chapters:
+            scenes = self._load_json(chapter.scene_json, default=[])
+            if not isinstance(scenes, list):
+                scenes = []
+            chapter_fallback = self._asset_file_path(chapter.cover_asset_id) or title_image
+            for scene_index, scene in enumerate(scenes):
+                if not isinstance(scene, dict):
+                    continue
+                scene_text = str(scene.get("text") or "").strip()
+                if not scene_text:
+                    continue
+                slide = prs.slides.add_slide(blank_layout)
+                image_path = (
+                    self._asset_file_path(scene.get("still_asset_id"))
+                    or self._asset_file_path(scene.get("background_asset_id"))
+                    or chapter_fallback
+                )
+                add_background(slide, image_path, f"chapter_{chapter.id}_scene_{scene_index + 1}")
+                speaker = str(scene.get("speaker") or "").strip()
+                footer = f"{int(chapter.chapter_no or 0):02d}-{scene_index + 1:02d}"
+                add_bottom_dialog(slide, scene_text, speaker, footer=footer)
+
+        filename_base = self._safe_powerpoint_filename(novel.title or f"cinema_novel_{novel.id}")
+        filename = f"{filename_base}_{novel.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pptx"
+        output_path = export_dir / filename
+        prs.save(output_path)
+        self._set_powerpoint_shape_alpha(output_path, "080A10", 20000)
+        return str(output_path), filename
+
+    def export_short_video(self, novel_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+
+        from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+
+        chapters = self.list_chapters(novel.id)
+        storage_root = Path(current_app.config["STORAGE_ROOT"]).resolve()
+        export_dir = storage_root / "projects" / str(novel.project_id) / "exports" / "cinema_novels"
+        work_dir = export_dir / "_video_work" / f"novel_{novel.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        frames_dir = work_dir / "frames"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        frames_dir.mkdir(parents=True, exist_ok=True)
+
+        font_regular = self._load_video_font(ImageFont, size=42)
+        font_small = self._load_video_font(ImageFont, size=28)
+        font_title = self._load_video_font(ImageFont, size=54)
+        font_footer = self._load_video_font(ImageFont, size=22)
+        title_image = self._asset_file_path(novel.poster_asset_id or novel.cover_asset_id)
+        frame_paths = []
+        durations = []
+
+        def add_frame(image_path, text, *, speaker="", footer="", title=False, duration=3.0):
+            index = len(frame_paths) + 1
+            frame_path = frames_dir / f"frame_{index:04d}.png"
+            self._render_short_video_frame(
+                image_path,
+                frame_path,
+                text,
+                speaker=speaker,
+                footer=footer,
+                title=title,
+                Image=Image,
+                ImageDraw=ImageDraw,
+                ImageEnhance=ImageEnhance,
+                ImageFilter=ImageFilter,
+                ImageOps=ImageOps,
+                font_regular=font_regular,
+                font_small=font_small,
+                font_title=font_title,
+                font_footer=font_footer,
+            )
+            frame_paths.append(frame_path)
+            durations.append(duration)
+
+        add_frame(
+            title_image,
+            "\n".join([part for part in [novel.title or "Untitled", novel.subtitle or novel.description or ""] if part]),
+            footer="title",
+            title=True,
+            duration=3.2,
+        )
+
+        for chapter in chapters:
+            scenes = self._load_json(chapter.scene_json, default=[])
+            if not isinstance(scenes, list):
+                scenes = []
+            chapter_fallback = self._asset_file_path(chapter.cover_asset_id) or title_image
+            for scene_index, scene in enumerate(scenes):
+                if not isinstance(scene, dict):
+                    continue
+                scene_text = self._short_video_scene_text(str(scene.get("text") or ""))
+                if not scene_text:
+                    continue
+                image_path = (
+                    self._asset_file_path(scene.get("still_asset_id"))
+                    or self._asset_file_path(scene.get("background_asset_id"))
+                    or chapter_fallback
+                )
+                duration = 3.0 if len(scene_text) < 50 else 3.8
+                add_frame(
+                    image_path,
+                    scene_text,
+                    speaker=str(scene.get("speaker") or "").strip(),
+                    footer=f"{int(chapter.chapter_no or 0):02d}-{scene_index + 1:02d}",
+                    duration=duration,
+                )
+
+        if not frame_paths:
+            raise ValueError("no scenes were found for video export")
+
+        filename_base = self._safe_powerpoint_filename(novel.title or f"cinema_novel_{novel.id}")
+        filename = f"{filename_base}_{novel.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.mp4"
+        output_path = export_dir / filename
+        concat_path = work_dir / "concat.txt"
+        with concat_path.open("w", encoding="utf-8") as handle:
+            for frame_path, duration in zip(frame_paths, durations):
+                handle.write(f"file '{frame_path.as_posix()}'\n")
+                handle.write(f"duration {duration:.2f}\n")
+            handle.write(f"file '{frame_paths[-1].as_posix()}'\n")
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_path),
+            "-vf",
+            "fps=30,format=yuv420p",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "22",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+        result = subprocess.run(command, capture_output=True, text=True, cwd=str(Path(current_app.root_path).parent))
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or result.stdout or "ffmpeg failed").strip()[-1000:])
+        self._apply_bgm_to_video(output_path, novel.project_id, payload)
+        return str(output_path), filename
+
+    def export_comic_short_video(self, novel_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+
+        from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+
+        if not (novel.poster_asset_id or novel.cover_asset_id):
+            try:
+                self.generate_short_comic_thumbnail(novel.id, {})
+                novel = self.get_novel(novel_id)
+            except Exception:
+                current_app.logger.exception("failed to generate short comic thumbnail before video export")
+        production = self._load_json(novel.production_json, default={})
+        if not production.get("end_card_asset_id"):
+            try:
+                self.generate_short_comic_end_card(novel.id, {})
+                novel = self.get_novel(novel_id)
+                production = self._load_json(novel.production_json, default={})
+            except Exception:
+                current_app.logger.exception("failed to generate short comic end card before video export")
+
+        chapters = self.list_chapters(novel.id)
+        storage_root = Path(current_app.config["STORAGE_ROOT"]).resolve()
+        export_dir = storage_root / "projects" / str(novel.project_id) / "exports" / "cinema_novels"
+        work_dir = export_dir / "_comic_video_work" / f"novel_{novel.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        frames_dir = work_dir / "frames"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        frames_dir.mkdir(parents=True, exist_ok=True)
+
+        fonts = {
+            "headline": self._load_video_font(ImageFont, size=76),
+            "headline_small": self._load_video_font(ImageFont, size=58),
+            "label": self._load_video_font(ImageFont, size=32),
+            "footer": self._load_video_font(ImageFont, size=24),
+        }
+        title_image = self._asset_file_path(novel.poster_asset_id or novel.cover_asset_id)
+        frame_paths = []
+        durations = []
+
+        def add_panel(image_path, caption, *, label="", footer="", title=False, fade_in=False, duration=2.55):
+            frame_path = frames_dir / f"frame_{len(frame_paths) + 1:04d}.png"
+            self._render_comic_short_frame(
+                image_path,
+                frame_path,
+                caption,
+                label=label,
+                footer=footer,
+                title=title,
+                Image=Image,
+                ImageDraw=ImageDraw,
+                ImageEnhance=ImageEnhance,
+                ImageFilter=ImageFilter,
+                ImageOps=ImageOps,
+                fonts=fonts,
+            )
+            if fade_in:
+                fade_paths = self._short_video_frame_fade_in_paths(frame_path, Image, frame_count=9)
+                for fade_path in fade_paths:
+                    frame_paths.append(fade_path)
+                    durations.append(1 / 30)
+                frame_paths.append(frame_path)
+                durations.append(max(0.5, duration - (len(fade_paths) / 30)))
+            else:
+                frame_paths.append(frame_path)
+                durations.append(duration)
+
+        add_panel(
+            title_image,
+            novel.title or "Untitled",
+            label=novel.subtitle or novel.description or "short comic",
+            footer="title",
+            title=True,
+            fade_in=True,
+            duration=2.8,
+        )
+
+        for chapter in chapters:
+            scenes = self._load_json(chapter.scene_json, default=[])
+            if not isinstance(scenes, list):
+                scenes = []
+            chapter_fallback = self._asset_file_path(chapter.cover_asset_id) or title_image
+            for scene_index, scene in enumerate(scenes):
+                if not isinstance(scene, dict):
+                    continue
+                scene_text = str(scene.get("text") or "").strip()
+                caption = self._comic_panel_caption(scene_text)
+                if not caption:
+                    continue
+                image_path = (
+                    self._asset_file_path(scene.get("still_asset_id"))
+                    or self._asset_file_path(scene.get("background_asset_id"))
+                )
+                if not image_path:
+                    continue
+                add_panel(
+                    image_path,
+                    caption,
+                    label=str(scene.get("speaker") or f"SCENE {int(chapter.chapter_no or 0):02d}-{scene_index + 1:02d}").strip(),
+                    footer=f"{int(chapter.chapter_no or 0):02d}-{scene_index + 1:02d}",
+                    duration=2.45,
+                )
+
+        end_card_image = self._asset_file_path(production.get("end_card_asset_id"))
+        if end_card_image:
+            add_panel(
+                end_card_image,
+                "LAPLACE CITY",
+                label="END",
+                footer="end",
+                title=True,
+                fade_in=True,
+                duration=3.4,
+            )
+
+        if not frame_paths:
+            raise ValueError("no scenes were found for comic video export")
+
+        filename_base = self._safe_powerpoint_filename(novel.title or f"cinema_novel_{novel.id}")
+        filename = f"{filename_base}_comic_{novel.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.mp4"
+        output_path = export_dir / filename
+        concat_path = work_dir / "concat.txt"
+        with concat_path.open("w", encoding="utf-8") as handle:
+            for frame_path, duration in zip(frame_paths, durations):
+                handle.write(f"file '{frame_path.as_posix()}'\n")
+                handle.write(f"duration {duration:.2f}\n")
+            handle.write(f"file '{frame_paths[-1].as_posix()}'\n")
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_path),
+            "-vf",
+            "fps=30,format=yuv420p",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "21",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+        result = subprocess.run(command, capture_output=True, text=True, cwd=str(Path(current_app.root_path).parent))
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or result.stdout or "ffmpeg failed").strip()[-1000:])
+        self._apply_bgm_to_video(output_path, novel.project_id, payload)
+        return str(output_path), filename
+
+    def create_short_comic_novel(self, project_id: int, user_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        storyboard = self.generate_short_comic_storyboard(project_id, payload)
+        title = str(storyboard.get("title") or payload.get("title") or "ショート漫画").strip() or "ショート漫画"
+        subtitle = str(storyboard.get("logline") or "縦ショート漫画").strip()
+        panels = storyboard.get("panels") if isinstance(storyboard.get("panels"), list) else []
+        if not panels:
+            raise ValueError("short comic storyboard did not include panels")
+
+        novel = CinemaNovel(
+            project_id=project_id,
+            created_by_user_id=user_id,
+            title=title,
+            subtitle=subtitle[:255],
+            description=subtitle,
+            status=str(payload.get("status") or "draft").strip() or "draft",
+            mobile_visible=self._normalize_bool(payload.get("mobile_visible", True)),
+            mode="short_comic_video",
+            production_json=json_util.dumps(
+                {
+                    "source_input": payload,
+                    "storyboard": storyboard,
+                    "target_panel_count": storyboard.get("target_panel_count"),
+                    "actual_panel_count": len(panels),
+                }
+            ),
+        )
+        db.session.add(novel)
+        db.session.flush()
+
+        scenes = []
+        for index, panel in enumerate(panels):
+            if not isinstance(panel, dict):
+                continue
+            caption = self._normalize_short_comic_caption(panel.get("caption") or panel.get("text") or "")
+            if not caption:
+                continue
+            scenes.append(
+                {
+                    "speaker": str(panel.get("speaker") or "").strip(),
+                    "text": caption,
+                    "caption": caption,
+                    "tone": str(panel.get("tone") or "").strip(),
+                    "emotion": str(panel.get("emotion") or "").strip(),
+                    "shot": str(panel.get("shot") or "").strip(),
+                    "visual_focus": str(panel.get("visual_focus") or "").strip(),
+                    "image_prompt": str(panel.get("image_prompt") or "").strip(),
+                    "characters": panel.get("characters") if isinstance(panel.get("characters"), list) else [],
+                    "background_asset_id": None,
+                    "still_asset_id": None,
+                    "choice_list": [],
+                    "panel_index": index,
+                }
+            )
+        if not scenes:
+            raise ValueError("short comic storyboard did not include usable panels")
+
+        chapter = CinemaNovelChapter(
+            novel_id=novel.id,
+            chapter_no=1,
+            title="ショート漫画",
+            body_markdown="\n".join(f"{index + 1}. {scene['caption']}" for index, scene in enumerate(scenes)),
+            scene_json=json_util.dumps(scenes),
+            sort_order=0,
+        )
+        db.session.add(chapter)
+        db.session.commit()
+
+        if payload.get("generate_images", True):
+            self.generate_short_comic_thumbnail(novel.id, payload)
+            self.generate_short_comic_panel_images(novel.id, {"parallel": True, "overwrite": False})
+            self.generate_short_comic_end_card(novel.id, payload)
+        return novel
+
+    def generate_short_comic_thumbnail(self, novel_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        production = self._load_json(novel.production_json, default={})
+        storyboard = production.get("storyboard") if isinstance(production.get("storyboard"), dict) else {}
+        panels = storyboard.get("panels") if isinstance(storyboard.get("panels"), list) else []
+        first_panel = panels[0] if panels and isinstance(panels[0], dict) else {}
+        title = str(storyboard.get("title") or novel.title or "").strip()
+        logline = str(storyboard.get("logline") or novel.subtitle or novel.description or "").strip()
+        headline = self._normalize_short_comic_caption(title or logline or "ショート漫画")
+        source_input = production.get("source_input") if isinstance(production.get("source_input"), dict) else payload
+        main_character = self._main_character_name_from_payload(novel.project_id, source_input)
+        searchable = "\n".join(
+            [
+                title,
+                logline,
+                main_character,
+                " ".join(str(item) for item in first_panel.get("characters") or []),
+                str(first_panel.get("visual_focus") or ""),
+                str(first_panel.get("image_prompt") or ""),
+            ]
+        )
+        references = self._matching_character_references(novel.project_id, searchable, limit=3)
+        reference_paths, reference_asset_ids = self._resolve_reference_image_paths(
+            [item.get("base_asset_id") for item in references if item.get("base_asset_id")]
+        )
+        options = self._user_setting_service.apply_cinema_novel_image_generation_settings(payload.get("image_options") or payload)
+        options["size"] = "1024x1536" if bool(getattr(novel, "mobile_visible", True)) else "1536x1024"
+        options["quality"] = options.get("quality") or "medium"
+        options["model"] = options.get("model") or options.get("image_ai_model") or "gpt-image-2"
+        art_style = self._short_comic_art_style(source_input)
+        prompt = self._short_comic_thumbnail_prompt(novel, headline, first_panel, main_character=main_character, logline=logline, art_style=art_style)
+        asset = self._generate_cinema_asset(
+            project_id=novel.project_id,
+            asset_type="cinema_novel_comic_thumbnail",
+            file_prefix=f"short_comic_{novel.id}_thumbnail",
+            prompt=prompt,
+            image_options=options,
+            metadata={
+                "source": "short_comic_thumbnail",
+                "novel_id": novel.id,
+                "headline": headline,
+                "reference_asset_ids": reference_asset_ids,
+            },
+            reference_paths=reference_paths,
+        )
+        novel.cover_asset_id = asset.id
+        novel.poster_asset_id = asset.id
+        db.session.add(novel)
+        db.session.commit()
+        return {
+            "novel": self.serialize_novel(novel, include_chapters=True),
+            "asset": self._serialize_asset(asset.id),
+        }
+
+    def generate_short_comic_end_card(self, novel_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        production = self._load_json(novel.production_json, default={})
+        storyboard = production.get("storyboard") if isinstance(production.get("storyboard"), dict) else {}
+        source_input = production.get("source_input") if isinstance(production.get("source_input"), dict) else payload
+        panels = storyboard.get("panels") if isinstance(storyboard.get("panels"), list) else []
+        last_panel = panels[-1] if panels and isinstance(panels[-1], dict) else {}
+        main_character = self._main_character_name_from_payload(novel.project_id, source_input)
+        searchable = "\n".join(
+            [
+                str(storyboard.get("title") or novel.title or ""),
+                main_character,
+                " ".join(str(item) for item in last_panel.get("characters") or []),
+                str(last_panel.get("visual_focus") or ""),
+                str(last_panel.get("image_prompt") or ""),
+            ]
+        )
+        references = self._matching_character_references(novel.project_id, searchable, limit=3)
+        reference_paths, reference_asset_ids = self._resolve_reference_image_paths(
+            [item.get("base_asset_id") for item in references if item.get("base_asset_id")]
+        )
+        options = self._user_setting_service.apply_cinema_novel_image_generation_settings(payload.get("image_options") or payload)
+        options["size"] = "1024x1536" if bool(getattr(novel, "mobile_visible", True)) else "1536x1024"
+        options["quality"] = options.get("quality") or "medium"
+        options["model"] = options.get("model") or options.get("image_ai_model") or "gpt-image-2"
+        art_style = self._short_comic_art_style(source_input)
+        prompt = self._short_comic_end_card_prompt(novel, last_panel, main_character=main_character, art_style=art_style)
+        asset = self._generate_cinema_asset(
+            project_id=novel.project_id,
+            asset_type="cinema_novel_comic_end_card",
+            file_prefix=f"short_comic_{novel.id}_end_card",
+            prompt=prompt,
+            image_options=options,
+            metadata={
+                "source": "short_comic_end_card",
+                "novel_id": novel.id,
+                "reference_asset_ids": reference_asset_ids,
+            },
+            reference_paths=reference_paths,
+        )
+        production["end_card_asset_id"] = asset.id
+        novel.production_json = json_util.dumps(production)
+        db.session.add(novel)
+        db.session.commit()
+        return {
+            "novel": self.serialize_novel(novel, include_chapters=True),
+            "asset": self._serialize_asset(asset.id),
+        }
+
+    def generate_short_comic_storyboard(self, project_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        project = Project.query.get(project_id)
+        world = World.query.filter_by(project_id=project_id).first()
+        main_character = self._main_character_name_from_payload(project_id, payload)
+        genre = str(payload.get("genre") or "面白い").strip() or "面白い"
+        theme = str(payload.get("theme") or "").strip()
+        title = str(payload.get("title") or "").strip()
+        art_style = self._short_comic_art_style(payload)
+        prompt_visual_label = "manga thumbnail panel" if art_style == "anime" else "reference-style visual still"
+        is_photo_book = "写真集" in genre
+        genre_guidance = (
+            "ジャンルが写真集の場合: 起承転結の物語より、主人公の魅力を見せる短いビジュアルカット集にしてください。"
+            "各コマはダンス、歌唱、朝の挨拶、街歩き、ステージ照明、カフェ、振り向き、クローズアップ、全身ポーズ、"
+            "衣装違い、笑顔、少し照れた表情など、同じ構図の繰り返しを避けた多彩なシーンにする。"
+            "caption は『おはよう』『歌声が光る』『踊る夜』のように短く、サムネ文字として映える言葉にする。"
+            "image_prompt は人物写真集・MVスチル・アイドル/モデル撮影のような構図、ポーズ、光、背景を具体的に書く。"
+            "ただし露骨な性的表現や過度な露出にはしない。"
+        ) if is_photo_book else (
+            "ジャンルに合わせて、短い物語として続きが気になる展開、変化、オチ、余韻を作ってください。"
+        )
+        try:
+            target_panel_count = int(payload.get("target_panel_count") or 20)
+        except (TypeError, ValueError):
+            target_panel_count = 20
+        target_panel_count = max(6, min(40, target_panel_count))
+        reference_sources = self._reference_sources(payload)
+        character_context = (
+            self._registered_character_context(project_id, main_character=main_character)
+            if self._reference_source_enabled(reference_sources, "characters")
+            else ""
+        )
+        reference_context = self._production_reference_context(
+            project_id,
+            reference_sources=reference_sources,
+            main_character=main_character,
+            project=project,
+            world=world,
+            include_characters=False,
+        )
+        prompt = "\n".join(
+            [
+                "Return only JSON.",
+                "縦ショート漫画動画用の絵コンテを日本語で作ってください。",
+                "これは小説ではなく、1コマ1画像で流すショート動画です。",
+                f"Hard constraint: 指定主人公は「{main_character or '未指定'}」です。未指定でない場合、title/logline/panels は必ずこの主人公を中心に作ること。",
+                f"Hard constraint: main_character が「{main_character or ''}」なら、caption または image_prompt または characters に「{main_character or ''}」を頻繁に入れること。",
+                "Hard constraint: 登録キャラクター文脈に別キャラがいても、指定主人公を別キャラへ置き換えないこと。",
+                f"目安コマ数: {target_panel_count}。物語として自然なら±2コマまで許可。",
+                genre_guidance,
+                "各コマの caption は日本語20文字以内。画像内にそのまま大きく入れるので短く、強く、誤字なく。",
+                (
+                    f"各コマの image_prompt は gpt-image-2 用。スマホ版なら9:16 vertical {prompt_visual_label}、"
+                    f"スマホ版でないなら16:9 horizontal {prompt_visual_label}。no speech bubbles except the exact headline text."
+                ),
+                "image_prompt には caption を画像内テキストとして正確に入れる指示を含める。",
+                "シリアス、コメディ、アクション、感動などの tone をコマごとに明示し、構図と表情に反映する。",
+                "複数キャラ可。ただし各コマは基本1〜2人、必要時のみ3人。",
+                "登録キャラクターを使う場合、characters に名前を入れる。",
+                f"Art style: {art_style}.",
+                "Art style が reference_image の場合、漫画化・アニメ化せず、登録キャラクターの基準画像の雰囲気・絵柄・衣装感・レンダリングを最優先する。",
+                "Art style が anime の場合、鮮やかで読みやすい現代アニメ調・漫画サムネ調にする。",
+                "Main character が指定されている場合、その人物を必ず主人公にしてください。別の主人公へ置き換えないでください。",
+                "主人公は冒頭、転換点、ラストに必ず登場させ、可能なら多くのコマの characters に含めてください。",
+                "Use only the enabled reference sections below as story material. Do not invent facts that contradict them.",
+                "Required JSON shape:",
+                '{"title": "...", "logline": "...", "target_panel_count": 20, "panels": [{"caption": "...", "tone": "comedy", "emotion": "...", "shot": "close-up", "visual_focus": "...", "characters": ["..."], "image_prompt": "..."}]}',
+                "",
+                f"Requested title: {title}",
+                f"Genre: {genre}",
+                f"Main character: {main_character or 'AIが選定'}",
+                f"Theme/request: {theme}",
+                f"Output aspect: {'9:16 vertical smartphone panel' if self._normalize_bool(payload.get('mobile_visible', True)) else '16:9 horizontal desktop panel'}",
+                "",
+                "Enabled reference sources:",
+                ", ".join(reference_sources),
+                "",
+                "Reference material:",
+                reference_context or "追加参照なし",
+                "",
+                "Registered characters:",
+                character_context or "なし",
+            ]
+        )
+        settings = self._user_setting_service.apply_cinema_novel_text_generation_settings(payload.get("text_options") or {})
+        result = self._text_ai_client.extract_state_json(
+            prompt,
+            model=settings.get("model"),
+        )
+        parsed = result.get("parsed_json")
+        if not isinstance(parsed, dict):
+            raise RuntimeError("short comic storyboard response was not valid JSON")
+        panels = parsed.get("panels")
+        if not isinstance(panels, list) or not panels:
+            raise RuntimeError("short comic storyboard did not include panels")
+        if main_character:
+            for key in ("title", "logline"):
+                if isinstance(parsed.get(key), str):
+                    parsed[key] = parsed[key].replace("??", main_character).replace("？？", main_character)
+            for panel in panels:
+                if not isinstance(panel, dict):
+                    continue
+                for key in ("caption", "visual_focus", "image_prompt"):
+                    if isinstance(panel.get(key), str):
+                        panel[key] = panel[key].replace("??", main_character).replace("？？", main_character)
+                characters = panel.get("characters") if isinstance(panel.get("characters"), list) else []
+                characters = [main_character if str(item).strip() in {"??", "？？", ""} else str(item) for item in characters]
+                if main_character not in characters:
+                    characters = [main_character] + characters[:2]
+                panel["characters"] = characters
+                image_prompt = str(panel.get("image_prompt") or "")
+                if main_character not in image_prompt:
+                    panel["image_prompt"] = f"Main protagonist {main_character}. {image_prompt}".strip()
+        parsed["target_panel_count"] = target_panel_count
+        parsed["model"] = result.get("model")
+        parsed["usage"] = result.get("usage")
+        return parsed
+
+    def generate_short_comic_panel_images(self, novel_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        chapters = self.list_chapters(novel.id)
+        chapter = chapters[0] if chapters else None
+        if not chapter:
+            return None
+        scenes = self._load_json(chapter.scene_json, default=[])
+        if not isinstance(scenes, list):
+            return None
+        overwrite = bool(payload.get("overwrite"))
+        options = self._user_setting_service.apply_cinema_novel_image_generation_settings(payload.get("image_options") or payload)
+        options["size"] = "1024x1536" if bool(getattr(novel, "mobile_visible", True)) else "1536x1024"
+        options["quality"] = options.get("quality") or "medium"
+        options["model"] = options.get("model") or options.get("image_ai_model") or "gpt-image-2"
+        production = self._load_json(novel.production_json, default={})
+        source_input = production.get("source_input") if isinstance(production.get("source_input"), dict) else {}
+        art_style = self._short_comic_art_style(source_input)
+        image_jobs = []
+        for scene_index, scene in enumerate(scenes):
+            if not isinstance(scene, dict):
+                continue
+            if scene.get("still_asset_id") and not overwrite:
+                continue
+            caption = self._normalize_short_comic_caption(scene.get("caption") or scene.get("text") or "")
+            if not caption:
+                continue
+            searchable = "\n".join(
+                [
+                    caption,
+                    str(scene.get("visual_focus") or ""),
+                    str(scene.get("image_prompt") or ""),
+                    " ".join(str(item) for item in scene.get("characters") or []),
+                ]
+            )
+            references = self._matching_character_references(novel.project_id, searchable, limit=3)
+            reference_paths, reference_asset_ids = self._resolve_reference_image_paths(
+                [item.get("base_asset_id") for item in references if item.get("base_asset_id")]
+            )
+            prompt = self._short_comic_image_prompt(novel, scene, caption, art_style=art_style)
+            image_jobs.append(
+                {
+                    "scene_index": scene_index,
+                    "project_id": novel.project_id,
+                    "asset_type": "cinema_novel_comic_panel",
+                    "file_prefix": f"short_comic_{novel.id}_panel_{scene_index + 1}",
+                    "prompt": prompt,
+                    "image_options": options,
+                    "reference_paths": reference_paths,
+                    "reference_asset_ids": reference_asset_ids,
+                    "metadata": {
+                        "source": "short_comic_panel",
+                        "novel_id": novel.id,
+                        "chapter_id": chapter.id,
+                        "scene_index": scene_index,
+                        "caption": caption,
+                        "reference_asset_ids": reference_asset_ids,
+                    },
+                }
+            )
+
+        created_assets = []
+        failed_assets = []
+        for job, result, error in self._generate_cinema_asset_jobs(image_jobs, parallel=bool(payload.get("parallel", True))):
+            if error or not result:
+                failed_assets.append({"scene_index": job.get("scene_index"), "error": error or "image generation failed"})
+                continue
+            asset = self._create_cinema_asset_from_result(
+                project_id=job["project_id"],
+                asset_type=job["asset_type"],
+                file_prefix=job["file_prefix"],
+                image_options=job["image_options"],
+                metadata=job["metadata"],
+                result=result,
+            )
+            scenes[job["scene_index"]]["still_asset_id"] = asset.id
+            created_assets.append(self._serialize_asset(asset.id))
+        chapter.scene_json = json_util.dumps(scenes)
+        db.session.add(chapter)
+        db.session.commit()
+        return {
+            "novel": self.serialize_novel(novel, include_chapters=True),
+            "chapter": self.serialize_chapter(chapter),
+            "assets": created_assets,
+            "failed_assets": failed_assets,
+        }
+
+    def _asset_file_path(self, asset_id: int | None):
+        if not asset_id:
+            return None
+        asset = Asset.query.get(asset_id)
+        if not asset or getattr(asset, "deleted_at", None) or not asset.file_path:
+            return None
+        path = Path(asset.file_path)
+        return str(path) if path.exists() else None
+
+    def _prepare_powerpoint_canvas(self, image_path, output_path, Image, ImageOps, ImageFilter, ImageEnhance):
+        if not image_path:
+            return None
+        try:
+            source = ImageOps.exif_transpose(Image.open(image_path)).convert("RGB")
+        except Exception:
+            return None
+
+        target_size = (1920, 1080)
+        ratio = target_size[0] / target_size[1]
+        source_ratio = source.width / source.height if source.height else ratio
+        if source_ratio > ratio:
+            crop_width = int(source.height * ratio)
+            left = max(0, (source.width - crop_width) // 2)
+            crop_box = (left, 0, left + crop_width, source.height)
+        else:
+            crop_height = int(source.width / ratio) if source.width else source.height
+            top = max(0, (source.height - crop_height) // 2)
+            crop_box = (0, top, source.width, top + crop_height)
+
+        background = source.crop(crop_box).resize(target_size, Image.Resampling.LANCZOS)
+        background = background.filter(ImageFilter.GaussianBlur(radius=22))
+        background = ImageEnhance.Brightness(background).enhance(0.55)
+        foreground = ImageOps.contain(source, target_size, Image.Resampling.LANCZOS)
+        canvas = background.copy()
+        canvas.paste(foreground, ((target_size[0] - foreground.width) // 2, (target_size[1] - foreground.height) // 2))
+        canvas.save(output_path, "JPEG", quality=92, optimize=True)
+        return output_path
+
+    def _powerpoint_scene_text(self, text: str) -> str:
+        text = re.sub(r"\s+", " ", str(text or "")).strip()
+        if len(text) <= 260:
+            return text
+        return text[:257].rstrip() + "..."
+
+    def _powerpoint_scene_font_size(self, text: str) -> int:
+        length = len(str(text or ""))
+        if length > 220:
+            return 15
+        if length > 160:
+            return 17
+        return 19
+
+    def _safe_powerpoint_filename(self, value: str) -> str:
+        safe = re.sub(r"[\\/:*?\"<>|\s]+", "_", str(value or "").strip(), flags=re.UNICODE).strip("._")
+        return safe[:80] or "cinema_novel"
+
+    def _load_video_font(self, ImageFont, *, size: int):
+        candidates = [
+            Path("C:/Windows/Fonts/YuGothM.ttc"),
+            Path("C:/Windows/Fonts/YuGothR.ttc"),
+            Path("C:/Windows/Fonts/meiryo.ttc"),
+            Path("C:/Windows/Fonts/msgothic.ttc"),
+        ]
+        for path in candidates:
+            if path.exists():
+                try:
+                    return ImageFont.truetype(str(path), size=size)
+                except Exception:
+                    continue
+        return ImageFont.load_default()
+
+    def _render_short_video_frame(
+        self,
+        image_path,
+        output_path,
+        text,
+        *,
+        speaker="",
+        footer="",
+        title=False,
+        Image,
+        ImageDraw,
+        ImageEnhance,
+        ImageFilter,
+        ImageOps,
+        font_regular,
+        font_small,
+        font_title,
+        font_footer,
+    ):
+        target_size = (1080, 1920)
+        try:
+            source = ImageOps.exif_transpose(Image.open(image_path)).convert("RGB") if image_path else None
+        except Exception:
+            source = None
+
+        if source:
+            ratio = target_size[0] / target_size[1]
+            source_ratio = source.width / source.height if source.height else ratio
+            if source_ratio > ratio:
+                crop_width = int(source.height * ratio)
+                left = max(0, (source.width - crop_width) // 2)
+                crop_box = (left, 0, left + crop_width, source.height)
+            else:
+                crop_height = int(source.width / ratio) if source.width else source.height
+                top = max(0, (source.height - crop_height) // 2)
+                crop_box = (0, top, source.width, top + crop_height)
+            background = source.crop(crop_box).resize(target_size, Image.Resampling.LANCZOS)
+            background = background.filter(ImageFilter.GaussianBlur(radius=26))
+            background = ImageEnhance.Brightness(background).enhance(0.62)
+            foreground = ImageOps.contain(source, (1080, 1440), Image.Resampling.LANCZOS)
+            canvas = background.copy()
+            canvas.paste(foreground, ((target_size[0] - foreground.width) // 2, 70))
+        else:
+            canvas = Image.new("RGB", target_size, (18, 22, 30))
+
+        overlay = Image.new("RGBA", target_size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        box = (64, 1310 if not title else 1260, 1016, 1782)
+        draw.rounded_rectangle(box, radius=34, fill=(8, 10, 16, 170))
+        if speaker:
+            draw.rounded_rectangle((92, box[1] - 50, 380, box[1] + 20), radius=20, fill=(38, 56, 92, 210))
+            draw.text((236, box[1] - 36), speaker[:16], font=font_small, fill=(255, 255, 255, 255), anchor="ma")
+
+        text_font = font_title if title else font_regular
+        lines = self._wrap_video_text(text, draw, text_font, max_width=850)
+        line_height = 66 if title else 58
+        total_height = len(lines) * line_height
+        y = box[1] + max(36, ((box[3] - box[1]) - total_height) // 2)
+        for line in lines:
+            draw.text((target_size[0] // 2, y), line, font=text_font, fill=(255, 255, 255, 255), anchor="ma")
+            y += line_height
+        if footer:
+            draw.text((970, 1810), footer, font=font_footer, fill=(215, 222, 235, 230), anchor="ra")
+
+        canvas = Image.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB")
+        canvas.save(output_path, "PNG")
+
+    def _render_comic_short_frame(
+        self,
+        image_path,
+        output_path,
+        caption,
+        *,
+        label="",
+        footer="",
+        title=False,
+        Image,
+        ImageDraw,
+        ImageEnhance,
+        ImageFilter,
+        ImageOps,
+        fonts,
+    ):
+        target_size = (1080, 1920)
+        try:
+            source = ImageOps.exif_transpose(Image.open(image_path)).convert("RGB") if image_path else None
+        except Exception:
+            source = None
+
+        if source:
+            ratio = target_size[0] / target_size[1]
+            source_ratio = source.width / source.height if source.height else ratio
+            if source_ratio > ratio:
+                crop_width = int(source.height * ratio)
+                left = max(0, (source.width - crop_width) // 2)
+                crop_box = (left, 0, left + crop_width, source.height)
+            else:
+                crop_height = int(source.width / ratio) if source.width else source.height
+                top = max(0, (source.height - crop_height) // 2)
+                crop_box = (0, top, source.width, top + crop_height)
+            background = source.crop(crop_box).resize(target_size, Image.Resampling.LANCZOS)
+            background = background.filter(ImageFilter.GaussianBlur(radius=24))
+            background = ImageEnhance.Brightness(background).enhance(0.45)
+            foreground = ImageOps.contain(source, target_size, Image.Resampling.LANCZOS)
+            canvas = background.copy()
+            canvas.paste(foreground, ((target_size[0] - foreground.width) // 2, (target_size[1] - foreground.height) // 2))
+            canvas = ImageEnhance.Contrast(canvas).enhance(1.05)
+            canvas = ImageEnhance.Color(canvas).enhance(1.06)
+        else:
+            canvas = Image.new("RGB", target_size, (18, 22, 30))
+        canvas.save(output_path, "PNG")
+
+    def _short_video_frame_fade_in_paths(self, frame_path: Path, Image, *, frame_count: int = 9):
+        source = Image.open(frame_path).convert("RGB")
+        fade_dir = frame_path.parent / f"{frame_path.stem}_fade"
+        fade_dir.mkdir(parents=True, exist_ok=True)
+        fade_paths = []
+        black = Image.new("RGB", source.size, (0, 0, 0))
+        count = max(2, int(frame_count))
+        for index in range(count - 1):
+            alpha = index / (count - 1)
+            frame = Image.blend(black, source, alpha)
+            path = fade_dir / f"{frame_path.stem}_fade_{index + 1:02d}.png"
+            frame.save(path, "PNG")
+            fade_paths.append(path)
+        return fade_paths
+
+    def _wrap_video_text(self, text: str, draw, font, *, max_width: int):
+        text = re.sub(r"\s+", " ", str(text or "")).strip()
+        if not text:
+            return []
+        lines = []
+        current = ""
+        for char in text:
+            candidate = current + char
+            if draw.textlength(candidate, font=font) <= max_width or not current:
+                current = candidate
+            else:
+                lines.append(current)
+                current = char
+        if current:
+            lines.append(current)
+        return lines[:5]
+
+    def _short_video_scene_text(self, text: str) -> str:
+        text = re.sub(r"\s+", " ", str(text or "")).strip()
+        limit = 74
+        if len(text) <= limit:
+            return text
+        end = max(text.rfind("。", 0, limit), text.rfind("、", 0, limit), text.rfind("！", 0, limit), text.rfind("？", 0, limit))
+        if end >= 36:
+            value = text[: end + 1].rstrip()
+            return value if value.endswith(("。", "！", "？")) else value + "..."
+        return text[: limit - 3].rstrip() + "..."
+
+    def _comic_panel_caption(self, text: str) -> str:
+        text = re.sub(r"\s+", " ", str(text or "")).strip(" 「」")
+        if not text:
+            return ""
+        subject_match = re.match(r"^([ぁ-んァ-ン一-龥A-Za-z0-9ー]{1,8})が", text)
+        subject = subject_match.group(1) if subject_match else ""
+        if subject and "受付" in text and ("着いた" in text or "到着" in text):
+            return f"{subject}、受付で異変。"
+        if subject and "笑" in text and ("浮" in text or "重力" in text):
+            return f"{subject}、笑って浮く。"
+        if "会議" in text and ("椅子" in text or "浮" in text):
+            return "会議室、全員ふわふわ。"
+        if "ベル" in text and ("鳴" in text or "浮" in text):
+            return "ベルが不穏に鳴る。"
+        if "禁止" in text and "笑" in text:
+            return "笑ったらアウト。"
+        for separator in ("。", "！", "？"):
+            index = text.find(separator)
+            if 8 <= index <= 24:
+                text = text[: index + 1]
+                break
+        replacements = [
+            ("という", "って"),
+            ("していた", "した"),
+            ("している", "してる"),
+            ("だった", "だ"),
+        ]
+        for before, after in replacements:
+            text = text.replace(before, after)
+        limit = 22
+        if len(text) <= limit:
+            return text
+        end = max(text.rfind("、", 0, limit), text.rfind("。", 0, limit), text.rfind("！", 0, limit), text.rfind("？", 0, limit))
+        if end >= 10:
+            return text[:end].rstrip("、。！？") + "..."
+        return text[: limit - 3].rstrip() + "..."
+
+    def _normalize_short_comic_caption(self, text: str) -> str:
+        text = re.sub(r"\s+", " ", str(text or "")).strip(" 「」")
+        if len(text) <= 24:
+            return text
+        end = max(text.rfind("、", 0, 24), text.rfind("。", 0, 24), text.rfind("！", 0, 24), text.rfind("？", 0, 24))
+        if end >= 10:
+            return text[: end + 1].rstrip()
+        return text[:21].rstrip() + "..."
+
+    def _main_character_name_from_payload(self, project_id: int, payload: dict) -> str:
+        raw_name = str(payload.get("main_character") or "").strip()
+        if raw_name:
+            return raw_name
+        try:
+            character_id = int(payload.get("main_character_id") or 0)
+        except (TypeError, ValueError):
+            character_id = 0
+        if character_id:
+            character = Character.query.filter(
+                Character.id == character_id,
+                Character.project_id == project_id,
+                Character.deleted_at.is_(None),
+            ).first()
+            if character:
+                return str(character.name or character.nickname or "").strip()
+        return ""
+
+    def _short_comic_image_prompt(self, novel, scene: dict, caption: str, *, art_style: str = "reference_image") -> str:
+        tone = str(scene.get("tone") or "").strip() or "dramatic"
+        emotion = str(scene.get("emotion") or "").strip()
+        shot = str(scene.get("shot") or "").strip() or "thumbnail composition"
+        visual_focus = str(scene.get("visual_focus") or "").strip()
+        base_prompt = str(scene.get("image_prompt") or "").strip()
+        characters = "、".join(str(item) for item in scene.get("characters") or [] if str(item).strip())
+        is_mobile = bool(getattr(novel, "mobile_visible", True))
+        if art_style == "anime":
+            aspect_instruction = (
+                "9:16 vertical smartphone manga panel. Keep the full composition inside a tall phone frame; do not crop important faces, bodies, props, or headline text."
+                if is_mobile
+                else "16:9 horizontal desktop manga panel. Use a wide cinematic composition; keep the full composition inside the frame and do not crop important faces, props, or headline text."
+            )
+            composition_instruction = "Use an eye-catching manga thumbnail composition, high readability, cinematic lighting, and clear character acting."
+            headline_instruction = "The headline should be bold, clean Japanese lettering with strong contrast, like a viral short manga thumbnail."
+        else:
+            aspect_instruction = (
+                "9:16 vertical smartphone visual still in the exact reference-image style. Keep the full composition inside a tall phone frame; do not crop important faces, bodies, props, or headline text."
+                if is_mobile
+                else "16:9 horizontal desktop visual still in the exact reference-image style. Use a wide cinematic composition; keep the full composition inside the frame and do not crop important faces, props, or headline text."
+            )
+            composition_instruction = "Use a dramatic social-video still composition while preserving the reference image rendering style. Do not convert the character into anime, manga, cel shading, comic line art, chibi, or a different illustration style."
+            headline_instruction = "The headline should be bold, clean Japanese lettering with strong contrast, but the character/background art must remain in the reference-image style."
+        style_instruction = self._short_comic_art_style_instruction(art_style)
+        return "\n".join(
+            [
+                f"Create one finished {aspect_instruction}",
+                style_instruction,
+                composition_instruction,
+                f"Novel title: {novel.title or ''}",
+                f"Characters in this panel: {characters or 'use the scene context'}",
+                f"Tone: {tone}",
+                f"Emotion: {emotion}",
+                f"Shot/composition: {shot}",
+                f"Visual focus: {visual_focus}",
+                "",
+                "Text rendering requirement:",
+                f"Add this exact Japanese headline text inside the image, large and readable: 「{caption}」",
+                headline_instruction,
+                "Do not add any other text, gibberish, watermark, logo, speech bubble text, UI text, or extra captions.",
+                "Keep enough contrast behind the headline using a simple dark translucent band or outlined letters if needed.",
+                "",
+                "Scene prompt:",
+                base_prompt or visual_focus or caption,
+            ]
+        )
+
+    def _short_comic_thumbnail_prompt(self, novel, headline: str, panel: dict, *, main_character: str = "", logline: str = "", art_style: str = "reference_image") -> str:
+        is_mobile = bool(getattr(novel, "mobile_visible", True))
+        aspect_instruction = (
+            "9:16 vertical smartphone thumbnail"
+            if is_mobile
+            else "16:9 horizontal desktop thumbnail"
+        )
+        visual_focus = str(panel.get("visual_focus") or panel.get("image_prompt") or logline or "").strip()
+        characters = "、".join(str(item) for item in panel.get("characters") or [] if str(item).strip())
+        if main_character and main_character not in characters:
+            characters = "、".join([main_character, characters]).strip("、")
+        style_instruction = self._short_comic_art_style_instruction(art_style)
+        if art_style == "anime":
+            series_label = "short manga video series"
+            design_instruction = "Use bold manga thumbnail design, dramatic composition, clear focal character, strong contrast, and polished lighting."
+        else:
+            series_label = "short visual video series"
+            design_instruction = "Make it clickable with dramatic composition, clear focal character, strong contrast, and polished lighting, while preserving the exact reference-image rendering style. Do not convert the art into anime, manga, cel shading, or comic line art."
+        return "\n".join(
+            [
+                f"Create a finished {aspect_instruction} for a {series_label}.",
+                "This is the standalone opening thumbnail, not panel 1.",
+                style_instruction,
+                "Make it more iconic, poster-like, and clickable than an ordinary story panel.",
+                design_instruction,
+                f"Novel title: {novel.title or ''}",
+                f"Main/visible characters: {characters or main_character or 'use the story context'}",
+                f"Story hook: {logline}",
+                f"Visual focus: {visual_focus}",
+                "",
+                "Text rendering requirement:",
+                f"Add this exact Japanese headline text inside the image, large and readable: 「{headline}」",
+                "Use clean bold Japanese lettering. Do not add any other text, gibberish, watermark, logo, speech bubbles, UI text, or extra captions.",
+                "Keep all important faces, props, and headline text fully inside the frame.",
+            ]
+        )
+
+    def _short_comic_end_card_prompt(self, novel, panel: dict, *, main_character: str = "", art_style: str = "reference_image") -> str:
+        is_mobile = bool(getattr(novel, "mobile_visible", True))
+        aspect_instruction = (
+            "9:16 vertical smartphone end card"
+            if is_mobile
+            else "16:9 horizontal desktop end card"
+        )
+        visual_focus = str(panel.get("visual_focus") or panel.get("image_prompt") or "").strip()
+        characters = "、".join(str(item) for item in panel.get("characters") or [] if str(item).strip())
+        if main_character and main_character not in characters:
+            characters = "、".join([main_character, characters]).strip("、")
+        style_instruction = self._short_comic_art_style_instruction(art_style)
+        finish_instruction = (
+            "Use dramatic lighting, confident pose, strong silhouette, and a premium cinematic anime finish."
+            if art_style == "anime"
+            else "Use dramatic lighting, confident pose, strong silhouette, and a premium cinematic finish while preserving the exact reference-image rendering style. Do not convert the art into anime, manga, cel shading, or comic line art."
+        )
+        return "\n".join(
+            [
+                f"Create a finished {aspect_instruction} for the final frame of a short visual video.",
+                "This is an end card, not a story panel.",
+                style_instruction,
+                "Make the main protagonist look extremely cool, heroic, iconic, and poster-like.",
+                finish_instruction,
+                f"Novel title: {novel.title or ''}",
+                f"Main/visible characters: {characters or main_character or 'use the story context'}",
+                f"Story context: {visual_focus}",
+                "",
+                "Text rendering requirement:",
+                'Add exact logo text: "LAPLACE CITY"',
+                'Add small text below or nearby: "END"',
+                "Do not add any other text, gibberish, watermark, logo, speech bubbles, UI text, or extra captions.",
+                "Keep all important faces, props, LAPLACE CITY, and END fully inside the frame.",
+            ]
+        )
+
+    def _short_comic_art_style(self, payload: dict | None) -> str:
+        value = str((payload or {}).get("short_comic_art_style") or "reference_image").strip().lower()
+        return "anime" if value in {"anime", "animation", "アニメ調"} else "reference_image"
+
+    def _short_comic_art_style_instruction(self, art_style: str) -> str:
+        if art_style == "anime":
+            return "Art style: vivid modern anime and manga thumbnail style, clean cel shading, expressive faces, readable shapes, polished commercial animation look."
+        return "Art style: follow the attached/reference character images as the primary visual standard. Preserve their exact rendering style, medium, texture, line/paint treatment, costume impression, facial identity, color mood, and rendering taste. Do not anime-ify, manga-ify, cel-shade, chibi-fy, or redesign the character."
+
+    def _set_powerpoint_shape_alpha(self, pptx_path: Path, color_hex: str, alpha_value: int):
+        from zipfile import ZIP_DEFLATED, ZipFile
+
+        source = Path(pptx_path)
+        temp_path = source.with_suffix(".tmp.pptx")
+        color_hex = str(color_hex or "").upper()
+        alpha_value = max(0, min(100000, int(alpha_value)))
+        target = f'<a:srgbClr val="{color_hex}"/>'
+        replacement = f'<a:srgbClr val="{color_hex}"><a:alpha val="{alpha_value}"/></a:srgbClr>'
+
+        with ZipFile(source, "r") as zin, ZipFile(temp_path, "w", ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename.startswith("ppt/slides/slide") and item.filename.endswith(".xml"):
+                    text = data.decode("utf-8")
+                    text = text.replace(target, replacement)
+                    data = text.encode("utf-8")
+                zout.writestr(item, data)
+        os.replace(temp_path, source)
+
+    def _apply_bgm_to_video(self, video_path: Path, project_id: int, payload: dict):
+        bgm_asset_id = int(payload.get("bgm_asset_id") or 0)
+        if not bgm_asset_id:
+            return
+        asset = self._asset_service.get_asset(bgm_asset_id)
+        if not asset or int(asset.project_id or 0) != int(project_id):
+            raise ValueError("selected BGM was not found")
+        if asset.asset_type != "cinema_novel_bgm":
+            raise ValueError("selected asset is not a BGM file")
+        audio_path = Path(asset.file_path)
+        if not audio_path.exists():
+            raise ValueError("selected BGM file was not found")
+        try:
+            volume = float(payload.get("bgm_volume") or 0.45)
+        except (TypeError, ValueError):
+            volume = 0.45
+        volume = max(0.0, min(1.0, volume))
+        video_duration = self._probe_media_duration(video_path)
+        audio_filter = f"volume={volume:.3f}"
+        if video_duration and video_duration > 2.5:
+            fade_start = max(0.0, video_duration - 2.0)
+            audio_filter = f"{audio_filter},afade=t=out:st={fade_start:.2f}:d=2"
+        mixed_path = video_path.with_name(f"{video_path.stem}_bgm{video_path.suffix}")
+        command = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video_path),
+            "-stream_loop",
+            "-1",
+            "-i",
+            str(audio_path),
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "160k",
+            "-filter:a",
+            audio_filter,
+            "-shortest",
+            "-movflags",
+            "+faststart",
+            str(mixed_path),
+        ]
+        result = subprocess.run(command, capture_output=True, text=True, cwd=str(Path(current_app.root_path).parent))
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or result.stdout or "ffmpeg audio mix failed").strip()[-1000:])
+        os.replace(mixed_path, video_path)
+
+    def _probe_media_duration(self, media_path: Path) -> float | None:
+        command = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(media_path),
+        ]
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, cwd=str(Path(current_app.root_path).parent))
+            if result.returncode != 0:
+                return None
+            return float(str(result.stdout or "").strip())
+        except Exception:
+            return None
 
     def _apply_mobile_novel_image_options(self, novel, options: dict) -> dict:
         options = dict(options or {})
@@ -590,7 +1955,22 @@ class CinemaNovelService:
         chapter_count = int(payload.get("chapter_count") or 5)
         chapter_count = max(3, min(12, chapter_count))
         chapter_target_chars = int(payload.get("chapter_target_chars") or settings.get("chapter_target_chars") or 3500)
-        registered_character_context = self._registered_character_context(project_id, main_character=main_character)
+        project = Project.query.get(project_id)
+        world = World.query.filter_by(project_id=project_id).first()
+        reference_sources = self._reference_sources(payload)
+        registered_character_context = (
+            self._registered_character_context(project_id, main_character=main_character)
+            if self._reference_source_enabled(reference_sources, "characters")
+            else ""
+        )
+        reference_context = self._production_reference_context(
+            project_id,
+            reference_sources=reference_sources,
+            main_character=main_character,
+            project=project,
+            world=world,
+            include_characters=False,
+        )
         prompt = "\n".join(
             [
                 "日本語で、ノベル再生用の事前生成ノベルゲーム作品の制作設計書を作成してください。",
@@ -601,6 +1981,7 @@ class CinemaNovelService:
                 "登場人物は、主人公を除き、可能な限り下記のDB登録済みキャラクターだけを使ってください。",
                 "主人公は指定名を優先してよく、DB未登録でも構いません。ただし脇役、敵役、組織代表、関係者は登録済みキャラクターから選んでください。",
                 "知らない新キャラクターを安易に増やさないでください。新キャラクターが必要な場合は、なぜ既存キャラクターで代替できないかを明記してください。",
+                "チェックされた参照データだけを素材として使い、参照内容と矛盾する設定を作らないでください。",
                 "",
                 f"タイトル: {title}",
                 f"ジャンル: {genre}",
@@ -608,6 +1989,12 @@ class CinemaNovelService:
                 f"テーマ: {theme or '未指定'}",
                 f"章数: {chapter_count}",
                 f"各章の目標文字数: {chapter_target_chars}",
+                "",
+                "有効な参照データ:",
+                ", ".join(reference_sources),
+                "",
+                "参照素材:",
+                reference_context or "追加参照なし",
                 "",
                 "DB登録済みキャラクター:",
                 registered_character_context or "登録済みキャラクターなし",
@@ -657,7 +2044,20 @@ class CinemaNovelService:
         current_input = payload.get("current_input") or {}
         requested_main_character = str(current_input.get("main_character") or "").strip()
         requested_genre = str(current_input.get("genre") or "").strip()
-        character_context = self._registered_character_context(project_id, main_character=requested_main_character)
+        reference_sources = self._reference_sources(current_input)
+        character_context = (
+            self._registered_character_context(project_id, main_character=requested_main_character)
+            if self._reference_source_enabled(reference_sources, "characters")
+            else ""
+        )
+        reference_context = self._production_reference_context(
+            project_id,
+            reference_sources=reference_sources,
+            main_character=requested_main_character,
+            project=project,
+            world=world,
+            include_characters=False,
+        )
         prompt = "\n".join(
             [
                 "Return only JSON.",
@@ -670,6 +2070,7 @@ class CinemaNovelService:
                 "chapter_count は 5 を基本にし、必要な場合だけ 3, 4, 6, 8 のいずれかにしてください。",
                 "ユーザー指定ジャンルがある場合は必ず反映してください。",
                 "ユーザー指定主役がある場合は必ずそのキャラクターを主人公にしてください。",
+                "チェックされた参照データだけを素材として使い、参照内容と矛盾する設定を作らないでください。",
                 "",
                 "User current input:",
                 f"title: {str(current_input.get('title') or '').strip()}",
@@ -678,19 +2079,11 @@ class CinemaNovelService:
                 f"chapter_count: {str(current_input.get('chapter_count') or '5').strip()}",
                 f"theme: {str(current_input.get('theme') or '').strip()}",
                 "",
-                "Project:",
-                f"title: {getattr(project, 'title', '') or ''}",
-                f"summary: {getattr(project, 'summary', '') or ''}",
+                "Enabled reference sources:",
+                ", ".join(reference_sources),
                 "",
-                "World setting:",
-                f"name: {getattr(world, 'name', '') or ''}",
-                f"tone: {getattr(world, 'tone', '') or ''}",
-                f"era: {getattr(world, 'era_description', '') or ''}",
-                f"overview: {getattr(world, 'overview', '') or ''}",
-                f"technology: {getattr(world, 'technology_level', '') or ''}",
-                f"social_structure: {getattr(world, 'social_structure', '') or ''}",
-                f"rules: {getattr(world, 'rules_json', '') or ''}",
-                f"forbidden: {getattr(world, 'forbidden_json', '') or ''}",
+                "Reference material:",
+                reference_context or "追加参照なし",
                 "",
                 "DB registered characters:",
                 character_context or "登録済みキャラクターなし",
@@ -752,6 +2145,169 @@ class CinemaNovelService:
                 ]
             )
         return "\n".join(lines)
+
+    def _reference_sources(self, payload: dict | None) -> list[str]:
+        payload = payload if isinstance(payload, dict) else {}
+        raw = payload.get("reference_sources")
+        if raw is None:
+            raw = payload.get("reference_context_sources")
+        if raw is None:
+            return list(self.DEFAULT_REFERENCE_SOURCES)
+        if isinstance(raw, str):
+            values = re.split(r"[,|\s]+", raw)
+        elif isinstance(raw, (list, tuple, set)):
+            values = list(raw)
+        else:
+            values = []
+        sources = []
+        for value in values:
+            key = str(value or "").strip()
+            if key in self.VALID_REFERENCE_SOURCES and key not in sources:
+                sources.append(key)
+        return sources
+
+    def _reference_source_enabled(self, reference_sources: list[str], key: str) -> bool:
+        return key in set(reference_sources or [])
+
+    def _production_reference_context(
+        self,
+        project_id: int,
+        *,
+        reference_sources: list[str],
+        main_character: str = "",
+        project=None,
+        world=None,
+        include_characters: bool = True,
+    ) -> str:
+        sources = reference_sources or []
+        lines = []
+        if self._reference_source_enabled(sources, "worldbuilding"):
+            project = project or Project.query.get(project_id)
+            lines.extend(
+                [
+                    "## 世界観",
+                    f"title: {getattr(project, 'title', '') or ''}",
+                    f"summary: {self._shorten_for_prompt(getattr(project, 'summary', '') or '', 1200)}",
+                ]
+            )
+        if self._reference_source_enabled(sources, "world"):
+            world = world or World.query.filter_by(project_id=project_id).first()
+            lines.extend(
+                [
+                    "## ワールド",
+                    f"name: {getattr(world, 'name', '') or ''}",
+                    f"tone: {getattr(world, 'tone', '') or ''}",
+                    f"era: {getattr(world, 'era_description', '') or ''}",
+                    f"overview: {self._shorten_for_prompt(getattr(world, 'overview', '') or '', 1600)}",
+                    f"technology: {self._shorten_for_prompt(getattr(world, 'technology_level', '') or '', 700)}",
+                    f"social_structure: {self._shorten_for_prompt(getattr(world, 'social_structure', '') or '', 700)}",
+                    f"rules: {self._shorten_for_prompt(getattr(world, 'rules_json', '') or '', 700)}",
+                    f"forbidden: {self._shorten_for_prompt(getattr(world, 'forbidden_json', '') or '', 700)}",
+                ]
+            )
+        if include_characters and self._reference_source_enabled(sources, "characters"):
+            lines.extend(
+                [
+                    "## キャラクター設定",
+                    self._registered_character_context(project_id, main_character=main_character) or "登録済みキャラクターなし",
+                ]
+            )
+        if self._reference_source_enabled(sources, "feed"):
+            lines.extend(["## Feed", self._recent_feed_context(project_id)])
+        if self._reference_source_enabled(sources, "news"):
+            lines.extend(["## ニュース", self._recent_world_news_context(project_id)])
+        if self._reference_source_enabled(sources, "short_stories"):
+            lines.extend(["## キャラクターのショートストーリー", self._recent_short_story_context(project_id)])
+        return "\n".join(part for part in lines if part is not None).strip()
+
+    def _recent_feed_context(self, project_id: int, limit: int = 12) -> str:
+        posts = (
+            FeedPost.query.filter(
+                FeedPost.project_id == project_id,
+                FeedPost.status == "published",
+                FeedPost.deleted_at.is_(None),
+            )
+            .order_by(FeedPost.published_at.desc(), FeedPost.created_at.desc(), FeedPost.id.desc())
+            .limit(limit)
+            .all()
+        )
+        if not posts:
+            return "Feed投稿なし"
+        character_ids = {post.character_id for post in posts if post.character_id}
+        characters = {
+            character.id: character
+            for character in Character.query.filter(Character.id.in_(character_ids)).all()
+        } if character_ids else {}
+        lines = []
+        for post in posts:
+            character = characters.get(post.character_id)
+            speaker = getattr(character, "name", None) or f"character_id={post.character_id}"
+            lines.append(f"- {speaker}: {self._shorten_for_prompt(post.body, 260)}")
+        return "\n".join(lines)
+
+    def _recent_world_news_context(self, project_id: int, limit: int = 8) -> str:
+        items = (
+            WorldNewsItem.query.filter(
+                WorldNewsItem.project_id == project_id,
+                WorldNewsItem.status == "published",
+                WorldNewsItem.deleted_at.is_(None),
+            )
+            .order_by(WorldNewsItem.created_at.desc(), WorldNewsItem.id.desc())
+            .limit(limit)
+            .all()
+        )
+        if not items:
+            return "ニュースなし"
+        lines = []
+        for item in items:
+            summary = item.summary or item.body
+            lines.append(
+                f"- [{item.news_type or 'news'}] {item.title or ''}: {self._shorten_for_prompt(summary, 320)}"
+            )
+        return "\n".join(lines)
+
+    def _recent_short_story_context(self, project_id: int, limit: int = 6) -> str:
+        sessions = (
+            ChatSession.query.filter(
+                ChatSession.project_id == project_id,
+                ChatSession.deleted_at.is_(None),
+            )
+            .order_by(ChatSession.updated_at.desc(), ChatSession.id.desc())
+            .limit(40)
+            .all()
+        )
+        stories = []
+        for session in sessions:
+            settings = self._load_json_object(getattr(session, "settings_json", None))
+            saved = settings.get("saved_short_stories")
+            if not isinstance(saved, list):
+                continue
+            for story in reversed(saved[-5:]):
+                if isinstance(story, dict):
+                    stories.append((session, story))
+                if len(stories) >= limit:
+                    break
+            if len(stories) >= limit:
+                break
+        if not stories:
+            return "保存済みショートストーリーなし"
+        lines = []
+        for session, story in stories[:limit]:
+            title = str(story.get("title") or getattr(session, "title", "") or "ショートストーリー").strip()
+            synopsis = str(story.get("synopsis") or "").strip()
+            body = str(story.get("body") or "").strip()
+            excerpt = synopsis or body
+            lines.append(f"- {title}: {self._shorten_for_prompt(excerpt, 420)}")
+        return "\n".join(lines)
+
+    def _load_json_object(self, value) -> dict:
+        if not value:
+            return {}
+        try:
+            parsed = json_util.loads(value) if isinstance(value, str) else value
+        except Exception:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
 
     def _generate_character_review(self, novel, character) -> dict:
         settings = self._user_setting_service.apply_cinema_novel_text_generation_settings({})
@@ -1827,12 +3383,23 @@ class CinemaNovelService:
             asset_id = int(payload.get("asset_id") or 0)
         except (TypeError, ValueError):
             asset_id = 0
-        if not asset_id:
-            raise ValueError("asset_id is required")
         scene = scenes[scene_index]
         if not isinstance(scene, dict):
             raise ValueError("scene image does not match the current scene")
-        if int(scene.get("still_asset_id") or 0) == asset_id:
+        delete_scene = self._normalize_bool(payload.get("delete_scene"))
+        if delete_scene:
+            if asset_id and asset_id not in {
+                int(scene.get("still_asset_id") or 0),
+                int(scene.get("background_asset_id") or 0),
+            }:
+                raise ValueError("scene image does not match the current scene")
+            scenes.pop(scene_index)
+            for index, item in enumerate(scenes):
+                if isinstance(item, dict):
+                    item["panel_index"] = index
+        elif not asset_id:
+            raise ValueError("asset_id is required")
+        elif int(scene.get("still_asset_id") or 0) == asset_id:
             scene["still_asset_id"] = None
         elif int(scene.get("background_asset_id") or 0) == asset_id:
             scene["background_asset_id"] = None
@@ -1845,6 +3412,7 @@ class CinemaNovelService:
             "novel": self.serialize_novel(novel, include_chapters=True),
             "chapter": self.serialize_chapter(chapter),
             "deleted_asset_id": asset_id,
+            "deleted_scene_index": scene_index if delete_scene else None,
         }
 
     def _resolve_scene_payload(self, novel, payload: dict):

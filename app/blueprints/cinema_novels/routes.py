@@ -2,7 +2,7 @@ import threading
 import uuid
 from datetime import datetime
 
-from flask import Blueprint, current_app, request, session
+from flask import Blueprint, current_app, request, send_file, session
 
 from ...api import ForbiddenError, NotFoundError, UnauthorizedError, ValidationError, json_response
 from ...models import User
@@ -17,6 +17,8 @@ project_service = ProjectService()
 cinema_novel_service = CinemaNovelService()
 production_outline_jobs = {}
 production_outline_jobs_lock = threading.Lock()
+short_comic_jobs = {}
+short_comic_jobs_lock = threading.Lock()
 
 
 def _current_user():
@@ -79,6 +81,23 @@ def list_project_cinema_novels(project_id: int):
     return json_response([cinema_novel_service.serialize_novel(novel, user_id=user.id) for novel in novels])
 
 
+@cinema_novels_bp.route("/projects/<int:project_id>/cinema-novels/bgm", methods=["GET"])
+def list_cinema_novel_bgm(project_id: int):
+    _project, _user = _require_project(project_id, for_manage=True)
+    return json_response(cinema_novel_service.list_bgm_assets(project_id))
+
+
+@cinema_novels_bp.route("/projects/<int:project_id>/cinema-novels/bgm", methods=["POST"])
+def upload_cinema_novel_bgm(project_id: int):
+    _project, user = _require_project(project_id, for_manage=True)
+    upload_file = request.files.get("file")
+    try:
+        asset = cinema_novel_service.upload_bgm_asset(project_id, user.id, upload_file)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    return json_response(asset, status=201)
+
+
 @cinema_novels_bp.route("/projects/<int:project_id>/cinema-novels/import-markdown-folder", methods=["POST"])
 def import_markdown_folder(project_id: int):
     _, user = _require_project(project_id, for_manage=True)
@@ -124,6 +143,19 @@ def save_production_outline(project_id: int):
 
 
 def _serialize_production_outline_job(job: dict):
+    return {
+        "id": job.get("id"),
+        "project_id": job.get("project_id"),
+        "status": job.get("status"),
+        "result": job.get("result"),
+        "error": job.get("error"),
+        "created_at": job.get("created_at"),
+        "started_at": job.get("started_at"),
+        "finished_at": job.get("finished_at"),
+    }
+
+
+def _serialize_short_comic_job(job: dict):
     return {
         "id": job.get("id"),
         "project_id": job.get("project_id"),
@@ -186,6 +218,58 @@ def create_production_outline_job(project_id: int):
     return json_response(_serialize_production_outline_job(job), status=202)
 
 
+@cinema_novels_bp.route("/projects/<int:project_id>/cinema-novels/short-comic-jobs", methods=["POST"])
+def create_short_comic_job(project_id: int):
+    _project, user = _require_project(project_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    job_id = uuid.uuid4().hex
+    job = {
+        "id": job_id,
+        "project_id": project_id,
+        "status": "queued",
+        "payload": payload,
+        "result": None,
+        "error": None,
+        "created_at": datetime.utcnow().isoformat(),
+        "started_at": None,
+        "finished_at": None,
+    }
+    with short_comic_jobs_lock:
+        short_comic_jobs[job_id] = job
+
+    app = current_app._get_current_object()
+    user_id = user.id
+
+    def worker():
+        with app.app_context():
+            with short_comic_jobs_lock:
+                job["status"] = "running"
+                job["started_at"] = datetime.utcnow().isoformat()
+            try:
+                novel = cinema_novel_service.create_short_comic_novel(project_id, user_id, payload)
+                result = cinema_novel_service.serialize_novel(novel, include_chapters=True, user_id=user_id)
+                with short_comic_jobs_lock:
+                    job["status"] = "succeeded"
+                    job["result"] = result
+                    job["finished_at"] = datetime.utcnow().isoformat()
+            except Exception as exc:
+                app.logger.exception("short comic job failed")
+                with short_comic_jobs_lock:
+                    job["status"] = "failed"
+                    job["error"] = str(exc)
+                    job["finished_at"] = datetime.utcnow().isoformat()
+            finally:
+                try:
+                    from ...extensions import db
+
+                    db.session.remove()
+                except Exception:
+                    pass
+
+    threading.Thread(target=worker, name=f"short-comic-{job_id}", daemon=True).start()
+    return json_response(_serialize_short_comic_job(job), status=202)
+
+
 @cinema_novels_bp.route("/projects/<int:project_id>/cinema-novels/production-outline-jobs/<job_id>", methods=["GET"])
 def get_production_outline_job(project_id: int, job_id: str):
     _project, _user = _require_project(project_id, for_manage=True)
@@ -194,6 +278,16 @@ def get_production_outline_job(project_id: int, job_id: str):
         if not job or int(job.get("project_id") or 0) != int(project_id):
             raise NotFoundError()
         return json_response(_serialize_production_outline_job(dict(job)))
+
+
+@cinema_novels_bp.route("/projects/<int:project_id>/cinema-novels/short-comic-jobs/<job_id>", methods=["GET"])
+def get_short_comic_job(project_id: int, job_id: str):
+    _project, _user = _require_project(project_id, for_manage=True)
+    with short_comic_jobs_lock:
+        job = short_comic_jobs.get(job_id)
+        if not job or int(job.get("project_id") or 0) != int(project_id):
+            raise NotFoundError()
+        return json_response(_serialize_short_comic_job(dict(job)))
 
 
 @cinema_novels_bp.route("/projects/<int:project_id>/cinema-novels/chapter-deepening-draft", methods=["POST"])
@@ -211,6 +305,60 @@ def generate_chapter_deepening_draft(project_id: int):
 def get_cinema_novel(novel_id: int):
     novel, _, user = _require_novel(novel_id)
     return json_response(cinema_novel_service.serialize_novel(novel, include_chapters=True, user_id=user.id))
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/powerpoint", methods=["GET"])
+def export_cinema_novel_powerpoint(novel_id: int):
+    novel, _project, _user = _require_novel(novel_id, for_manage=True)
+    try:
+        result = cinema_novel_service.export_powerpoint(novel.id)
+    except (RuntimeError, ValueError) as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    file_path, filename = result
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/short-video", methods=["GET"])
+def export_cinema_novel_short_video(novel_id: int):
+    novel, _project, _user = _require_novel(novel_id, for_manage=True)
+    try:
+        result = cinema_novel_service.export_short_video(novel.id, request.args.to_dict())
+    except (RuntimeError, ValueError) as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    file_path, filename = result
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="video/mp4",
+    )
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/comic-short-video", methods=["GET"])
+def export_cinema_novel_comic_short_video(novel_id: int):
+    novel, _project, _user = _require_novel(novel_id, for_manage=True)
+    try:
+        result = cinema_novel_service.export_comic_short_video(novel.id, request.args.to_dict())
+    except (RuntimeError, ValueError) as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    file_path, filename = result
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="video/mp4",
+    )
 
 
 @cinema_novels_bp.route("/cinema-novels/<int:novel_id>", methods=["DELETE"])

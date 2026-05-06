@@ -23,6 +23,7 @@
     imageTools: document.getElementById("cinemaReaderImageTools"),
     imageEditButton: document.getElementById("cinemaReaderImageEditButton"),
     imageDeleteButton: document.getElementById("cinemaReaderImageDeleteButton"),
+    sceneDeleteButton: document.getElementById("cinemaReaderSceneDeleteButton"),
     imageEditModal: document.getElementById("cinemaReaderImageEditModal"),
     imageEditForm: document.getElementById("cinemaReaderImageEditForm"),
     imageEditPrompt: document.getElementById("cinemaReaderImageEditPrompt"),
@@ -92,10 +93,15 @@
     return sceneImageAsset(currentScene());
   }
 
+  function isShortComicNovel() {
+    return state.novel?.mode === "short_comic_video";
+  }
+
   function currentImageAsset(chapter) {
     const scenes = chapter?.scene_json || [];
     const currentAsset = sceneImageAsset(scenes[state.sceneIndex]);
     if (currentAsset?.media_url) return currentAsset;
+    if (isShortComicNovel()) return null;
     for (let chapterIndex = state.chapterIndex; chapterIndex >= 0; chapterIndex -= 1) {
       const chapterScenes = chapters()[chapterIndex]?.scene_json || [];
       const startIndex = chapterIndex === state.chapterIndex ? state.sceneIndex - 1 : chapterScenes.length - 1;
@@ -130,6 +136,10 @@
     return Boolean(canUploadImage() && displayed?.id && sceneAsset?.id && Number(displayed.id) === Number(sceneAsset.id));
   }
 
+  function canDeleteScene() {
+    return Boolean(canUploadImage() && currentScene());
+  }
+
   function renderStill(chapter) {
     const url = currentImageUrl(chapter);
     if (!url) {
@@ -162,6 +172,9 @@
     }
     if (els.imageDeleteButton) {
       els.imageDeleteButton.disabled = state.isEditingImage || state.isUploadingImage || state.isDeletingImage || !canDeleteImage(chapter);
+    }
+    if (els.sceneDeleteButton) {
+      els.sceneDeleteButton.disabled = state.isEditingImage || state.isUploadingImage || state.isDeletingImage || !canDeleteScene();
     }
   }
 
@@ -322,11 +335,18 @@
     }
   }
 
-  async function deleteSceneImage() {
+  async function deleteSceneImage({ deleteScene = false } = {}) {
     const chapter = currentChapter();
     const asset = currentSceneImageAsset();
-    if (!chapter || !asset?.id || !canDeleteImage(chapter) || state.isDeletingImage) return;
-    if (!window.confirm("このシーンに紐づく画像を削除しますか？")) return;
+    if (deleteScene) {
+      if (!chapter || !canDeleteScene() || state.isDeletingImage) return;
+    } else if (!chapter || !asset?.id || !canDeleteImage(chapter) || state.isDeletingImage) {
+      return;
+    }
+    const message = deleteScene
+      ? "このシーンをテキストごと削除して、後ろのシーンを前に詰めますか？"
+      : "このシーンに紐づく画像だけを削除しますか？";
+    if (!window.confirm(message)) return;
     const previousChapterId = chapter.id;
     const previousSceneIndex = state.sceneIndex;
     state.isDeletingImage = true;
@@ -337,12 +357,13 @@
         body: JSON.stringify({
           chapter_id: chapter.id,
           scene_index: state.sceneIndex,
-          asset_id: asset.id,
+          asset_id: asset?.id,
+          delete_scene: deleteScene,
         }),
       });
       state.novel = result.novel;
       restorePosition(previousChapterId, previousSceneIndex);
-      window.NovelUI?.toast?.("シーン画像を削除しました。");
+      window.NovelUI?.toast?.(deleteScene ? "シーンを削除しました。" : "シーン画像を削除しました。");
       render();
     } catch (error) {
       window.NovelUI?.toast?.(error.message || "シーン画像の削除に失敗しました。", "danger");
@@ -375,7 +396,10 @@
     window.setTimeout(() => els.imageEditPrompt?.focus(), 160);
   });
   els.imageDeleteButton?.addEventListener("click", () => {
-    deleteSceneImage().catch(console.error);
+    deleteSceneImage({ deleteScene: false }).catch(console.error);
+  });
+  els.sceneDeleteButton?.addEventListener("click", () => {
+    deleteSceneImage({ deleteScene: true }).catch(console.error);
   });
   els.imageEditForm?.addEventListener("submit", submitImageEdit);
   els.imageUploadInput?.addEventListener("change", () => {

@@ -54,20 +54,151 @@
   font-size: .85rem;
 }
 
-.cinema-production-form {
-  display: grid;
-  grid-template-columns: 1.4fr .75fr 1fr 1.3fr .6fr;
-  gap: .75rem;
+.cinema-production-mode-tabs {
+  display: inline-flex;
+  gap: .35rem;
+  align-items: center;
+  padding: .25rem;
+  width: fit-content;
+  border: 1px solid rgba(84, 177, 255, .2);
+  border-radius: .65rem;
+  background: rgba(4, 10, 20, .58);
 }
 
-.cinema-production-form .form-control,
-.cinema-production-form .form-select {
+.cinema-production-mode-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  min-height: 2.25rem;
+  padding: .35rem .8rem;
+  border: 0;
+  border-radius: .5rem;
+  color: rgba(220, 246, 255, .72);
+  background: transparent;
+  font-weight: 800;
+}
+
+.cinema-production-mode-tabs button.is-active {
+  color: #06111f;
+  background: #9ee8ff;
+}
+
+.cinema-production-form {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1.35fr) minmax(8.5rem, .75fr) minmax(11rem, 1fr) minmax(13rem, 1.05fr) minmax(10rem, .9fr);
+  gap: .75rem;
+  align-items: end;
+}
+
+.cinema-production-field {
+  display: grid;
+  gap: .32rem;
+  min-width: 0;
+}
+
+.cinema-production-field span {
+  color: rgba(220, 246, 255, .72);
+  font-size: .76rem;
+  font-weight: 800;
+}
+
+.cinema-production-field-wide {
+  grid-column: span 3;
+}
+
+.cinema-production-reference-field {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem .85rem;
+  align-items: center;
+  margin: 0;
+  padding: .65rem .75rem;
+  border: 1px solid rgba(84, 177, 255, .16);
+  border-radius: .65rem;
+  background: rgba(4, 10, 20, .38);
+}
+
+.cinema-production-reference-field legend {
+  float: none;
+  width: auto;
+  margin: 0 .3rem 0 0;
+  color: rgba(220, 246, 255, .72);
+  font-size: .76rem;
+  font-weight: 900;
+}
+
+.cinema-production-reference-field label {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  margin: 0;
+  color: #dff6ff;
+  font-size: .84rem;
+  font-weight: 800;
+}
+
+.cinema-production-bgm-field {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(8rem, 10rem) auto;
+  gap: .65rem;
+  align-items: end;
+  margin: 0;
+  padding: .65rem .75rem;
+  border: 1px solid rgba(84, 177, 255, .16);
+  border-radius: .65rem;
+  background: rgba(4, 10, 20, .38);
+}
+
+.cinema-production-bgm-field legend {
+  grid-column: 1 / -1;
+  float: none;
+  width: auto;
+  margin: 0;
+  color: rgba(220, 246, 255, .72);
+  font-size: .76rem;
+  font-weight: 900;
+}
+
+.cinema-bgm-upload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.45rem;
+  margin: 0;
+  padding: .45rem .85rem;
+  border: 1px solid rgba(103, 232, 249, .4);
+  border-radius: 999px;
+  color: #cffafe;
+  background: rgba(8, 47, 73, .48);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.cinema-bgm-upload-button input {
+  display: none;
+}
+
+.cinema-bgm-upload-button span {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+.cinema-production-field .form-control,
+.cinema-production-field .form-select,
+.cinema-production-form > .form-control,
+.cinema-production-form > .form-select {
+  min-width: 0;
+  width: 100%;
   border-color: rgba(84, 177, 255, .16);
   background: rgba(4, 10, 20, .74);
   color: #e7f9ff;
 }
 
-.cinema-production-form .form-control::placeholder {
+.cinema-production-field .form-control::placeholder,
+.cinema-production-form > .form-control::placeholder {
   color: rgba(180, 221, 255, .58);
 }
 
@@ -95,6 +226,10 @@
 .cinema-production-form textarea,
 .cinema-production-form button {
   grid-column: span 2;
+}
+
+.cinema-production-field textarea {
+  grid-column: auto;
 }
 
 .cinema-novel-status-controls {
@@ -197,10 +332,13 @@
 .cinema-novel-poster {
   aspect-ratio: 16 / 10;
   background: rgba(4, 10, 20, .82);
+  display: grid;
+  place-items: center;
 }
 
 .cinema-novel-poster img,
 .cinema-reader-still-wrap img {
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -213,6 +351,12 @@
 }
 
 .cinema-novel-poster img.cinema-novel-title-poster {
+  object-fit: contain;
+  padding: .35rem;
+  background: #030712;
+}
+
+.cinema-novel-poster img.cinema-novel-poster-portrait {
   object-fit: contain;
   padding: .35rem;
   background: #030712;
@@ -662,6 +806,17 @@
 .cinema-reader-image-delete-button:not(:disabled):focus {
   border-color: rgba(252, 165, 165, .95);
   background: rgba(127, 29, 29, .82);
+}
+
+.cinema-reader-scene-delete-button:not(:disabled) {
+  border-color: rgba(251, 146, 60, .72);
+  color: #ffedd5;
+}
+
+.cinema-reader-scene-delete-button:not(:disabled):hover,
+.cinema-reader-scene-delete-button:not(:disabled):focus {
+  border-color: rgba(253, 186, 116, .95);
+  background: rgba(124, 45, 18, .86);
 }
 
 .cinema-reader-textbox {
