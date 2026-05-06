@@ -3,12 +3,15 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import mimetypes
 import os
 import re
 import subprocess
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from html import escape as html_escape
 from pathlib import Path
 
 from flask import current_app
@@ -251,6 +254,445 @@ class CinemaNovelService:
         self._set_powerpoint_shape_alpha(output_path, "080A10", 20000)
         return str(output_path), filename
 
+    def export_epub(self, novel_id: int, *, writing_mode: str = "horizontal"):
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        chapters = self.list_chapters(novel.id)
+        storage_root = Path(current_app.config["STORAGE_ROOT"]).resolve()
+        export_dir = storage_root / "projects" / str(novel.project_id) / "exports" / "cinema_novels"
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        filename_base = self._safe_powerpoint_filename(novel.title or f"cinema_novel_{novel.id}")
+        is_short_comic = getattr(novel, "mode", "") == "short_comic_video"
+        vertical = writing_mode == "vertical" and not is_short_comic
+        mode_suffix = "_vertical" if vertical else ""
+        filename = f"{filename_base}_{novel.id}{mode_suffix}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.epub"
+        output_path = export_dir / filename
+
+        image_items = {}
+        manifest_images = []
+
+        def add_image(asset_id, *, name_hint="image"):
+            try:
+                asset_id = int(asset_id or 0)
+            except (TypeError, ValueError):
+                asset_id = 0
+            if not asset_id:
+                return None
+            if asset_id in image_items:
+                return image_items[asset_id]["href"]
+            asset = self._asset_service.get_asset(asset_id)
+            if not asset or not asset.file_path:
+                return None
+            source_path = Path(asset.file_path)
+            if not source_path.exists():
+                return None
+            mime_type = str(asset.mime_type or mimetypes.guess_type(str(source_path))[0] or "image/jpeg").split(";", 1)[0]
+            if not mime_type.startswith("image/"):
+                return None
+            extension = source_path.suffix.lower() or mimetypes.guess_extension(mime_type) or ".jpg"
+            href = f"images/{name_hint}_{asset_id}{extension}"
+            item_id = f"img_{asset_id}"
+            image_items[asset_id] = {"id": item_id, "href": href, "path": source_path, "media_type": mime_type}
+            manifest_images.append(image_items[asset_id])
+            return href
+
+        cover_href = add_image(novel.poster_asset_id or novel.cover_asset_id, name_hint="cover")
+        chapter_docs = []
+        if is_short_comic:
+            chapter_docs.extend(self._epub_short_comic_documents(novel, chapters, add_image))
+        else:
+            chapter_docs.extend(self._epub_novel_documents(novel, chapters, add_image))
+
+        if not chapter_docs:
+            chapter_docs.append(
+                {
+                    "id": "chapter_1",
+                    "href": "chapters/chapter_1.xhtml",
+                    "title": novel.title or "Untitled",
+                    "body": f"<h1>{html_escape(novel.title or 'Untitled')}</h1><p>{html_escape(novel.description or novel.subtitle or '')}</p>",
+                }
+            )
+
+        nav_doc = self._epub_nav_document(novel, chapter_docs)
+        ncx_doc = self._epub_ncx_document(novel, chapter_docs)
+        opf_doc = self._epub_package_document(novel, chapter_docs, manifest_images, cover_href=cover_href)
+        css_doc = self._epub_stylesheet(vertical=vertical)
+
+        with zipfile.ZipFile(output_path, "w") as epub:
+            epub.writestr("mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+            epub.writestr(
+                "META-INF/container.xml",
+                """<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>""",
+                compress_type=zipfile.ZIP_DEFLATED,
+            )
+            epub.writestr("OEBPS/styles/book.css", css_doc, compress_type=zipfile.ZIP_DEFLATED)
+            epub.writestr("OEBPS/nav.xhtml", nav_doc, compress_type=zipfile.ZIP_DEFLATED)
+            epub.writestr("OEBPS/toc.ncx", ncx_doc, compress_type=zipfile.ZIP_DEFLATED)
+            epub.writestr("OEBPS/content.opf", opf_doc, compress_type=zipfile.ZIP_DEFLATED)
+            for doc in chapter_docs:
+                epub.writestr(
+                    f"OEBPS/{doc['href']}",
+                    self._epub_xhtml_document(doc["title"], doc["body"], body_class=doc.get("body_class", "")),
+                    compress_type=zipfile.ZIP_DEFLATED,
+                )
+            for item in manifest_images:
+                epub.write(item["path"], f"OEBPS/{item['href']}", compress_type=zipfile.ZIP_DEFLATED)
+        return str(output_path), filename
+
+    def _epub_novel_documents(self, novel: CinemaNovel, chapters: list[CinemaNovelChapter], add_image):
+        docs = []
+        for index, chapter in enumerate(chapters, start=1):
+            title = chapter.title or f"Chapter {index}"
+            body_parts = [f"<h1>{html_escape(title)}</h1>"]
+
+            markdown_html = self._epub_markdown_to_html(chapter.body_markdown or "", skip_heading=title)
+            if markdown_html:
+                body_parts.append(markdown_html)
+
+            scenes = self._load_json(chapter.scene_json, default=[])
+            if not isinstance(scenes, list):
+                scenes = []
+            scene_docs = []
+            used_scene_images = set()
+            for scene_index, scene in enumerate(scenes, start=1):
+                if not isinstance(scene, dict):
+                    continue
+                text = str(scene.get("text") or "").strip()
+                speaker = str(scene.get("speaker") or "").strip()
+                image_href = add_image(scene.get("still_asset_id") or scene.get("background_asset_id"), name_hint=f"chapter_{index}_scene_{scene_index}")
+                if image_href and image_href not in used_scene_images:
+                    used_scene_images.add(image_href)
+                    image_title = f"{title} image {len(scene_docs) + 1}"
+                    scene_docs.append(
+                        {
+                            "id": f"chapter_{index}_image_{len(scene_docs) + 1}",
+                            "href": f"chapters/chapter_{index}_image_{len(scene_docs) + 1}.xhtml",
+                            "title": image_title,
+                            "body_class": "image-page-document",
+                            "body": (
+                                '<section class="image-page">'
+                                f'<figure class="scene-image-full"><img src="../{html_escape(image_href, quote=True)}" alt="{html_escape(image_title, quote=True)}"/>'
+                                "</figure>"
+                                "</section>"
+                            ),
+                        }
+                    )
+                elif text and not markdown_html:
+                    body_parts.append(self._epub_scene_paragraph(text, speaker))
+
+            docs.append(
+                {
+                    "id": f"chapter_{index}",
+                    "href": f"chapters/chapter_{index}.xhtml",
+                    "title": title,
+                    "body_class": "text-page",
+                    "body": "\n".join(part for part in body_parts if part),
+                }
+            )
+            docs.extend(scene_docs)
+        if not docs:
+            docs.append(
+                {
+                    "id": "chapter_1",
+                    "href": "chapters/chapter_1.xhtml",
+                    "title": novel.title or "Untitled",
+                    "body_class": "text-page",
+                    "body": self._epub_markdown_to_html(novel.description or novel.subtitle or "", skip_heading=novel.title or "") or f"<h1>{html_escape(novel.title or 'Untitled')}</h1>",
+                }
+            )
+        return docs
+
+    def _epub_short_comic_documents(self, novel: CinemaNovel, chapters: list[CinemaNovelChapter], add_image):
+        docs = []
+        panel_no = 1
+        cover_href = add_image(novel.poster_asset_id or novel.cover_asset_id, name_hint="cover")
+        if cover_href:
+            docs.append(
+                {
+                    "id": "cover",
+                    "href": "chapters/cover.xhtml",
+                    "title": novel.title or "Cover",
+                    "body": "\n".join(
+                        [
+                            f"<h1>{html_escape(novel.title or 'Untitled')}</h1>",
+                            f'<figure class="panel"><img src="../{html_escape(cover_href, quote=True)}" alt="{html_escape(novel.title or "Cover", quote=True)}"/></figure>',
+                            f"<p>{html_escape(novel.description or novel.subtitle or '')}</p>" if (novel.description or novel.subtitle) else "",
+                        ]
+                    ),
+                }
+            )
+        for chapter in chapters:
+            scenes = self._load_json(chapter.scene_json, default=[])
+            if not isinstance(scenes, list):
+                scenes = []
+            for scene in scenes:
+                if not isinstance(scene, dict):
+                    continue
+                text = str(scene.get("text") or scene.get("title") or "").strip()
+                title = str(scene.get("title") or text or f"Panel {panel_no}").strip()
+                speaker = str(scene.get("speaker") or "").strip()
+                image_href = add_image(scene.get("still_asset_id") or scene.get("background_asset_id"), name_hint=f"panel_{panel_no}")
+                if not image_href and not text:
+                    continue
+                body_parts = [f"<h1>{html_escape(title[:80])}</h1>"]
+                if image_href:
+                    body_parts.append(
+                        f'<figure class="panel"><img src="../{html_escape(image_href, quote=True)}" alt="{html_escape(title, quote=True)}"/></figure>'
+                    )
+                if text:
+                    body_parts.append(self._epub_scene_paragraph(text, speaker))
+                docs.append(
+                    {
+                        "id": f"panel_{panel_no}",
+                        "href": f"chapters/panel_{panel_no}.xhtml",
+                        "title": title[:80],
+                        "body": "\n".join(body_parts),
+                    }
+                )
+                panel_no += 1
+        return docs
+
+    def _epub_markdown_to_html(self, markdown: str, *, skip_heading: str = "") -> str:
+        lines = str(markdown or "").replace("\r\n", "\n").split("\n")
+        blocks = []
+        paragraph = []
+        skip_key = self._epub_heading_key(skip_heading)
+        skipped_first_heading = False
+
+        def flush_paragraph():
+            if not paragraph:
+                return
+            blocks.append("<p>" + "<br/>".join(html_escape(line) for line in paragraph) + "</p>")
+            paragraph.clear()
+
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line:
+                flush_paragraph()
+                continue
+            heading = re.match(r"^(#{1,3})\s+(.+)$", line)
+            if heading:
+                flush_paragraph()
+                level = min(3, len(heading.group(1)))
+                heading_text = heading.group(2).strip()
+                if not skipped_first_heading and skip_key and self._epub_heading_key(heading_text) == skip_key:
+                    skipped_first_heading = True
+                    continue
+                blocks.append(f"<h{level}>{html_escape(heading_text)}</h{level}>")
+                continue
+            if not skipped_first_heading and skip_key and not blocks and not paragraph and self._epub_heading_key(line) == skip_key:
+                skipped_first_heading = True
+                continue
+            bullet = re.match(r"^[-*]\s+(.+)$", line)
+            if bullet:
+                flush_paragraph()
+                blocks.append(f"<p class=\"bullet\">・{html_escape(bullet.group(1).strip())}</p>")
+                continue
+            paragraph.append(line)
+        flush_paragraph()
+        return "\n".join(blocks)
+
+    def _epub_heading_key(self, value: str) -> str:
+        return re.sub(r"\s+", "", str(value or "").strip().lower())
+
+    def _epub_scene_caption(self, text: str, speaker: str = "") -> str:
+        text = str(text or "").strip()
+        speaker = str(speaker or "").strip()
+        if not text:
+            return speaker
+        caption = f"{speaker}: {text}" if speaker else text
+        return caption[:140]
+
+    def _epub_scene_paragraph(self, text: str, speaker: str = "") -> str:
+        text = str(text or "").strip()
+        speaker = str(speaker or "").strip()
+        if speaker:
+            return f'<p><strong>{html_escape(speaker)}</strong><br/>{html_escape(text)}</p>'
+        return f"<p>{html_escape(text)}</p>"
+
+    def _epub_xhtml_document(self, title: str, body: str, *, body_class: str = "") -> str:
+        class_attr = f' class="{html_escape(body_class, quote=True)}"' if body_class else ""
+        return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ja" xml:lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <title>{html_escape(title or "Untitled")}</title>
+  <link rel="stylesheet" type="text/css" href="../styles/book.css"/>
+</head>
+<body{class_attr}>
+{body}
+</body>
+</html>"""
+
+    def _epub_nav_document(self, novel: CinemaNovel, chapter_docs: list[dict]) -> str:
+        items = "\n".join(
+            f'      <li><a href="{html_escape(doc["href"], quote=True)}">{html_escape(doc["title"] or "Untitled")}</a></li>'
+            for doc in chapter_docs
+        )
+        return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="ja" xml:lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <title>{html_escape(novel.title or "Untitled")} 目次</title>
+  <link rel="stylesheet" type="text/css" href="styles/book.css"/>
+</head>
+<body>
+  <nav epub:type="toc" id="toc">
+    <h1>目次</h1>
+    <ol>
+{items}
+    </ol>
+  </nav>
+</body>
+</html>"""
+
+    def _epub_ncx_document(self, novel: CinemaNovel, chapter_docs: list[dict]) -> str:
+        nav_points = []
+        for index, doc in enumerate(chapter_docs, start=1):
+            nav_points.append(
+                f"""  <navPoint id="navPoint-{index}" playOrder="{index}">
+    <navLabel><text>{html_escape(doc["title"] or "Untitled")}</text></navLabel>
+    <content src="{html_escape(doc["href"], quote=True)}"/>
+  </navPoint>"""
+            )
+        return f"""<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta name="dtb:uid" content="novelcreator-cinema-novel-{int(novel.id)}"/>
+    <meta name="dtb:depth" content="1"/>
+    <meta name="dtb:totalPageCount" content="0"/>
+    <meta name="dtb:maxPageNumber" content="0"/>
+  </head>
+  <docTitle><text>{html_escape(novel.title or "Untitled")}</text></docTitle>
+  <navMap>
+{chr(10).join(nav_points)}
+  </navMap>
+</ncx>"""
+
+    def _epub_package_document(self, novel: CinemaNovel, chapter_docs: list[dict], image_items: list[dict], *, cover_href: str | None = None) -> str:
+        modified = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        manifest_parts = [
+            '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>',
+            '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>',
+            '<item id="css" href="styles/book.css" media-type="text/css"/>',
+        ]
+        for doc in chapter_docs:
+            manifest_parts.append(
+                f'<item id="{html_escape(doc["id"], quote=True)}" href="{html_escape(doc["href"], quote=True)}" media-type="application/xhtml+xml"/>'
+            )
+        for item in image_items:
+            properties = ' properties="cover-image"' if cover_href and item["href"] == cover_href else ""
+            manifest_parts.append(
+                f'<item id="{html_escape(item["id"], quote=True)}" href="{html_escape(item["href"], quote=True)}" media-type="{html_escape(item["media_type"], quote=True)}"{properties}/>'
+            )
+        spine_items = "\n".join(f'    <itemref idref="{html_escape(doc["id"], quote=True)}"/>' for doc in chapter_docs)
+        cover_meta = ""
+        if cover_href:
+            cover_item = next((item for item in image_items if item["href"] == cover_href), None)
+            if cover_item:
+                cover_meta = f'\n    <meta name="cover" content="{html_escape(cover_item["id"], quote=True)}"/>'
+        return f"""<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="book-id">novelcreator-cinema-novel-{int(novel.id)}</dc:identifier>
+    <dc:title>{html_escape(novel.title or "Untitled")}</dc:title>
+    <dc:language>ja</dc:language>
+    <meta property="dcterms:modified">{modified}</meta>{cover_meta}
+  </metadata>
+  <manifest>
+    {chr(10).join(manifest_parts)}
+  </manifest>
+  <spine toc="ncx">
+{spine_items}
+  </spine>
+</package>"""
+
+    def _epub_stylesheet(self, *, vertical: bool = False) -> str:
+        vertical_css = """
+.text-page {
+  -epub-writing-mode: vertical-rl;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  max-height: 42em;
+}
+.text-page p {
+  text-align: justify;
+}
+.text-page figure {
+  max-height: 90%;
+}
+.text-page figcaption {
+  text-align: start;
+}
+""" if vertical else ""
+        return """body {
+  color: #1f2937;
+  font-family: serif;
+  line-height: 1.8;
+  margin: 0;
+  padding: 1.25em;
+}
+h1, h2, h3 {
+  color: #111827;
+  font-family: sans-serif;
+  line-height: 1.35;
+}
+p {
+  margin: 0 0 1em;
+}
+img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+figure {
+  margin: 1.25em 0;
+  page-break-inside: avoid;
+}
+.image-page {
+  page-break-before: always;
+  break-before: page;
+  min-height: 92vh;
+}
+.scene-image-full {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 92vh;
+  text-align: center;
+  -epub-writing-mode: horizontal-tb;
+  writing-mode: horizontal-tb;
+}
+.scene-image-full img {
+  max-height: 88vh;
+  max-width: 100%;
+  object-fit: contain;
+}
+.image-page figcaption {
+  display: none;
+}
+figcaption {
+  color: #4b5563;
+  font-size: 0.9em;
+  margin-top: 0.6em;
+}
+.panel img, .scene-image img, .chapter-image img {
+  border-radius: 0.25em;
+}
+.bullet {
+  margin-left: 1em;
+}""" + vertical_css
+
     def export_short_video(self, novel_id: int, payload: dict | None = None):
         payload = dict(payload or {})
         novel = self.get_novel(novel_id)
@@ -445,7 +887,7 @@ class CinemaNovelService:
             label=novel.subtitle or novel.description or "short comic",
             footer="title",
             title=True,
-            fade_in=True,
+            fade_in=False,
             duration=2.8,
         )
 
@@ -458,8 +900,8 @@ class CinemaNovelService:
                 if not isinstance(scene, dict):
                     continue
                 scene_text = str(scene.get("text") or "").strip()
-                caption = self._comic_panel_caption(scene_text)
-                if not caption:
+                caption = "" if scene.get("comic_page") else self._comic_panel_caption(scene_text)
+                if not caption and not scene.get("comic_page"):
                     continue
                 image_path = (
                     self._asset_file_path(scene.get("still_asset_id"))
@@ -470,7 +912,7 @@ class CinemaNovelService:
                 add_panel(
                     image_path,
                     caption,
-                    label=str(scene.get("speaker") or f"SCENE {int(chapter.chapter_no or 0):02d}-{scene_index + 1:02d}").strip(),
+                    label="" if scene.get("comic_page") else str(scene.get("speaker") or f"SCENE {int(chapter.chapter_no or 0):02d}-{scene_index + 1:02d}").strip(),
                     footer=f"{int(chapter.chapter_no or 0):02d}-{scene_index + 1:02d}",
                     duration=2.45,
                 )
@@ -529,10 +971,16 @@ class CinemaNovelService:
 
     def create_short_comic_novel(self, project_id: int, user_id: int, payload: dict | None):
         payload = dict(payload or {})
-        storyboard = self.generate_short_comic_storyboard(project_id, payload)
+        comic_layout = self._short_comic_layout(payload)
+        storyboard = (
+            self.generate_comic_page_storyboard(project_id, payload)
+            if comic_layout == "page"
+            else self.generate_short_comic_storyboard(project_id, payload)
+        )
         title = str(storyboard.get("title") or payload.get("title") or "ショート漫画").strip() or "ショート漫画"
-        subtitle = str(storyboard.get("logline") or "縦ショート漫画").strip()
-        panels = storyboard.get("panels") if isinstance(storyboard.get("panels"), list) else []
+        subtitle = str(storyboard.get("logline") or ("漫画ページ" if comic_layout == "page" else "縦ショート漫画")).strip()
+        panels = storyboard.get("pages") if comic_layout == "page" and isinstance(storyboard.get("pages"), list) else storyboard.get("panels")
+        panels = panels if isinstance(panels, list) else []
         if not panels:
             raise ValueError("short comic storyboard did not include panels")
 
@@ -549,6 +997,7 @@ class CinemaNovelService:
                 {
                     "source_input": payload,
                     "storyboard": storyboard,
+                    "comic_layout": comic_layout,
                     "target_panel_count": storyboard.get("target_panel_count"),
                     "actual_panel_count": len(panels),
                 }
@@ -561,14 +1010,32 @@ class CinemaNovelService:
         for index, panel in enumerate(panels):
             if not isinstance(panel, dict):
                 continue
-            caption = self._normalize_short_comic_caption(panel.get("caption") or panel.get("text") or "")
+            caption = (
+                self._normalize_comic_page_caption(panel.get("page_title") or panel.get("caption") or panel.get("summary") or panel.get("text") or "")
+                if comic_layout == "page"
+                else self._normalize_short_comic_caption(panel.get("caption") or panel.get("text") or "")
+            )
             if not caption:
                 continue
+            page_panels = panel.get("panels") if isinstance(panel.get("panels"), list) else []
+            dialogue_lines = []
+            for item in page_panels:
+                if not isinstance(item, dict):
+                    continue
+                speaker = str(item.get("speaker") or "").strip()
+                speech = str(item.get("speech") or item.get("dialogue") or "").strip()
+                if speech:
+                    dialogue_lines.append(f"{speaker}: {speech}" if speaker else speech)
             scenes.append(
                 {
                     "speaker": str(panel.get("speaker") or "").strip(),
                     "text": caption,
                     "caption": caption,
+                    "comic_layout": comic_layout,
+                    "comic_page": comic_layout == "page",
+                    "page_title": str(panel.get("page_title") or caption).strip(),
+                    "page_panels": page_panels,
+                    "dialogue": dialogue_lines,
                     "tone": str(panel.get("tone") or "").strip(),
                     "emotion": str(panel.get("emotion") or "").strip(),
                     "shot": str(panel.get("shot") or "").strip(),
@@ -587,7 +1054,7 @@ class CinemaNovelService:
         chapter = CinemaNovelChapter(
             novel_id=novel.id,
             chapter_no=1,
-            title="ショート漫画",
+            title="漫画ページ" if comic_layout == "page" else "ショート漫画",
             body_markdown="\n".join(f"{index + 1}. {scene['caption']}" for index, scene in enumerate(scenes)),
             scene_json=json_util.dumps(scenes),
             sort_order=0,
@@ -597,7 +1064,21 @@ class CinemaNovelService:
 
         if payload.get("generate_images", True):
             self.generate_short_comic_thumbnail(novel.id, payload)
-            self.generate_short_comic_panel_images(novel.id, {"parallel": True, "overwrite": False})
+            panel_result = self.generate_short_comic_panel_images(novel.id, {"parallel": True, "overwrite": False})
+            created_count = len((panel_result or {}).get("assets") or [])
+            failed_count = len((panel_result or {}).get("failed_assets") or [])
+            production = self._load_json(novel.production_json, default={})
+            production["panel_image_generation"] = {
+                "expected": len(scenes),
+                "created": created_count,
+                "failed": failed_count,
+                "finished_at": datetime.utcnow().isoformat(),
+            }
+            novel.production_json = json_util.dumps(production)
+            db.session.add(novel)
+            db.session.commit()
+            if scenes and created_count == 0:
+                raise RuntimeError(f"panel image generation created 0/{len(scenes)} images")
             self.generate_short_comic_end_card(novel.id, payload)
         return novel
 
@@ -608,7 +1089,8 @@ class CinemaNovelService:
             return None
         production = self._load_json(novel.production_json, default={})
         storyboard = production.get("storyboard") if isinstance(production.get("storyboard"), dict) else {}
-        panels = storyboard.get("panels") if isinstance(storyboard.get("panels"), list) else []
+        panels = storyboard.get("pages") if isinstance(storyboard.get("pages"), list) else storyboard.get("panels")
+        panels = panels if isinstance(panels, list) else []
         first_panel = panels[0] if panels and isinstance(panels[0], dict) else {}
         title = str(storyboard.get("title") or novel.title or "").strip()
         logline = str(storyboard.get("logline") or novel.subtitle or novel.description or "").strip()
@@ -666,7 +1148,8 @@ class CinemaNovelService:
         production = self._load_json(novel.production_json, default={})
         storyboard = production.get("storyboard") if isinstance(production.get("storyboard"), dict) else {}
         source_input = production.get("source_input") if isinstance(production.get("source_input"), dict) else payload
-        panels = storyboard.get("panels") if isinstance(storyboard.get("panels"), list) else []
+        panels = storyboard.get("pages") if isinstance(storyboard.get("pages"), list) else storyboard.get("panels")
+        panels = panels if isinstance(panels, list) else []
         last_panel = panels[-1] if panels and isinstance(panels[-1], dict) else {}
         main_character = self._main_character_name_from_payload(novel.project_id, source_input)
         searchable = "\n".join(
@@ -828,6 +1311,106 @@ class CinemaNovelService:
         parsed["usage"] = result.get("usage")
         return parsed
 
+    def generate_comic_page_storyboard(self, project_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        project = Project.query.get(project_id)
+        world = World.query.filter_by(project_id=project_id).first()
+        main_character = self._main_character_name_from_payload(project_id, payload)
+        genre = str(payload.get("genre") or "面白い").strip() or "面白い"
+        theme = str(payload.get("theme") or "").strip()
+        title = str(payload.get("title") or "").strip()
+        art_style = self._short_comic_art_style(payload)
+        try:
+            target_page_count = int(payload.get("target_page_count") or payload.get("target_panel_count") or 4)
+        except (TypeError, ValueError):
+            target_page_count = 4
+        target_page_count = max(1, min(12, target_page_count))
+        reference_sources = self._reference_sources(payload)
+        character_context = (
+            self._registered_character_context(project_id, main_character=main_character)
+            if self._reference_source_enabled(reference_sources, "characters")
+            else ""
+        )
+        reference_context = self._production_reference_context(
+            project_id,
+            reference_sources=reference_sources,
+            main_character=main_character,
+            project=project,
+            world=world,
+            include_characters=False,
+        )
+        prompt = "\n".join(
+            [
+                "Return only JSON.",
+                "Create a Japanese manga-page storyboard, not a prose novel and not single-panel social video frames.",
+                "The output will be used by gpt-image-2 to draw one complete manga page per page item.",
+                "Each manga page should contain 2 to 6 panels, clear gutters, speech balloons, short readable dialogue, and optional small narration boxes.",
+                "Keep each speech balloon short. Use Japanese dialogue of about 4 to 16 characters per balloon whenever possible.",
+                "Avoid tiny text, dense paragraphs, excessive captions, or too many balloons.",
+                f"Target page count: {target_page_count}. A little fewer is acceptable if the story works.",
+                f"Hard constraint: main protagonist is {main_character or 'not specified'}. If specified, use this protagonist consistently.",
+                "Use registered characters if relevant. Do not replace the specified protagonist with another character.",
+                "For each page, provide page_title, summary, tone, characters, and panels.",
+                "For each panel, provide panel_no, composition, action, speaker, speech, sfx, and background.",
+                "Also provide image_prompt for each page. The image_prompt must describe the whole page layout and include the exact dialogue/sfx text to draw.",
+                "If art_style is reference_image, preserve reference character identity and rendering taste, while composing the page as manga panels.",
+                "If art_style is anime, use polished modern manga/anime page art.",
+                "Required JSON shape:",
+                '{"title":"...","logline":"...","target_page_count":4,"pages":[{"page_title":"...","summary":"...","tone":"comedy","characters":["..."],"panels":[{"panel_no":1,"composition":"...","action":"...","speaker":"...","speech":"...","sfx":"...","background":"..."}],"image_prompt":"..."}]}',
+                "",
+                f"Requested title: {title}",
+                f"Genre: {genre}",
+                f"Main character: {main_character or 'AI chooses'}",
+                f"Theme/request: {theme}",
+                f"Page aspect: {'9:16 vertical smartphone manga page' if self._normalize_bool(payload.get('mobile_visible', True)) else 'portrait manga page, readable on desktop'}",
+                f"Art style: {art_style}",
+                "",
+                "Enabled reference sources:",
+                ", ".join(reference_sources),
+                "",
+                "Reference material:",
+                reference_context or "none",
+                "",
+                "Registered characters:",
+                character_context or "none",
+            ]
+        )
+        settings = self._user_setting_service.apply_cinema_novel_text_generation_settings(payload.get("text_options") or {})
+        result = self._text_ai_client.extract_state_json(
+            prompt,
+            model=settings.get("model"),
+        )
+        parsed = result.get("parsed_json")
+        if not isinstance(parsed, dict):
+            raise RuntimeError("comic page storyboard response was not valid JSON")
+        pages = parsed.get("pages")
+        if not isinstance(pages, list) or not pages:
+            raise RuntimeError("comic page storyboard did not include pages")
+        if main_character:
+            for key in ("title", "logline"):
+                if isinstance(parsed.get(key), str):
+                    parsed[key] = parsed[key].replace("??", main_character).replace("？？", main_character)
+            for page in pages:
+                if not isinstance(page, dict):
+                    continue
+                for key in ("page_title", "summary", "image_prompt"):
+                    if isinstance(page.get(key), str):
+                        page[key] = page[key].replace("??", main_character).replace("？？", main_character)
+                characters = page.get("characters") if isinstance(page.get("characters"), list) else []
+                characters = [main_character if str(item).strip() in {"??", "？？", ""} else str(item) for item in characters]
+                if main_character not in characters:
+                    characters = [main_character] + characters[:3]
+                page["characters"] = characters
+                image_prompt = str(page.get("image_prompt") or "")
+                if main_character not in image_prompt:
+                    page["image_prompt"] = f"Main protagonist {main_character}. {image_prompt}".strip()
+        parsed["target_page_count"] = target_page_count
+        parsed["target_panel_count"] = target_page_count
+        parsed["comic_layout"] = "page"
+        parsed["model"] = result.get("model")
+        parsed["usage"] = result.get("usage")
+        return parsed
+
     def generate_short_comic_panel_images(self, novel_id: int, payload: dict | None):
         payload = dict(payload or {})
         novel = self.get_novel(novel_id)
@@ -869,13 +1452,17 @@ class CinemaNovelService:
             reference_paths, reference_asset_ids = self._resolve_reference_image_paths(
                 [item.get("base_asset_id") for item in references if item.get("base_asset_id")]
             )
-            prompt = self._short_comic_image_prompt(novel, scene, caption, art_style=art_style)
+            prompt = (
+                self._comic_page_image_prompt(novel, scene, art_style=art_style)
+                if scene.get("comic_page")
+                else self._short_comic_image_prompt(novel, scene, caption, art_style=art_style)
+            )
             image_jobs.append(
                 {
                     "scene_index": scene_index,
                     "project_id": novel.project_id,
-                    "asset_type": "cinema_novel_comic_panel",
-                    "file_prefix": f"short_comic_{novel.id}_panel_{scene_index + 1}",
+                    "asset_type": "cinema_novel_comic_page" if scene.get("comic_page") else "cinema_novel_comic_panel",
+                    "file_prefix": f"comic_page_{novel.id}_{scene_index + 1}" if scene.get("comic_page") else f"short_comic_{novel.id}_panel_{scene_index + 1}",
                     "prompt": prompt,
                     "image_options": options,
                     "reference_paths": reference_paths,
@@ -1207,6 +1794,15 @@ class CinemaNovelService:
                 return str(character.name or character.nickname or "").strip()
         return ""
 
+    def _normalize_comic_page_caption(self, text: str) -> str:
+        text = re.sub(r"\s+", " ", str(text or "")).strip(" 「」")
+        if len(text) <= 36:
+            return text
+        end = max(text.rfind("、", 0, 36), text.rfind("。", 0, 36), text.rfind("！", 0, 36), text.rfind("？", 0, 36))
+        if end >= 12:
+            return text[: end + 1].rstrip()
+        return text[:33].rstrip() + "..."
+
     def _short_comic_image_prompt(self, novel, scene: dict, caption: str, *, art_style: str = "reference_image") -> str:
         tone = str(scene.get("tone") or "").strip() or "dramatic"
         emotion = str(scene.get("emotion") or "").strip()
@@ -1292,6 +1888,63 @@ class CinemaNovelService:
             ]
         )
 
+    def _comic_page_image_prompt(self, novel, scene: dict, *, art_style: str = "reference_image") -> str:
+        page_title = str(scene.get("page_title") or scene.get("caption") or "Manga page").strip()
+        summary = str(scene.get("visual_focus") or scene.get("text") or "").strip()
+        tone = str(scene.get("tone") or "").strip() or "comedy"
+        characters = ", ".join(str(item) for item in scene.get("characters") or [] if str(item).strip())
+        panels = scene.get("page_panels") if isinstance(scene.get("page_panels"), list) else []
+        panel_lines = []
+        exact_texts = []
+        for index, panel in enumerate(panels[:6], start=1):
+            if not isinstance(panel, dict):
+                continue
+            speaker = str(panel.get("speaker") or "").strip()
+            speech = str(panel.get("speech") or panel.get("dialogue") or "").strip()
+            sfx = str(panel.get("sfx") or "").strip()
+            if speech:
+                exact_texts.append(speech)
+            if sfx:
+                exact_texts.append(sfx)
+            panel_lines.append(
+                f"Panel {index}: composition={panel.get('composition') or ''}; action={panel.get('action') or ''}; "
+                f"speaker={speaker}; speech={speech}; sfx={sfx}; background={panel.get('background') or ''}"
+            )
+        if not panel_lines:
+            panel_lines.append(f"Panel 1: introduce {characters or 'the protagonist'}; speech={page_title}")
+        style_instruction = self._short_comic_art_style_instruction(art_style)
+        identity_instruction = (
+            "Preserve the reference character identity, costume impression, face, hair, color mood, and rendering taste. Use manga panel layout and speech balloons, but do not redesign the character into a different person."
+            if art_style == "reference_image"
+            else "Use polished modern manga/anime page art with expressive faces, clean linework, readable balloons, and dynamic panel rhythm."
+        )
+        return "\n".join(
+            [
+                "Create one complete finished Japanese manga page image.",
+                "This is a normal manga page, not a social-video thumbnail and not a single illustration.",
+                style_instruction,
+                identity_instruction,
+                "Page layout: 2 to 6 panels with clear white gutters, readable panel order, varied close-up / medium / wide shots.",
+                "Add speech balloons and optional small narration boxes directly inside the page.",
+                "Use only the exact Japanese text listed below. Do not add gibberish, watermark, UI text, random signs, or extra captions.",
+                "Keep every speech balloon large and readable on a smartphone. Avoid tiny dense text.",
+                "The page should feel like a real manga page: panel borders, balloons, expressive reactions, timing, and visual comedy/drama.",
+                f"Novel title: {novel.title or ''}",
+                f"Page title: {page_title}",
+                f"Tone: {tone}",
+                f"Characters: {characters or 'use the story context'}",
+                f"Page summary: {summary}",
+                "",
+                "Panel plan:",
+                "\n".join(panel_lines),
+                "",
+                "Exact visible text to render:",
+                "\n".join(f"- {text}" for text in exact_texts[:12]) or f"- {page_title}",
+                "",
+                f"Base image prompt: {scene.get('image_prompt') or ''}",
+            ]
+        )
+
     def _short_comic_end_card_prompt(self, novel, panel: dict, *, main_character: str = "", art_style: str = "reference_image") -> str:
         is_mobile = bool(getattr(novel, "mobile_visible", True))
         aspect_instruction = (
@@ -1331,6 +1984,10 @@ class CinemaNovelService:
     def _short_comic_art_style(self, payload: dict | None) -> str:
         value = str((payload or {}).get("short_comic_art_style") or "reference_image").strip().lower()
         return "anime" if value in {"anime", "animation", "アニメ調"} else "reference_image"
+
+    def _short_comic_layout(self, payload: dict | None) -> str:
+        value = str((payload or {}).get("comic_layout") or "short").strip().lower()
+        return "page" if value in {"page", "pages", "manga_page", "comic_page", "漫画ページ"} else "short"
 
     def _short_comic_art_style_instruction(self, art_style: str) -> str:
         if art_style == "anime":

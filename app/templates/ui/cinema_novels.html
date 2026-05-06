@@ -57,6 +57,7 @@
         <select class="form-select" name="genre" id="cinemaGenreSelect">
           <option value="">AIが提案</option>
           <option value="面白いコメディ">面白い</option>
+          <option value="お色気">お色気</option>
           <option value="写真集">写真集</option>
           <option value="恋愛">恋愛</option>
           <option value="サスペンス">サスペンス</option>
@@ -73,8 +74,15 @@
         <input class="form-control" name="chapter_count" type="number" min="3" max="12" value="5">
       </label>
       <label class="cinema-production-field" data-production-field="comic" hidden>
-        <span>目安コマ数</span>
-        <input class="form-control" name="target_panel_count" type="number" min="6" max="40" value="20">
+        <span>漫画形式</span>
+        <select class="form-select" name="comic_layout" aria-label="漫画形式">
+          <option value="short">ショート漫画</option>
+          <option value="page">漫画ページ</option>
+        </select>
+      </label>
+      <label class="cinema-production-field" data-production-field="comic" hidden>
+        <span>目安コマ数 / ページ数</span>
+        <input class="form-control" name="target_panel_count" type="number" min="1" max="40" value="20">
       </label>
       <label class="cinema-production-field" data-production-field="comic" hidden>
         <span>画風</span>

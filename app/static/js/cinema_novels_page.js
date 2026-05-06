@@ -11,6 +11,8 @@
   const outlineResult = document.getElementById("cinemaProductionResult");
   const suggestPremiseButton = document.getElementById("cinemaSuggestPremiseButton");
   const createShortComicButton = document.getElementById("cinemaCreateShortComicButton");
+  const comicLayoutSelect = document.querySelector('[name="comic_layout"]');
+  const targetPanelInput = document.querySelector('[name="target_panel_count"]');
   const productionModeHelp = document.getElementById("cinemaProductionModeHelp");
   const productionModeButtons = Array.from(document.querySelectorAll("[data-production-mode]"));
   const productionModeFields = Array.from(document.querySelectorAll("[data-production-field]"));
@@ -129,6 +131,11 @@
     return novel?.mode === "short_comic_video";
   }
 
+  function isComicPageNovel(novel) {
+    const production = novel?.production_json || {};
+    return novel?.mode === "short_comic_video" && production?.comic_layout === "page";
+  }
+
   function setProductionMode(mode) {
     productionMode = mode === "comic" ? "comic" : "novel";
     productionModeButtons.forEach((button) => {
@@ -144,8 +151,17 @@
     });
     if (productionModeHelp) {
       productionModeHelp.textContent = productionMode === "comic"
-        ? "ショート漫画を作成します。作成後に漫画動画として出力できます。"
+        ? "ショート漫画または漫画ページを作成します。作成後に漫画動画やEPUBとして出力できます。"
         : "ノベルゲームを作成します。作成後にPPT化や動画化ができます。";
+    }
+  }
+
+  function syncComicLayoutDefaults() {
+    if (!comicLayoutSelect || !targetPanelInput) return;
+    if (comicLayoutSelect.value === "page" && Number(targetPanelInput.value || 0) > 12) {
+      targetPanelInput.value = "4";
+    } else if (comicLayoutSelect.value !== "page" && Number(targetPanelInput.value || 0) < 6) {
+      targetPanelInput.value = "20";
     }
   }
 
@@ -338,8 +354,9 @@
     ].filter(Boolean).join(" ");
     const reviews = Array.isArray(novel.reviews) ? novel.reviews : [];
     const shortComic = isShortComicNovel(novel);
-    const progressText = shortComic ? "漫画動画用" : `${progressCopy} / ${novel.chapter_count || 0}章`;
-    const workTypeBadge = `<span class="cinema-novel-status-badge ${shortComic ? "is-mobile-visible" : "is-draft"}">${shortComic ? "ショート漫画" : "ノベルゲーム"}</span>`;
+    const comicPage = isComicPageNovel(novel);
+    const progressText = shortComic ? (comicPage ? "漫画ページ用" : "漫画動画用") : `${progressCopy} / ${novel.chapter_count || 0}章`;
+    const workTypeBadge = `<span class="cinema-novel-status-badge ${shortComic ? "is-mobile-visible" : "is-draft"}">${comicPage ? "漫画ページ" : shortComic ? "ショート漫画" : "ノベルゲーム"}</span>`;
     const statusBadge = `<span class="cinema-novel-status-badge ${statusClass(novel.status)}">${statusLabel(novel.status)}</span>`;
     const mobileBadge = canManageProject ? `<span class="cinema-novel-status-badge ${novel.mobile_visible ? "is-mobile-visible" : "is-mobile-hidden"}">${mobileVisibleLabel(novel.mobile_visible)}</span>` : "";
     const reviewersHtml = reviews.length ? `
@@ -358,6 +375,10 @@
             <i class="bi bi-badge-cc"></i>
             漫画動画
           </button>
+          <button class="btn btn-sm btn-outline-dark" type="button" data-epub-novel-id="${novel.id}">
+            <i class="bi bi-book"></i>
+            EPUB
+          </button>
     ` : `
           <button class="btn btn-sm btn-outline-dark" type="button" data-production-novel-id="${novel.id}">
             <i class="bi bi-tools"></i>
@@ -370,6 +391,14 @@
           <button class="btn btn-sm btn-outline-dark" type="button" data-video-novel-id="${novel.id}">
             <i class="bi bi-file-earmark-play"></i>
             動画
+          </button>
+          <button class="btn btn-sm btn-outline-dark" type="button" data-epub-novel-id="${novel.id}">
+            <i class="bi bi-book"></i>
+            EPUB
+          </button>
+          <button class="btn btn-sm btn-outline-dark" type="button" data-vertical-epub-novel-id="${novel.id}">
+            <i class="bi bi-layout-text-window-reverse"></i>
+            縦書きEPUB
           </button>
     `;
     const publicationButton = `
@@ -919,8 +948,10 @@
 
   async function createShortComic() {
     if (!outlineForm || !createShortComicButton) return;
+    syncComicLayoutDefaults();
     const body = productionFormBody();
     body.target_panel_count = Number(body.target_panel_count || 20);
+    if (body.comic_layout === "page") body.target_page_count = body.target_panel_count;
     body.generate_images = true;
     const originalHtml = createShortComicButton.innerHTML;
     createShortComicButton.disabled = true;
@@ -934,11 +965,23 @@
       const novel = await waitShortComicJob(job);
       await loadNovels();
       if (outlineResult) {
-        const panelCount = (novel.chapters?.[0]?.scene_json || []).length;
+        const scenes = novel.chapters?.[0]?.scene_json || [];
+        const panelCount = scenes.length;
+        const imageCount = scenes.filter((scene) => scene?.still_asset_id || scene?.background_asset_id || scene?.still_asset?.media_url || scene?.background_asset?.media_url).length;
+        const comicPage = isComicPageNovel(novel);
         outlineResult.hidden = false;
+        if (panelCount > 0 && imageCount === 0) {
+          outlineResult.innerHTML = `
+            <div class="alert alert-warning">
+              本編画像がまだ反映されていません。${imageCount}/${panelCount} 画像。しばらく待ってから再読み込みしてください。
+            </div>
+            <pre>${escape(novel.title || "")}\n${escape(novel.subtitle || "")}</pre>
+          `;
+          return;
+        }
         outlineResult.innerHTML = `
           <div class="cinema-production-result-meta">
-            ショート漫画を作成しました。${panelCount}コマ / 画像つき
+            ${comicPage ? "漫画ページ" : "ショート漫画"}を作成しました。${panelCount}${comicPage ? "ページ" : "コマ"} / 画像つき
           </div>
           <pre>${escape(novel.title || "")}\n${escape(novel.subtitle || "")}</pre>
         `;
@@ -958,6 +1001,7 @@
   importButton?.addEventListener("click", importAkagane);
   suggestPremiseButton?.addEventListener("click", suggestProductionPremise);
   createShortComicButton?.addEventListener("click", createShortComic);
+  comicLayoutSelect?.addEventListener("change", syncComicLayoutDefaults);
   bgmUploadInput?.addEventListener("change", () => {
     uploadBgmAsset(bgmUploadInput.files?.[0]);
   });
@@ -987,6 +1031,18 @@
     if (exportButton) {
       event.preventDefault();
       window.location.href = `/api/v1/cinema-novels/${Number(exportButton.dataset.exportNovelId)}/powerpoint`;
+      return;
+    }
+    const epubButton = event.target.closest("[data-epub-novel-id]");
+    if (epubButton) {
+      event.preventDefault();
+      window.location.href = `/api/v1/cinema-novels/${Number(epubButton.dataset.epubNovelId)}/epub`;
+      return;
+    }
+    const verticalEpubButton = event.target.closest("[data-vertical-epub-novel-id]");
+    if (verticalEpubButton) {
+      event.preventDefault();
+      window.location.href = `/api/v1/cinema-novels/${Number(verticalEpubButton.dataset.verticalEpubNovelId)}/epub?writing_mode=vertical`;
       return;
     }
     const videoButton = event.target.closest("[data-video-novel-id]");

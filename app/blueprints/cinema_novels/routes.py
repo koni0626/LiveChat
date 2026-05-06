@@ -325,6 +325,24 @@ def export_cinema_novel_powerpoint(novel_id: int):
     )
 
 
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/epub", methods=["GET"])
+def export_cinema_novel_epub(novel_id: int):
+    novel, _project, _user = _require_novel(novel_id, for_manage=True)
+    try:
+        result = cinema_novel_service.export_epub(novel.id, writing_mode=str(request.args.get("writing_mode") or "horizontal"))
+    except (RuntimeError, ValueError) as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    file_path, filename = result
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/epub+zip",
+    )
+
+
 @cinema_novels_bp.route("/cinema-novels/<int:novel_id>/short-video", methods=["GET"])
 def export_cinema_novel_short_video(novel_id: int):
     novel, _project, _user = _require_novel(novel_id, for_manage=True)
