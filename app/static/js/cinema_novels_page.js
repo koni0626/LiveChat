@@ -42,8 +42,26 @@
   const novelStatusSelect = document.getElementById("cinemaNovelStatusSelect");
   const novelMobileVisibleCheck = document.getElementById("cinemaNovelMobileVisibleCheck");
   const novelStatusSaveButton = document.getElementById("cinemaNovelStatusSaveButton");
+  const comicEditorPanel = document.getElementById("cinemaComicEditorPanel");
+  const comicEditorTitle = document.getElementById("cinemaComicEditorTitle");
+  const comicEditorCloseButton = document.getElementById("cinemaComicEditorClose");
+  const comicEditorThumbs = document.getElementById("cinemaComicEditorThumbs");
+  const comicEditorPreview = document.getElementById("cinemaComicEditorPreview");
+  const comicEditorCaption = document.getElementById("cinemaComicEditorCaption");
+  const comicEditorImagePrompt = document.getElementById("cinemaComicEditorImagePrompt");
+  const comicEditorEditPrompt = document.getElementById("cinemaComicEditorEditPrompt");
+  const comicEditorHistory = document.getElementById("cinemaComicEditorHistory");
+  const comicEditorAddAfterButton = document.getElementById("cinemaComicEditorAddAfter");
+  const comicEditorCopyAfterButton = document.getElementById("cinemaComicEditorCopyAfter");
+  const comicEditorDeleteSceneButton = document.getElementById("cinemaComicEditorDeleteScene");
+  const comicEditorSaveTextButton = document.getElementById("cinemaComicEditorSaveText");
+  const comicEditorRegenerateButton = document.getElementById("cinemaComicEditorRegenerate");
+  const comicEditorStatus = document.getElementById("cinemaComicEditorStatus");
   let activeNovel = null;
   let activeReviewNovel = null;
+  let activeComicNovel = null;
+  let activeComicChapter = null;
+  let activeComicSceneIndex = 0;
   let latestProductionOutline = null;
   let latestProductionInput = null;
   let productionCharacters = [];
@@ -371,6 +389,10 @@
       </div>
     ` : "";
     const actionsHtml = shortComic ? `
+          <button class="btn btn-sm btn-outline-dark" type="button" data-comic-editor-novel-id="${novel.id}">
+            <i class="bi bi-easel"></i>
+            編集
+          </button>
           <button class="btn btn-sm btn-outline-dark" type="button" data-comic-video-novel-id="${novel.id}">
             <i class="bi bi-badge-cc"></i>
             漫画動画
@@ -998,6 +1020,299 @@
     }
   }
 
+  function comicScenes() {
+    return Array.isArray(activeComicChapter?.scene_json) ? activeComicChapter.scene_json : [];
+  }
+
+  function comicEditorItems() {
+    const coverAsset = activeComicNovel?.poster_asset?.media_url ? activeComicNovel.poster_asset : activeComicNovel?.cover_asset;
+    const endAsset = activeComicNovel?.comic_end_card_asset;
+    return [
+      {
+        kind: "cover",
+        label: "表紙",
+        caption: activeComicNovel?.title || "表紙",
+        imagePrompt: activeComicNovel?.description || activeComicNovel?.subtitle || "",
+        asset: coverAsset || null,
+        history: Array.isArray(activeComicNovel?.comic_cover_asset_history) ? activeComicNovel.comic_cover_asset_history : [],
+      },
+      ...comicScenes().map((scene, sceneIndex) => ({
+        kind: "scene",
+        label: scene?.comic_page ? `P${sceneIndex + 1}` : `${sceneIndex + 1}`,
+        sceneIndex,
+        scene,
+        caption: comicSceneCaption(scene),
+        imagePrompt: scene?.image_prompt || scene?.visual_focus || "",
+        asset: scene?.still_asset?.media_url ? scene.still_asset : scene?.background_asset || null,
+        history: Array.isArray(scene?.still_asset_history) ? scene.still_asset_history : [],
+      })),
+      {
+        kind: "end_card",
+        label: "END",
+        caption: "Laplace City",
+        imagePrompt: "Final cool end card, protagonist in a striking heroic pose, premium short-video closing thumbnail.",
+        asset: endAsset || null,
+        history: Array.isArray(activeComicNovel?.comic_end_card_asset_history) ? activeComicNovel.comic_end_card_asset_history : [],
+      },
+    ];
+  }
+
+  function comicItemImageUrl(item) {
+    return item?.asset?.media_url || "";
+  }
+
+  function comicSceneCaption(scene) {
+    return scene?.caption || scene?.text || scene?.page_title || "";
+  }
+
+  function selectedComicItem() {
+    return comicEditorItems()[activeComicSceneIndex] || null;
+  }
+
+  function setComicEditorStatus(message, type = "") {
+    if (!comicEditorStatus) return;
+    comicEditorStatus.classList.toggle("text-danger", type === "danger");
+    comicEditorStatus.classList.toggle("text-success", type === "success");
+    comicEditorStatus.textContent = message || "";
+  }
+
+  function syncActiveComicChapterFromNovel() {
+    if (!activeComicNovel) {
+      activeComicChapter = null;
+      return;
+    }
+    const chapters = Array.isArray(activeComicNovel.chapters) ? activeComicNovel.chapters : [];
+    activeComicChapter = chapters[0] || null;
+    const maxIndex = Math.max(0, comicEditorItems().length - 1);
+    activeComicSceneIndex = Math.min(Math.max(0, activeComicSceneIndex), maxIndex);
+  }
+
+  function renderComicEditor() {
+    if (!comicEditorPanel || !comicEditorThumbs || !comicEditorPreview) return;
+    syncActiveComicChapterFromNovel();
+    const items = comicEditorItems();
+    const item = selectedComicItem();
+    if (comicEditorTitle) {
+      comicEditorTitle.textContent = activeComicNovel?.title ? `漫画編集室: ${activeComicNovel.title}` : "漫画編集室";
+    }
+    if (!items.length) {
+      comicEditorThumbs.innerHTML = "";
+      comicEditorPreview.innerHTML = `<div class="cinema-comic-editor-empty">編集できるコマがありません。</div>`;
+      if (comicEditorHistory) comicEditorHistory.innerHTML = `<div class="cinema-comic-editor-history-empty">履歴はまだありません。</div>`;
+      if (comicEditorCaption) comicEditorCaption.value = "";
+      if (comicEditorImagePrompt) comicEditorImagePrompt.value = "";
+      return;
+    }
+    comicEditorThumbs.innerHTML = items.map((item, index) => {
+      const imageUrl = comicItemImageUrl(item);
+      return `
+        <button class="cinema-comic-editor-thumb ${index === activeComicSceneIndex ? "is-active" : ""}" type="button" data-comic-editor-scene-index="${index}">
+          ${imageUrl ? `<img src="${escape(imageUrl)}" alt="">` : `<span class="cinema-comic-editor-noimage">No image</span>`}
+          <strong>${escape(item.label || String(index + 1))}</strong>
+          <small>${escape(item.caption || "").slice(0, 44)}</small>
+        </button>
+      `;
+    }).join("");
+
+    const imageUrl = comicItemImageUrl(item);
+    comicEditorPreview.innerHTML = imageUrl
+      ? `<img src="${escape(imageUrl)}" alt=""><p>${escape(item?.caption || "")}</p>`
+      : `<div class="cinema-comic-editor-empty">このコマには画像がありません。再生成すると画像を作れます。</div>`;
+    if (comicEditorCaption) comicEditorCaption.value = item?.caption || "";
+    if (comicEditorImagePrompt) comicEditorImagePrompt.value = item?.imagePrompt || "";
+    if (comicEditorEditPrompt) comicEditorEditPrompt.value = "";
+    if (comicEditorHistory) {
+      const history = Array.isArray(item?.history) ? item.history : [];
+      comicEditorHistory.innerHTML = history.length ? history.map((asset, index) => `
+        <button class="cinema-comic-editor-history-item" type="button" data-comic-history-asset-id="${asset.id}">
+          <img src="${escape(asset.media_url || "")}" alt="">
+          <span>履歴 ${index + 1}</span>
+        </button>
+      `).join("") : `<div class="cinema-comic-editor-history-empty">再生成すると前の画像がここに残ります。</div>`;
+    }
+    const sceneEditable = item?.kind === "scene";
+    if (comicEditorAddAfterButton) comicEditorAddAfterButton.disabled = !activeComicChapter;
+    if (comicEditorCopyAfterButton) comicEditorCopyAfterButton.disabled = !sceneEditable;
+    if (comicEditorDeleteSceneButton) comicEditorDeleteSceneButton.disabled = !sceneEditable;
+  }
+
+  async function openComicEditor(novelId) {
+    if (!comicEditorPanel) return;
+    activeComicNovel = await api(`/api/v1/cinema-novels/${novelId}`);
+    activeComicSceneIndex = 0;
+    renderComicEditor();
+    comicEditorPanel.hidden = false;
+    setComicEditorStatus("");
+    comicEditorPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function saveComicSceneText({ silent = false } = {}) {
+    if (!activeComicNovel) return null;
+    const item = selectedComicItem();
+    if (!item) return null;
+    if (item.kind !== "scene") {
+      setComicEditorStatus("表紙とENDは、修正メモを書いて再生成するか、画像履歴から選んで反映できます。");
+      return null;
+    }
+    if (!activeComicChapter) return null;
+    if (!silent) {
+      comicEditorSaveTextButton.disabled = true;
+      comicEditorSaveTextButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 保存中`;
+      setComicEditorStatus("保存しています...");
+    }
+    try {
+      const result = await api(`/api/v1/cinema-novels/${activeComicNovel.id}/comic-scenes`, {
+        method: "PUT",
+        body: JSON.stringify({
+          chapter_id: activeComicChapter.id,
+          scene_index: item.sceneIndex,
+          caption: comicEditorCaption?.value || "",
+          image_prompt: comicEditorImagePrompt?.value || "",
+        }),
+      });
+      activeComicNovel = result.novel || activeComicNovel;
+      activeComicChapter = result.chapter || activeComicChapter;
+      renderComicEditor();
+      if (!silent) setComicEditorStatus("保存しました。動画とEPUBにも反映されます。", "success");
+      return result;
+    } catch (error) {
+      setComicEditorStatus(cleanErrorMessage(error.message), "danger");
+      throw error;
+    } finally {
+      if (!silent) {
+        comicEditorSaveTextButton.disabled = false;
+        comicEditorSaveTextButton.innerHTML = `<i class="bi bi-save"></i> テキスト保存`;
+      }
+    }
+  }
+
+  async function selectComicHistoryImage(assetId) {
+    if (!activeComicNovel || !assetId) return;
+    const item = selectedComicItem();
+    if (!item) return;
+    setComicEditorStatus("履歴画像を反映しています...");
+    try {
+      const result = item.kind === "scene"
+        ? await api(`/api/v1/cinema-novels/${activeComicNovel.id}/comic-scenes`, {
+          method: "PUT",
+          body: JSON.stringify({
+            chapter_id: activeComicChapter.id,
+            scene_index: item.sceneIndex,
+            selected_asset_id: assetId,
+          }),
+        })
+        : await api(`/api/v1/cinema-novels/${activeComicNovel.id}/comic-special-image`, {
+          method: "PUT",
+          body: JSON.stringify({
+            kind: item.kind,
+            selected_asset_id: assetId,
+          }),
+        });
+      activeComicNovel = result.novel || activeComicNovel;
+      activeComicChapter = result.chapter || activeComicNovel.chapters?.[0] || activeComicChapter;
+      renderComicEditor();
+      setComicEditorStatus("履歴画像を反映しました。動画とEPUBにもこの画像が使われます。", "success");
+      await loadNovels();
+    } catch (error) {
+      setComicEditorStatus(cleanErrorMessage(error.message), "danger");
+    }
+  }
+
+  async function mutateComicScene(operation) {
+    if (!activeComicNovel || !activeComicChapter) return;
+    const item = selectedComicItem();
+    const scenes = comicScenes();
+    const selectedSceneIndex = item?.kind === "scene"
+      ? item.sceneIndex
+      : item?.kind === "cover"
+        ? -1
+        : Math.max(0, scenes.length - 1);
+    if ((operation === "copy_after" || operation === "delete") && item?.kind !== "scene") {
+      setComicEditorStatus("表紙とENDはコマ操作の対象外です。", "danger");
+      return;
+    }
+    if (operation === "delete" && !window.confirm("このコマを削除して、後ろのコマを前に詰めますか？")) return;
+    const buttons = [comicEditorAddAfterButton, comicEditorCopyAfterButton, comicEditorDeleteSceneButton].filter(Boolean);
+    buttons.forEach((button) => { button.disabled = true; });
+    setComicEditorStatus("コマ構成を更新しています...");
+    try {
+      const result = await api(`/api/v1/cinema-novels/${activeComicNovel.id}/comic-scenes/mutate`, {
+        method: "POST",
+        body: JSON.stringify({
+          chapter_id: activeComicChapter.id,
+          scene_index: selectedSceneIndex,
+          operation,
+          caption: comicEditorCaption?.value || "",
+          image_prompt: comicEditorImagePrompt?.value || "",
+        }),
+      });
+      activeComicNovel = result.novel || activeComicNovel;
+      activeComicChapter = result.chapter || activeComicNovel.chapters?.[0] || activeComicChapter;
+      activeComicSceneIndex = Math.max(1, Number(result.scene_index || 0) + 1);
+      renderComicEditor();
+      const message = operation === "delete" ? "コマを削除しました。" : operation === "copy_after" ? "コマをコピーしました。" : "コマを追加しました。";
+      setComicEditorStatus(message, "success");
+      await loadNovels();
+    } catch (error) {
+      setComicEditorStatus(cleanErrorMessage(error.message), "danger");
+    } finally {
+      buttons.forEach((button) => { button.disabled = false; });
+      renderComicEditor();
+    }
+  }
+
+  async function regenerateComicScene() {
+    if (!activeComicNovel) return;
+    const item = selectedComicItem();
+    if (!item) return;
+    comicEditorRegenerateButton.disabled = true;
+    comicEditorSaveTextButton.disabled = true;
+    comicEditorRegenerateButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 再生成中`;
+    setComicEditorStatus("このコマだけ画像を作り直しています...");
+    try {
+      const editPrompt = (comicEditorEditPrompt?.value || "").trim();
+      const savedImagePrompt = comicEditorImagePrompt?.value || "";
+      const savedCaption = comicEditorCaption?.value || "";
+      if (item.kind === "scene") await saveComicSceneText({ silent: true });
+      const refreshedItem = selectedComicItem() || item;
+      const imagePrompt = [
+        savedImagePrompt || refreshedItem.imagePrompt || "",
+        editPrompt ? `Revision note: ${editPrompt}` : "",
+      ].filter(Boolean).join("\n");
+      const result = item.kind === "scene"
+        ? await api(`/api/v1/cinema-novels/${activeComicNovel.id}/comic-scenes/regenerate`, {
+          method: "POST",
+          body: JSON.stringify({
+            chapter_id: activeComicChapter.id,
+            scene_index: refreshedItem.sceneIndex,
+            caption: savedCaption,
+            image_prompt: imagePrompt,
+          }),
+        })
+        : await api(`/api/v1/cinema-novels/${activeComicNovel.id}/comic-special-image/regenerate`, {
+          method: "POST",
+          body: JSON.stringify({
+            kind: item.kind,
+            caption: savedCaption,
+            image_prompt: imagePrompt,
+          }),
+        });
+      activeComicNovel = result.novel || activeComicNovel;
+      activeComicChapter = result.chapter || activeComicNovel.chapters?.[0] || activeComicChapter;
+      renderComicEditor();
+      const created = (result.assets || []).length || (result.asset ? 1 : 0);
+      const failed = (result.failed_assets || []).length;
+      setComicEditorStatus(`再生成しました。作成 ${created} / 失敗 ${failed}`, failed ? "danger" : "success");
+      await loadNovels();
+    } catch (error) {
+      setComicEditorStatus(cleanErrorMessage(error.message), "danger");
+    } finally {
+      comicEditorRegenerateButton.disabled = false;
+      comicEditorSaveTextButton.disabled = false;
+      comicEditorRegenerateButton.innerHTML = `<i class="bi bi-magic"></i> このコマを再生成`;
+    }
+  }
+
   importButton?.addEventListener("click", importAkagane);
   suggestPremiseButton?.addEventListener("click", suggestProductionPremise);
   createShortComicButton?.addEventListener("click", createShortComic);
@@ -1051,6 +1366,17 @@
       window.location.href = `/api/v1/cinema-novels/${Number(videoButton.dataset.videoNovelId)}/short-video${selectedBgmQuery()}`;
       return;
     }
+    const comicEditorButton = event.target.closest("[data-comic-editor-novel-id]");
+    if (comicEditorButton) {
+      event.preventDefault();
+      openComicEditor(Number(comicEditorButton.dataset.comicEditorNovelId)).catch((error) => {
+        if (outlineResult) {
+          outlineResult.hidden = false;
+          outlineResult.innerHTML = `<div class="alert alert-danger">${escape(cleanErrorMessage(error.message))}</div>`;
+        }
+      });
+      return;
+    }
     const comicVideoButton = event.target.closest("[data-comic-video-novel-id]");
     if (comicVideoButton) {
       event.preventDefault();
@@ -1083,6 +1409,28 @@
   reviewCloseButton?.addEventListener("click", () => {
     if (reviewPanel) reviewPanel.hidden = true;
   });
+  comicEditorCloseButton?.addEventListener("click", () => {
+    if (comicEditorPanel) comicEditorPanel.hidden = true;
+  });
+  comicEditorThumbs?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-comic-editor-scene-index]");
+    if (!button) return;
+    activeComicSceneIndex = Number(button.dataset.comicEditorSceneIndex || 0);
+    renderComicEditor();
+    setComicEditorStatus("");
+  });
+  comicEditorHistory?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-comic-history-asset-id]");
+    if (!button) return;
+    selectComicHistoryImage(Number(button.dataset.comicHistoryAssetId || 0));
+  });
+  comicEditorAddAfterButton?.addEventListener("click", () => mutateComicScene("add_after"));
+  comicEditorCopyAfterButton?.addEventListener("click", () => mutateComicScene("copy_after"));
+  comicEditorDeleteSceneButton?.addEventListener("click", () => mutateComicScene("delete"));
+  comicEditorSaveTextButton?.addEventListener("click", () => {
+    saveComicSceneText().catch(() => {});
+  });
+  comicEditorRegenerateButton?.addEventListener("click", regenerateComicScene);
   createReviewButton?.addEventListener("click", createReview);
   outlineForm?.addEventListener("submit", async (event) => {
     event.preventDefault();

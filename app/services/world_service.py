@@ -129,12 +129,12 @@ class WorldService:
     def _build_world_draft_prompt(self, project, current_world, payload: dict) -> str:
         ui_fields = payload.get("ui_fields") if isinstance(payload.get("ui_fields"), dict) else payload
         lines = [
-            "Return only JSON.",
-            "Create a strong draft world setting for a Japanese character live chat tool.",
-            "The user will edit it later, so make it concrete, reusable, and suitable for AI character conversation.",
-            "Required JSON keys: world_name, world_tone, time_period, place_description, technology_level, social_structure, important_facilities, forbidden_settings.",
-            "All values must be Japanese strings written in Markdown-friendly style. important_facilities and forbidden_settings may contain headings and bullet lists.",
-            "Avoid generic fantasy filler. Make the setting specific enough to guide character behavior and image generation.",
+            "JSONのみを返してください。",
+            "日本語キャラクターのライブチャットツール向けに、強い世界観設定のドラフトを作成してください。",
+            "ユーザーが後で編集する前提なので、具体的で、再利用しやすく、AIキャラクター会話に適した内容にしてください。",
+            "必須JSONキー: world_name, world_tone, time_period, place_description, technology_level, social_structure, important_facilities, forbidden_settings。",
+            "すべての値は、Markdownで扱いやすい日本語文字列にしてください。important_facilities と forbidden_settings には見出しや箇条書きを含めても構いません。",
+            "汎用的なファンタジーの穴埋めは避けてください。キャラクターの行動や画像生成を導ける程度に、具体的な設定にしてください。",
         ]
         if project:
             lines.extend(

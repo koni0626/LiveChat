@@ -71,17 +71,17 @@ class PlayerProfileMemoryService:
         if not any(str(data.get(key) or "").strip() for key in data if key not in {"memory_enabled", "last_interaction_at"}):
             return ""
         lines = [
-            "Shared player profile for all characters:",
-            f"interests: {data['interest_notes'] or '(none)'}",
-            f"dislikes_or_avoid_topics: {data['dislike_notes'] or '(none)'}",
-            f"preferred_conversation_style: {data['conversation_style_notes'] or '(none)'}",
-            f"humor_preferences: {data['humor_notes'] or '(none)'}",
-            f"romance_boundaries_and_preferences: {data['romance_notes'] or '(none)'}",
-            f"current_goals_or_interests: {data['goal_notes'] or '(none)'}",
-            f"recurring_frustrations: {data['frustration_notes'] or '(none)'}",
-            f"recent_player_signals: {data['recent_player_notes'] or '(none)'}",
-            "Use this as background understanding. Adapt topic choice, clarity, humor, pacing, and romantic distance to the player.",
-            "Do not announce that you are using a profile. Do not overfit one old note if the current player message says otherwise.",
+            "全キャラクター共通のプレイヤープロフィール:",
+            f"興味: {data['interest_notes'] or '(なし)'}",
+            f"嫌いなもの/避けたい話題: {data['dislike_notes'] or '(なし)'}",
+            f"好みの会話スタイル: {data['conversation_style_notes'] or '(なし)'}",
+            f"ユーモアの好み: {data['humor_notes'] or '(なし)'}",
+            f"恋愛上の境界線と好み: {data['romance_notes'] or '(なし)'}",
+            f"現在の目標/関心: {data['goal_notes'] or '(なし)'}",
+            f"繰り返し出る不満: {data['frustration_notes'] or '(なし)'}",
+            f"最近のプレイヤーサイン: {data['recent_player_notes'] or '(なし)'}",
+            "背景理解として使ってください。話題選び、説明の明瞭さ、ユーモア、会話のテンポ、恋愛的な距離感をプレイヤーに合わせてください。",
+            "プロフィールを使っていることを宣言しないでください。現在のプレイヤー発言と矛盾する場合、古いメモ1つに過剰適応しないでください。",
         ]
         return "\n".join(lines)
 

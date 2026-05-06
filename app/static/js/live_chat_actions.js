@@ -122,7 +122,8 @@
         return;
       }
       window.clearTimeout(imageClickTimer);
-      imageClickTimer = window.setTimeout(() => openGalleryLightbox(button), 220);
+      event.preventDefault();
+      await selectGalleryImage(button);
     });
 
     imageGrid?.addEventListener("dblclick", async (event) => {
@@ -131,7 +132,7 @@
       if (!button) return;
       event.preventDefault();
       window.clearTimeout(imageClickTimer);
-      await selectGalleryImage(button);
+      openGalleryLightbox(button);
     });
 
     imageGrid?.addEventListener("pointerdown", (event) => {

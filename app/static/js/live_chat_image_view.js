@@ -140,7 +140,7 @@
       const fileName = item.asset?.file_name || `live-chat-image-${item.id || "image"}.png`;
       return `
         <div class="live-chat-thumb-card ${item.is_selected ? "selected" : ""}">
-          <button class="live-chat-thumb ${item.is_selected ? "selected" : ""}" type="button" data-image-id="${item.id}" data-image-url="${NovelUI.escape(mediaUrl || "")}" title="クリックで拡大。PCはダブルクリック、スマホは長押しで現在の画像に変更">
+          <button class="live-chat-thumb ${item.is_selected ? "selected" : ""}" type="button" data-image-id="${item.id}" data-image-url="${NovelUI.escape(mediaUrl || "")}" title="クリックで現在の画像に変更。ダブルクリックで拡大">
             ${mediaUrl ? `<img src="${mediaUrl}" alt="thumb">` : "<span>No Image</span>"}
             ${item.is_selected ? '<span class="live-chat-thumb-current"><span class="live-chat-thumb-current-dot" aria-hidden="true"></span>現在の画像</span>' : ""}
           </button>

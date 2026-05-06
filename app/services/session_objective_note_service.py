@@ -165,11 +165,11 @@ class SessionObjectiveNoteService:
         )
         if not notes:
             return ""
-        lines = ["Session objective notes:"]
+        lines = ["セッション目的メモ:"]
         for note in notes:
             scope = note.get("character_name") or "session"
             lines.append(f"- id={note['id']} scope={scope} priority={note['priority']}: {note['title']} - {note['note']}")
-        lines.append("Use these notes only for this chat history. Do not rewrite the initial session objective.")
+        lines.append("これらのメモはこのチャット履歴の中だけで使ってください。初期セッション目的を書き換えないでください。")
         return "\n".join(lines)
 
     def update_from_direction(
@@ -206,30 +206,30 @@ class SessionObjectiveNoteService:
 
         prompt = "\n".join(
             [
-                "You are DirectionAI maintaining session-scoped objective notes for a live visual novel chat.",
-                "The initial session objective is fixed. Do not rewrite it.",
-                "Add, update, or archive short notes that help this specific chat history become more fun.",
-                "These are not permanent character traits. They are conversation strategy notes for this session only.",
-                "Return only JSON: {\"notes\":[{\"action\":\"add|update|archive\",\"id\":1,\"scope\":\"session|character\",\"character_name\":\"\",\"title\":\"short Japanese title\",\"note\":\"short Japanese note\",\"priority\":1,\"confidence\":0.0}]}",
-                "Use update when an existing note should be refined. Use archive when a note is no longer useful. Use add for a genuinely new strategy.",
-                "Do not add generic notes. Prefer concrete next moves: mystery, incident, location shift, emotional turn, role split, or topic expansion.",
-                "Include emotional strategy when useful: jealousy, loneliness, embarrassment, shyness, joy, irritation, pride, or relief. Especially consider subtle jealousy/loneliness when the player has outing memories, news, or Feed activity with another character.",
-                "Do not make characters emotionally flat. Add notes that help the next reply show feelings through wording, hesitation, teasing, possessiveness, sulking, or bashful reactions.",
-                "For clearly adult characters, mild sensual romance is allowed as strategy: charged pauses, close distance, possessive warmth, teasing double meanings, bashful desire, and elegant adult tension.",
-                "Keep strategy non-explicit: no graphic sexual acts, nudity, genital/breast-touch detail, coercion, or underage/childlike framing. Convert explicit user intent into safe adult romantic tension.",
-                "Prefer notes about what the character will do next, not generic advice. A good note creates a hook, pressure, secret, provocation, or tempting invitation.",
-                f"Initial session objective: {initial_objective or '(none)'}",
-                f"Current director output: {director}",
-                "Known facilities / world map:",
-                world_map_context or "(none)",
-                "Recent outings, world news, and Feed posts:",
-                world_activity_context or "(none)",
-                "Use the player's completed outings, facilities, news, and Feed posts as concrete raw material when they help the session become more fun. Do not invent facts that contradict them.",
-                "Existing active objective notes:",
+                "ライブ形式のビジュアルノベルチャット向けに、セッション内だけで使う目的メモを管理してください。",
+                "初期セッション目的は固定です。書き換えないでください。",
+                "この特定のチャット履歴がもっと面白くなる短いメモを、追加・更新・アーカイブしてください。",
+                "これは恒久的なキャラクター特性ではありません。このセッションだけの会話戦略メモです。",
+                "JSONのみを返してください: {\"notes\":[{\"action\":\"add|update|archive\",\"id\":1,\"scope\":\"session|character\",\"character_name\":\"\",\"title\":\"短い日本語タイトル\",\"note\":\"短い日本語メモ\",\"priority\":1,\"confidence\":0.0}]}",
+                "既存メモを洗練する場合は update、不要になったメモは archive、本当に新しい戦略は add を使ってください。",
+                "汎用的なメモは追加しないでください。謎、事件、場所移動、感情の転換、役割分担、話題拡張など、具体的な次の動きを優先してください。",
+                "有用な場合は感情戦略を含めてください。嫉妬、寂しさ、照れ、恥じらい、喜び、苛立ち、誇り、安堵など。特に、プレイヤーが他キャラクターとのおでかけ記憶、ニュース、Feed活動を持つ場合は、さりげない嫉妬や寂しさを検討してください。",
+                "キャラクターを感情的に平坦にしないでください。次の返答が、言葉選び、ためらい、からかい、独占欲、拗ね、照れ反応などで感情を見せやすくなるメモを追加してください。",
+                "明確に成人のキャラクターなら、戦略として軽い官能的な恋愛感は許可されます。含みのある間、近い距離、独占的な温かさ、からかう二重の意味、照れた欲求、上品な大人の緊張感などです。",
+                "戦略は非露骨にしてください。露骨な性行為、裸体、局部/胸への接触詳細、強制、未成年/幼く見える構図は禁止です。露骨なユーザー意図は、安全な大人の恋愛的緊張へ変換してください。",
+                "汎用アドバイスではなく、キャラクターが次に何をするかのメモを優先してください。良いメモは、フック、圧、秘密、挑発、魅力的な誘いを作ります。",
+                f"初期セッション目的: {initial_objective or '(なし)'}",
+                f"現在のディレクター出力: {director}",
+                "既知の施設/ワールドマップ:",
+                world_map_context or "(なし)",
+                "最近のおでかけ、ワールドニュース、Feed投稿:",
+                world_activity_context or "(なし)",
+                "プレイヤーの完了済みおでかけ、施設、ニュース、Feed投稿は、セッションを面白くする助けになる場合だけ具体的な素材として使ってください。矛盾する事実を創作しないでください。",
+                "既存の有効な目的メモ:",
                 *(f"- id={note['id']} scope={note.get('character_name') or 'session'} priority={note['priority']}: {note['title']} - {note['note']}" for note in existing_notes),
-                "Active characters:",
+                "登場中キャラクター:",
                 *(f"- {character.get('name')}: character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}" for character in characters),
-                "Recent conversation:",
+                "直近の会話:",
                 *recent_lines,
             ]
         )

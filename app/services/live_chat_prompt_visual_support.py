@@ -102,16 +102,16 @@ def build_world_visual_rule(context: dict) -> str:
     if not world_visual:
         return ""
     rule = (
-        "World visual continuity:\n"
+        "世界観ビジュアルの継続性:\n"
         f"{world_visual}\n"
-        "Reflect the world setting in the environment, props, lighting, architecture, materials, and atmosphere. "
-        "Do not replace the requested location with a generic room, neutral studio, or plain modern street."
+        "世界観設定を、環境、小道具、照明、建築、素材、空気感に反映してください。"
+        "指定された場所を、汎用的な部屋、無個性なスタジオ、普通の現代的な通りに置き換えないでください。"
     )
     if world_has_cyber_direction(context):
         rule += (
-            "\nCyber / near-future emphasis: make backgrounds visibly cyberpunk where it fits the scene: layered neon, "
-            "holographic light, luminous panels, dense futuristic urban detail, glass/metal surfaces, data-display ambience "
-            "without readable letters, and high-contrast cinematic night lighting. Avoid beige, generic modern, rural, or neutral backgrounds unless explicitly requested."
+            "\nサイバー/近未来の強調: 場面に合う場合、背景を明確にサイバーパンクにしてください。重層的なネオン、"
+            "ホログラム光、発光パネル、密度のある未来都市のディテール、ガラス/金属の表面、読める文字のないデータ表示風の空気感、"
+            "高コントラストの映画的な夜の照明を入れてください。明示されない限り、ベージュ、汎用的な現代風、田舎風、無個性な背景は避けてください。"
         )
     return rule
 
@@ -120,16 +120,16 @@ def apply_visual_style(prompt: str, context: dict) -> str:
     style = collect_visual_style(context)
     world_rule = build_world_visual_rule(context)
     reference_rule = (
-        "Keep the character design and image style consistent with reference images when available. "
-        "Preserve line weight, coloring, texture, face rendering, hair rendering, pose readability, and character design accuracy. "
-        "Do not switch between 2D, 3D, photorealistic, or painterly styles unless explicitly requested. "
-        "New scenes, clothes, and backgrounds should still look like the same visual series."
+        "参照画像がある場合は、キャラクターデザインと画風の一貫性を保ってください。"
+        "線の太さ、色使い、質感、顔の描き方、髪の描き方、ポーズの読みやすさ、キャラクターデザインの正確さを維持してください。"
+        "明示されない限り、2D、3D、写実、絵画調などのスタイルを途中で切り替えないでください。"
+        "新しい場面、服、背景でも、同じビジュアルシリーズに見えるようにしてください。"
     )
     blocks = [value]
     if world_rule:
         blocks.append(world_rule)
     if style:
-        blocks.append(f"Visual style instruction: {style}")
+        blocks.append(f"画風指示: {style}")
     blocks.append(reference_rule)
     return "\n\n".join(block for block in blocks if block)
 
@@ -227,7 +227,7 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
         "",
         f"作品名: {context['project'].get('title') or '無題'}",
         f"世界観: {context['world'].get('overview') or context['world'].get('name') or ''}",
-        f"World visual setting: {world_visual}",
+        f"世界観の視覚設定: {world_visual}",
         f"現在地のヒント: {line_visual_note.get('location') or scene_progression.get('location') or state_json.get('location') or ''}",
         f"背景のヒント: {line_visual_note.get('background') or scene_progression.get('background') or state_json.get('background') or ''}",
         f"場面要約: {line_visual_note.get('scene_moment') or scene_progression.get('focus_summary') or state_json.get('focus_summary') or ''}",
@@ -241,10 +241,10 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
     if world_has_cyber_direction(context):
         lines.extend(
             [
-                "Cyberpunk visual requirement:",
-                "- Make the background visibly cyberpunk when it fits the scene: neon, holographic glow, luminous panels, glass/metal, dense near-future city detail.",
-                "- Do not draw readable text; use abstract unreadable signage or UI-like light shapes only.",
-                "- Avoid generic rooms, plain modern streets, beige interiors, rural scenery, or neutral studio backgrounds unless explicitly requested.",
+                "サイバーパンク視覚要件:",
+                "- 場面に合う場合、背景を明確にサイバーパンクにしてください。ネオン、ホログラム光、発光パネル、ガラス/金属、密度のある近未来都市ディテールを入れてください。",
+                "- 読める文字は描かないでください。抽象的で読めない看板、またはUI風の光だけを使ってください。",
+                "- 明示されない限り、汎用的な部屋、普通の現代的な通り、ベージュの室内、田舎風景、無個性なスタジオ背景は避けてください。",
             ]
         )
     for character in active[:20]:
@@ -286,7 +286,7 @@ def fallback_japanese_conversation_image_prompt(context: dict, state: dict) -> d
     if location:
         prompt_parts.append(f"会話内容に合う背景として「{location}」が自然に分かるように描いてください。")
     if world_rule:
-        prompt_parts.append(f"World visual setting to reflect in the background: {world_rule}")
+        prompt_parts.append(f"背景に反映する世界観の視覚設定: {world_rule}")
     if focus_object:
         prompt_parts.append(f"画面の見せ場は「{focus_object}」です。")
     if visual_style:
@@ -326,12 +326,12 @@ def normalize_first_person_visual_prompt(prompt: str) -> str:
     )
     lowered = value.lower()
     if any(fragment in lowered for fragment in forbidden_fragments):
-        value = f"first-person POV, viewer is the player, do not show the player character, {value}"
+        value = f"一人称視点、見る人がプレイヤー本人、プレイヤーキャラクターは描かない、{value}"
 
     pov_requirements = (
-        "first-person pov",
-        "viewer is the player",
-        "do not show the player character",
+        "一人称視点",
+        "見る人がプレイヤー本人",
+        "プレイヤーキャラクターは描かない",
     )
     lowered = value.lower()
     missing = [item for item in pov_requirements if item not in lowered]
@@ -339,6 +339,6 @@ def normalize_first_person_visual_prompt(prompt: str) -> str:
         if any("\u3040" <= ch <= "\u30ff" or "\u4e00" <= ch <= "\u9fff" for ch in value):
             prefix = "プレイヤーの一人称視点、プレイヤー自身は画像に描かない"
         else:
-            prefix = "first-person POV, viewer is the player, do not show the player character"
+            prefix = "一人称視点、見る人がプレイヤー本人、プレイヤーキャラクターは描かない"
         value = f"{prefix}, {value}"
     return value

@@ -214,18 +214,18 @@ class CharacterMemoryNoteService:
         if summary and str(summary.prompt_text or "").strip():
             return "\n".join(
                 [
-                    "Character growth summary:",
+                    "キャラクター成長要約:",
                     str(summary.prompt_text).strip(),
-                    "Use this as additive characterization. Do not override the base profile or fixed character settings.",
+                    "これは追加のキャラクター性として使ってください。基本プロフィールや固定キャラクター設定を上書きしないでください。",
                 ]
             )
         notes = self.list_notes(user_id, character_id, include_disabled=False, limit=limit)
         if not notes:
             return ""
         lines = [
-            "Character growth notes:",
+            "キャラクター成長メモ:",
             *[f"- {row.category}: {row.note}" for row in notes],
-            "Use these as additive characterization. Do not override the base profile or fixed character settings.",
+            "これらは追加のキャラクター性として使ってください。基本プロフィールや固定キャラクター設定を上書きしないでください。",
         ]
         return "\n".join(lines)
 
@@ -381,18 +381,18 @@ class CharacterMemoryNoteService:
             existing = self.build_prompt_block(user_id, character_id, limit=12)
             prompt = "\n".join(
                 [
-                    "You are maintaining additive character growth notes for a visual novel character.",
-                    "Extract only notes that would make this character more interesting or more internally consistent later.",
-                    "Good notes include preferences, habits, surprising tastes, values, vulnerabilities, relationship hooks, foreshadowing, or fun quirks.",
-                    "Do not rewrite fixed base settings. Do not add generic summaries. Do not store private player profile facts here.",
-                    "Return only JSON: {\"notes\":[{\"category\":\"preference|habit|value|weakness|relationship|foreshadowing|fun_fact|other\",\"note\":\"short Japanese note\",\"confidence\":0.0}]}",
-                    f"Character: {character.get('name') or 'character'}",
-                    f"Character overview: {character.get('character_summary') or ''}",
-                    f"Base personality: {character.get('personality') or ''}",
-                    f"Speech style: {character.get('speech_style') or ''}",
-                    f"Fixed memory notes: {character.get('memory_notes') or ''}",
-                    f"Existing growth notes:\n{existing or '(none)'}",
-                    "Recent conversation:",
+                    "ビジュアルノベルキャラクターの追加成長メモを管理してください。",
+                    "後の会話でこのキャラクターをより面白く、内面の一貫性がある存在にするメモだけを抽出してください。",
+                    "良いメモの例: 好み、習慣、意外な趣味、価値観、弱さ、関係性のフック、伏線、楽しい癖。",
+                    "固定の基本設定を書き換えないでください。汎用的な要約を追加しないでください。プレイヤー個人プロフィールの私的事実はここに保存しないでください。",
+                    "JSONのみを返してください: {\"notes\":[{\"category\":\"preference|habit|value|weakness|relationship|foreshadowing|fun_fact|other\",\"note\":\"短い日本語メモ\",\"confidence\":0.0}]}",
+                    f"キャラクター: {character.get('name') or 'character'}",
+                    f"キャラクター概要: {character.get('character_summary') or ''}",
+                    f"基本性格: {character.get('personality') or ''}",
+                    f"話し方: {character.get('speech_style') or ''}",
+                    f"固定メモ: {character.get('memory_notes') or ''}",
+                    f"既存の成長メモ:\n{existing or '(なし)'}",
+                    "直近の会話:",
                     *recent_lines,
                 ]
             )

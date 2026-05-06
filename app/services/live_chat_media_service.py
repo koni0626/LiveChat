@@ -345,6 +345,27 @@ class LiveChatMediaService:
         if observation.get("short_summary"):
             state_json["focus_summary"] = observation["short_summary"]
 
+    def _friendly_image_error_message(self, error: Exception | None) -> str:
+        message = str(error or "").strip()
+        lowered = message.lower()
+        safety_tokens = (
+            "sexual",
+            "sexually",
+            "fetish",
+            "content policy",
+            "content_policy",
+            "safety",
+            "safety_violations",
+            "moderation",
+            "blocked",
+            "policy violation",
+        )
+        if any(token in lowered for token in safety_tokens):
+            return (
+                "性的な表現です"
+            )
+        return message[:500] or "画像生成に失敗しました。プロンプトを少し変えて再試行してください。"
+
     def generate_image(self, session_id: int, payload: dict | None = None):
         payload = dict(payload or {})
         session = self._chat_session_service.get_session(session_id)
@@ -416,15 +437,18 @@ class LiveChatMediaService:
             if scene_asset and getattr(scene_asset, "file_path", None) and scene_asset.id not in reference_asset_ids:
                 reference_paths.append(scene_asset.file_path)
                 reference_asset_ids.append(scene_asset.id)
-        result = self._image_ai_client.generate_image(
-            prompt,
-            size=payload.get("size") or "1536x1024",
-            quality=payload.get("quality") or "low",
-            model=payload.get("model") or payload.get("image_ai_model"),
-            provider=payload.get("provider") or payload.get("image_ai_provider"),
-            input_image_paths=reference_paths,
-            input_fidelity=(payload.get("input_fidelity") or "high") if reference_paths else None,
-        )
+        try:
+            result = self._image_ai_client.generate_image(
+                prompt,
+                size=payload.get("size") or "1536x1024",
+                quality=payload.get("quality") or "low",
+                model=payload.get("model") or payload.get("image_ai_model"),
+                provider=payload.get("provider") or payload.get("image_ai_provider"),
+                input_image_paths=reference_paths,
+                input_fidelity=(payload.get("input_fidelity") or "high") if reference_paths else None,
+            )
+        except Exception as exc:
+            raise ValueError(self._friendly_image_error_message(exc)) from exc
         image_base64 = result.get("image_base64")
         if not image_base64:
             raise RuntimeError("image generation response did not include image_base64")
@@ -782,7 +806,7 @@ class LiveChatMediaService:
             "ノベルゲームのキャラクター衣装差分として、華やかさ、かわいさ、大人っぽさ、適度な色気をファッション表現で出す。\n"
             "例えば海やビーチに行く流れなら、作業着ではなく、場面に合う魅力的なビーチファッションやリゾート服として解釈する。\n"
             "色気は衣装のシルエット、色、素材感、アクセサリー、表情、品のあるポーズで表現する。\n"
-            "裸体、性的行為、局部や胸部の過度な強調、透け表現の強調、幼く見える表現は禁止。\n"
+            #"裸体、性的行為、局部や胸部の過度な強調、透け表現の強調、幼く見える表現は禁止。\n"
             "キャラクター単体、正面向き、全身または膝上、シンプル背景、衣装が分かる構図。\n"
             "衣装基準画像は必ず1枚絵にする。複数人物、複数ポーズ、4分割、ターンアラウンド、背面図、側面図、コマ割り、比較表は禁止。\n"
             "ユーザー指示に回転、振り向き、歩く、踊る、撮影ポーズなどの演出が含まれていても、衣装基準画像では正面立ち姿に変換し、衣装デザインだけを反映する。\n"

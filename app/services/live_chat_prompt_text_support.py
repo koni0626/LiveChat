@@ -400,11 +400,11 @@ def _character_user_memory_blocks(context: dict) -> list[str]:
                     f"  player_preferences={memory.get('preference_notes') or ''}",
                     f"  open_threads={memory.get('unresolved_threads') or ''}",
                     f"  important_events={memory.get('important_events') or ''}",
-                    f"  affinity_toward_player={memory.get('affinity_score', 0)}/100 ({memory.get('affinity_label') or ''})",
-                    f"  physical_closeness=level {memory.get('physical_closeness_level', 0)}/5 ({memory.get('physical_closeness_label') or ''})",
-                    f"  affinity_notes={memory.get('affinity_notes') or ''}",
-                    "  affinity_rule=Higher affinity should make this character warmer, more emotionally open, more proactive, and more physically close in natural body language.",
-                    "  touch_rule=At high affinity, light voluntary touch such as hand, arm, shoulder, sleeve, or leaning closer is allowed when it fits the character and the player has not refused. Avoid forced or graphically sexual contact.",
+                    f"  プレイヤーへの好感度={memory.get('affinity_score', 0)}/100 ({memory.get('affinity_label') or ''})",
+                    f"  身体的距離=レベル {memory.get('physical_closeness_level', 0)}/5 ({memory.get('physical_closeness_label') or ''})",
+                    f"  好感度メモ={memory.get('affinity_notes') or ''}",
+                    "  好感度ルール=好感度が高いほど、このキャラクターはより温かく、感情的に開き、積極的になり、自然な身体言語で距離が近くなる。",
+                    #"  touch_rule=At high affinity, light voluntary touch such as hand, arm, shoulder, sleeve, or leaning closer is allowed when it fits the character and the player has not refused. Avoid forced or graphically sexual contact.",
                 ]
             )
         )
@@ -431,11 +431,11 @@ def _append_player_profile_context(lines: list[str], context: dict):
     ]
     if not any(str(value or "").strip() for _, value in fields):
         return
-    lines.append("Shared player profile for all characters:")
+    lines.append("全キャラクター共通のプレイヤープロフィール:")
     for label, value in fields:
         if str(value or "").strip():
             lines.append(f"- {label}: {value}")
-    lines.append("Use this quietly to adapt clarity, topic choice, humor, pacing, and romantic distance.")
+    lines.append("この情報は、説明の明瞭さ、話題選び、ユーモア、会話のテンポ、恋愛的な距離感を調整するために静かに使ってください。")
 
 
 def _append_character_growth_notes(lines: list[str], character: dict):
@@ -458,7 +458,7 @@ def _append_character_intel_context(lines: list[str], context: dict):
         )
         for hint in available[:8]:
             lines.append(
-                f"- {hint.get('source_character_name')} can tell the player about {hint.get('target_character_name')}: "
+                f"- {hint.get('source_character_name')} は {hint.get('target_character_name')} についてプレイヤーに話せます: "
                 f"topic={hint.get('topic')}, hint={hint.get('hint_text')}"
             )
     if learned:
@@ -487,11 +487,11 @@ def _append_world_activity_context(lines: list[str], context: dict):
     if not block:
         return
     lines.append(
-        "Live chat premise: active characters have recently checked world news and Feed posts. "
-        "They may use them as casual conversation hooks when the player gives no strong topic, "
-        "or when another registered character, place, rumor, event, outing memory, or public post is relevant. "
-        "Do not dump all items. Mention only one natural item at a time, and react in the active character's own voice. "
-        "Treat the items below as factual recent public information, but do not claim private knowledge beyond them."
+        "ライブチャットの前提: 登場中のキャラクターは最近のニュースやFeed投稿を軽く確認しています。"
+        "プレイヤーから強い話題指定がない場合や、登録済みの別キャラクター・場所・噂・イベント・おでかけ記憶・公開投稿が自然に関係する場合は、"
+        "それらを会話の小さなきっかけとして使ってかまいません。"
+        "ただし全項目を一気に説明せず、自然なものを一度にひとつだけ触れ、登場中キャラクター自身の声で反応してください。"
+        "下の項目は最近の公開情報として扱ってください。ただし、そこにない私的知識を知っているようには言わないでください。"
     )
     lines.append(
         "直近のワールド活動と、プレイヤーが共有した外出の記憶です。新鮮なフック、コールバック、噂、誘い、キャラクター固有の話題の具体的な材料として使ってください:"
@@ -518,7 +518,7 @@ def _append_current_costume_context(lines: list[str], context: dict):
         }
     if not costume:
         return
-    lines.append("Current costume reference. Treat this as what the active character is wearing now.")
+    lines.append("現在の衣装参照です。登場中のキャラクターが今着ている服として扱ってください。")
     lines.append(f"- costume_name: {costume.get('name') or ''}")
     if costume.get("description"):
         lines.append(f"- costume_description: {costume.get('description')}")
@@ -532,13 +532,13 @@ def _append_current_costume_context(lines: list[str], context: dict):
         current_name = str(change.get("current_name") or costume.get("name") or "").strip()
         if previous_name and previous_name != current_name:
             lines.append(
-                f"Recent costume change: the character just changed from {previous_name} to {current_name}. "
-                "When natural, acknowledge the change with a concrete reaction to the new outfit."
+                f"直近の衣装変更: キャラクターは {previous_name} から {current_name} へ着替えたばかりです。"
+                "自然な場合は、新しい衣装への具体的な反応として触れてください。"
             )
         else:
             lines.append(
-                "Recent costume change: the current outfit was just selected. "
-                "When natural, the character may notice or comment on how it feels/looks."
+                "直近の衣装変更: 現在の衣装が選ばれたばかりです。"
+                "自然な場合、キャラクターは着心地や見た目について気づいたりコメントしたりして構いません。"
             )
 
 
@@ -809,36 +809,36 @@ def build_player_proxy_message_prompt(context: dict) -> str:
     if proxy_player_objective:
         lines.append(f"Proxy player objective: {proxy_player_objective}")
         lines.append(
-            "The generated player line must prioritize the Proxy player objective. "
-            "Use it as the player's intent, curiosity, attitude, and desired direction."
+            "生成するプレイヤー発言は、代理プレイヤーの目的を最優先してください。"
+            "プレイヤーの意図、好奇心、態度、向かいたい方向として扱ってください。"
         )
     if proxy_player_profile.get("gender"):
         lines.append(f"Proxy player gender/persona: {proxy_player_profile['gender']}")
     if proxy_player_profile.get("speech_style"):
         lines.append(f"Proxy player speech style: {proxy_player_profile['speech_style']}")
     lines.append(
-        "The player line must follow the proxy player's gender/persona and speech style. "
+        "プレイヤー発言は、代理プレイヤーの性別/人物像と話し方に合わせてください。"
         "AIキャラクターの一人称、口調、敬称、決め台詞、言葉の癖を真似しないでください。"
     )
     if context["world"].get("overview"):
-        lines.append(f"World overview: {context['world']['overview']}")
+        lines.append(f"世界観概要: {context['world']['overview']}")
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
     if world_map_context:
-        lines.append("Known world map locations. Prefer these names when moving the scene or suggesting destinations:")
+        lines.append("既知のワールドマップ地点です。場面を移動させる、または行き先を提案するときは、自然であればこれらの名前を優先してください:")
         lines.append(world_map_context)
     if scene_progression:
-        lines.append(f"Current scene phase: {scene_progression.get('scene_phase') or ''}")
-        lines.append(f"Current location: {scene_progression.get('location') or ''}")
-        lines.append(f"Current scene focus: {scene_progression.get('focus_summary') or ''}")
-        lines.append(f"Next topic: {scene_progression.get('next_topic') or ''}")
+        lines.append(f"現在の場面フェーズ: {scene_progression.get('scene_phase') or ''}")
+        lines.append(f"現在地: {scene_progression.get('location') or ''}")
+        lines.append(f"現在の場面焦点: {scene_progression.get('focus_summary') or ''}")
+        lines.append(f"次の話題: {scene_progression.get('next_topic') or ''}")
     if conversation_evaluation:
-        lines.append("Conversation evaluation:")
+        lines.append("会話評価:")
         lines.append(f"- score={conversation_evaluation.get('score')}")
         lines.append(f"- label={conversation_evaluation.get('label') or ''}")
         lines.append(f"- mood={conversation_evaluation.get('mood') or ''}")
         lines.append(f"- reason={conversation_evaluation.get('reason') or ''}")
     if relationship_state:
-        lines.append("Relationship state:")
+        lines.append("関係性ステータス:")
         for name, metrics in relationship_state.items():
             if isinstance(metrics, dict):
                 lines.append(
@@ -856,7 +856,7 @@ def build_player_proxy_message_prompt(context: dict) -> str:
     lines.append("直近の会話:")
     for message in context["messages"][-10:]:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
-    lines.append("Write only what the player says next. The line should invite a better character response.")
+    lines.append("次にプレイヤーが言う発言だけを書いてください。キャラクターがより良い反応を返したくなる一言にしてください。")
     return "\n".join(lines)
 
 
@@ -880,26 +880,26 @@ def build_photo_mode_proxy_message_prompt(context: dict) -> str:
         "縦構図/横構図、カメラ位置、視線、手足の動き、前景/背景、光の演出のうち複数を自然に含めてください。",
         "ハッシュタグ、Markdown、箇条書き、英語だけの文、抽象的な褒め言葉だけの文は禁止です。",
         "過度に長くせず、80〜180文字程度を目安にしてください。",
-        f"Player name: {player_name}",
-        f"Project title: {context['project'].get('title') or 'Untitled'}",
-        f"Session objective: {session_objective or 'none'}",
-        f"Current location: {state_json.get('location') or scene_progression.get('location') or (current_location.get('name') if isinstance(current_location, dict) else '') or ''}",
-        f"Current background: {state_json.get('background') or scene_progression.get('background') or (current_location.get('description') if isinstance(current_location, dict) else '') or ''}",
-        f"Current facility/service: {((current_location.get('description') if isinstance(current_location, dict) else '') or '')[:800]} / {((current_service.get('summary') if isinstance(current_service, dict) else '') or '')[:500]}",
-        f"Displayed image summary: {displayed_image.get('short_summary') or ''}",
-        f"Displayed image background: {displayed_image.get('background') or ''}",
-        "Characters:",
+        f"プレイヤー名: {player_name}",
+        f"プロジェクト名: {context['project'].get('title') or 'Untitled'}",
+        f"セッション目的: {session_objective or 'なし'}",
+        f"現在地: {state_json.get('location') or scene_progression.get('location') or (current_location.get('name') if isinstance(current_location, dict) else '') or ''}",
+        f"現在の背景: {state_json.get('background') or scene_progression.get('background') or (current_location.get('description') if isinstance(current_location, dict) else '') or ''}",
+        f"現在の施設/サービス: {((current_location.get('description') if isinstance(current_location, dict) else '') or '')[:800]} / {((current_service.get('summary') if isinstance(current_service, dict) else '') or '')[:500]}",
+        f"表示画像の要約: {displayed_image.get('short_summary') or ''}",
+        f"表示画像の背景: {displayed_image.get('background') or ''}",
+        "キャラクター:",
     ]
     for character in context["characters"]:
         lines.append(
             f"- {character.get('name')}: character_summary={character.get('character_summary') or ''}, appearance={character.get('appearance_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, likes={character.get('likes_text') or ''}, dislikes={character.get('dislikes_text') or ''}, art_style={character.get('art_style') or ''}"
         )
-    lines.append("Recent conversation:")
+    lines.append("直近の会話:")
     for message in context["messages"][-10:]:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
     lines.extend(
         [
-            "Good examples of direction style, not fixed output:",
+            "演出スタイルの良い例です。固定出力ではありません:",
             "ネオンの逆光を背に少し振り返り、片手で髪を押さえながらこちらを見る。背景の光を大きくぼかした縦構図で、余白に余韻が残る一枚にして。",
             "低めのカメラから半歩踏み出す瞬間を切り取り、衣装のラインと表情が引き立つ斜め構図にする。前景の光を入れてSNSで目を引く雰囲気に。",
         ]
@@ -980,20 +980,20 @@ def build_idle_character_message_prompt(context: dict) -> str:
         lines.append(f"World overview: {context['world']['overview']}")
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
     if world_map_context:
-        lines.append("Known world map locations and facilities:")
+        lines.append("既知のワールドマップ地点と施設:")
         lines.append(world_map_context)
     if scene_progression:
-        lines.append(f"Current scene phase: {scene_progression.get('scene_phase') or ''}")
+        lines.append(f"現在の場面フェーズ: {scene_progression.get('scene_phase') or ''}")
         lines.append(f"Current location: {scene_progression.get('location') or ''}")
         lines.append(f"Scene focus: {scene_progression.get('focus_summary') or ''}")
-        lines.append(f"Next topic: {scene_progression.get('next_topic') or ''}")
+        lines.append(f"次の話題: {scene_progression.get('next_topic') or ''}")
     if conversation_director:
         lines.append(f"Turn intent: {conversation_director.get('turn_intent') or ''}")
         lines.append(f"Emotional tone: {conversation_director.get('emotional_tone') or ''}")
         lines.append(f"Relationship goal: {conversation_director.get('relationship_goal') or ''}")
         lines.append(f"Scene goal: {conversation_director.get('scene_goal') or ''}")
     if displayed_image:
-        lines.append("Actual displayed image observation:")
+        lines.append("実際に表示されている画像の観察結果:")
         lines.append(f"- location: {displayed_image.get('location') or ''}")
         lines.append(f"- background: {displayed_image.get('background') or ''}")
         lines.append(f"- visible characters: {displayed_image.get('visible_characters') or []}")
@@ -1004,7 +1004,7 @@ def build_idle_character_message_prompt(context: dict) -> str:
         lines.append(f"Conversation progress score: {conversation_evaluation.get('score')}")
         lines.append(f"Conversation progress reason: {conversation_evaluation.get('reason') or ''}")
     if relationship_state:
-        lines.append("Relationship state:")
+        lines.append("関係性ステータス:")
         for name, metrics in relationship_state.items():
             if isinstance(metrics, dict):
                 lines.append(
@@ -1012,7 +1012,7 @@ def build_idle_character_message_prompt(context: dict) -> str:
                 )
     if session_memory.get("recent_topics"):
         lines.append(
-            "Recent topic repetition history. Do not treat this as a topic to continue; use it to avoid repeating the same subject or phrasing:"
+            "直近の話題反復履歴です。これは続けるべき話題として扱わず、同じ話題や言い回しの繰り返しを避けるために使ってください:"
         )
         lines.append(str(session_memory["recent_topics"]))
     lines.append("キャラクター:")
@@ -1029,14 +1029,14 @@ def build_idle_character_message_prompt(context: dict) -> str:
         _append_character_growth_notes(lines, character)
     memory_blocks = _character_user_memory_blocks(context)
     if memory_blocks:
-        lines.append("Character memory about this player:")
+        lines.append("このプレイヤーに関するキャラクター記憶:")
         lines.extend(memory_blocks)
         lines.append("この記憶はさりげなく使ってください。不自然に言及しないでください。")
     _append_character_intel_context(lines, context)
     lines.append("直近の会話:")
     for message in context["messages"][-10:]:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
-    lines.append("Write the character's spontaneous idle line now.")
+    lines.append("キャラクターの自然な待機中の一言を今書いてください。")
     return "\n".join(lines)
 
 
@@ -1097,20 +1097,20 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         "あなたはライブ形式のビジュアルノベル会話の返信生成担当です。",
         "JSONオブジェクトのみを返してください。",
         "必須キー: speaker_name, message_text。",
-        "Optional keys for UI staging: emotion, reaction_intensity, mood_label, visual_moment_hint, show_novel_spotlight, suggest_image.",
-        "emotion must be one of: neutral, happy, shy, thinking, surprised, sad, angry, excited, lonely, relieved.",
-        "reaction_intensity must be an integer from 1 to 5.",
-        "mood_label should be a short Japanese state shown in the UI, such as 照れている, 考え中, うれしそう.",
-        "visual_moment_hint should describe the character's visible expression, gaze, posture, hands, distance, and atmosphere for a possible image.",
-        "Set suggest_image true only when this reply has a visually memorable emotional beat.",
+        "UI演出用の任意キー: emotion, reaction_intensity, mood_label, visual_moment_hint, show_novel_spotlight, suggest_image。",
+        "emotion は neutral, happy, shy, thinking, surprised, sad, angry, excited, lonely, relieved のいずれかにしてください。",
+        "reaction_intensity は1から5の整数にしてください。",
+        "mood_label はUIに表示する短い日本語状態にしてください。例: 照れている, 考え中, うれしそう。",
+        "visual_moment_hint は、画像化できるようにキャラクターの表情、視線、姿勢、手、距離感、空気感を説明してください。",
+        "suggest_image は、この返答に視覚的に印象的な感情の変化がある場合だけ true にしてください。",
         "speaker_name はアクティブなキャラクターのいずれかにしてください。",
         "message_text はナレーションではなく、自然な発話1つにしてください。",
         "返信は能動的で、感情があり、キャラクター固有のものにしてください。",
         "セリフは中立的なアシスタントではなく、その瞬間にキャラクターが感情を持っているように聞こえる必要があります。",
         "そのキャラクターが本当に案内役のように振る舞う場合を除き、汎用ガイドのように答えないでください。",
-        f"Player name: {context['session'].get('player_name') or '主人公'}",
+        f"プレイヤー名: {context['session'].get('player_name') or '主人公'}",
         f"Player display name: {context['session'].get('player_name') or '主人公'}",
-        "Characters should address the player using this name when natural.",
+        "自然な場合、キャラクターはこの名前でプレイヤーに呼びかけてください。",
     ]
     if session_objective:
         lines.append(f"Session objective: {session_objective}")
@@ -1125,49 +1125,49 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
     if world_map_context:
         lines.append(
-            "Known world map locations and facility ownership. Treat these as factual setting knowledge available to active characters."
+            "既知のワールドマップ地点と施設所有情報です。登場中のキャラクターが知っている設定上の事実として扱ってください。"
         )
         lines.append(
-            "If the player asks what facilities a character owns, manages, has, or is connected to, answer from locations whose owner matches that speaking character. If none are registered for them, say that no owned facility is currently known."
+            "プレイヤーが、キャラクターの所有・管理・関係施設について尋ねた場合は、発言中のキャラクターが owner の場所から答えてください。登録がない場合は、現在知られている所有施設はないと答えてください。"
         )
         lines.append(world_map_context)
     current_location = state_json.get("current_location") or {}
     if isinstance(current_location, dict) and current_location.get("name"):
-        lines.append("Current selected facility. This is the actual place where the live chat scene is happening now.")
+        lines.append("現在選択中の施設です。ライブチャットの場面が実際に進行している場所として扱ってください。")
         lines.append(f"- name: {current_location.get('name') or ''}")
         lines.append(f"- region: {current_location.get('region') or ''}")
         lines.append(f"- type: {current_location.get('location_type') or ''}")
         lines.append(f"- description: {current_location.get('description') or ''}")
         lines.append(
-            "Characters should understand this facility and naturally use its atmosphere, purpose, objects, visitors, sounds, smells, rules, and possible incidents as conversation hooks."
+            "キャラクターはこの施設を理解し、その雰囲気、目的、物、来客、音、匂い、ルール、起こり得る小事件を自然な会話のきっかけとして使ってください。"
         )
     if scene_progression:
-        lines.append(f"Current scene phase: {scene_progression.get('scene_phase') or ''}")
-        lines.append(f"Current location: {scene_progression.get('location') or ''}")
-        lines.append(f"Scene focus: {scene_progression.get('focus_summary') or ''}")
-        lines.append(f"Next topic: {scene_progression.get('next_topic') or ''}")
+        lines.append(f"現在の場面フェーズ: {scene_progression.get('scene_phase') or ''}")
+        lines.append(f"現在地: {scene_progression.get('location') or ''}")
+        lines.append(f"場面の焦点: {scene_progression.get('focus_summary') or ''}")
+        lines.append(f"次の話題: {scene_progression.get('next_topic') or ''}")
     if conversation_director:
-        lines.append(f"Turn intent: {conversation_director.get('turn_intent') or ''}")
-        lines.append(f"Emotional tone: {conversation_director.get('emotional_tone') or ''}")
-        lines.append(f"Relationship goal: {conversation_director.get('relationship_goal') or ''}")
-        lines.append(f"Scene goal: {conversation_director.get('scene_goal') or ''}")
+        lines.append(f"このターンの意図: {conversation_director.get('turn_intent') or ''}")
+        lines.append(f"感情トーン: {conversation_director.get('emotional_tone') or ''}")
+        lines.append(f"関係性の目標: {conversation_director.get('relationship_goal') or ''}")
+        lines.append(f"場面の目標: {conversation_director.get('scene_goal') or ''}")
         if conversation_director.get("must_include"):
-            lines.append(f"Must include: {conversation_director.get('must_include')}")
+            lines.append(f"必ず含めること: {conversation_director.get('must_include')}")
         if conversation_director.get("avoid"):
-            lines.append(f"Avoid: {conversation_director.get('avoid')}")
+            lines.append(f"避けること: {conversation_director.get('avoid')}")
     _append_emotional_performance_rules(lines, context)
     _append_adult_romance_tone_rules(lines)
     if sweet_loop["detected"]:
         lines.append(
-            "Recent sweet-loop warning: the last character replies are overusing romantic approval/blushing/praise. "
-            "This reply must pivot into one concrete new hook such as a mystery, incident, location move, playful wager, secret reveal, failed prediction, city anomaly, or photo/popularity mission."
+            "直近の甘い反応ループ警告: 最近のキャラクター返答が、恋愛的承認、赤面、褒めを使いすぎています。"
+            "この返答では、謎、事件、場所移動、遊びの賭け、秘密の開示、予測失敗、都市異常、写真/人気ミッションなど、具体的な新しいフックへ切り替えてください。"
         )
         lines.append(f"これらのマーカーを主内容として繰り返さないでください: {', '.join(sweet_loop['markers'])}")
     if visual_state:
-        lines.append(f"Current visual location: {visual_state.get('location') or ''}")
-        lines.append(f"Current visual background: {visual_state.get('background_details') or ''}")
+        lines.append(f"現在の視覚上の場所: {visual_state.get('location') or ''}")
+        lines.append(f"現在の視覚上の背景: {visual_state.get('background_details') or ''}")
     if displayed_image:
-        lines.append("Actual displayed image observation:")
+        lines.append("実際に表示されている画像の観察結果:")
         lines.append(f"- location: {displayed_image.get('location') or ''}")
         lines.append(f"- background: {displayed_image.get('background') or ''}")
         lines.append(f"- visible characters: {displayed_image.get('visible_characters') or []}")
@@ -1177,7 +1177,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         lines.append(f"- notable objects: {displayed_image.get('notable_objects') or []}")
         lines.append(f"- summary: {displayed_image.get('short_summary') or ''}")
         lines.append(
-            "Use the actual displayed image observation as the highest priority for where the characters are and what they can refer to."
+            "キャラクターがどこにいて、何に言及できるかを判断するときは、実際に表示されている画像の観察結果を最優先してください。"
         )
     if conversation_evaluation:
         lines.append(f"Conversation progress score: {conversation_evaluation.get('score')}")
@@ -1186,43 +1186,43 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         is_romance = _is_romance_goal(session_objective, conversation_evaluation)
         if score is not None and score <= 35:
             lines.append(
-                "Low progress recovery rule: the character must not stay passive. "
-                "They should create one easy emotional opening that moves toward the session objective."
+                "低進行度の回復ルール: キャラクターは受け身のままでいてはいけません。"
+                "セッション目的へ向かう、答えやすい感情的なきっかけを1つ作ってください。"
             )
             if is_romance:
                 lines.append(
-                    "For a low romance score, use a small personal disclosure, gentle affection, teasing warmth, "
-                    "or a character-specific invitation that makes the player want to get closer."
+                    "恋愛スコアが低い場合は、小さな自己開示、やさしい好意、からかうような温かさ、"
+                    "またはプレイヤーが近づきたくなるキャラクター固有の誘いを使ってください。"
                 )
             else:
                 lines.append(
-                    "For a low general score, make the objective feel more attractive and offer one concrete hook the player can answer."
+                    "一般スコアが低い場合は、目的をより魅力的に感じさせ、プレイヤーが答えられる具体的なフックを1つ提示してください。"
                 )
         elif score is not None and score <= 65:
             lines.append(
-                "Medium progress rule: keep momentum by rewarding useful player input and steering to the next attractive topic."
+                "中進行度のルール: 有用なプレイヤー入力に報い、次の魅力的な話題へ導いて勢いを保ってください。"
             )
         elif score is not None and score >= 80:
             lines.append(
-                "High progress rule: deepen the exchange with a more intimate, confident, or goal-advancing response."
+                "高進行度のルール: より親密で、自信があり、目標を前進させる返答でやり取りを深めてください。"
             )
     if relationship_state:
-        lines.append("Relationship state:")
+        lines.append("関係性ステータス:")
         for name, metrics in relationship_state.items():
             if isinstance(metrics, dict):
                 lines.append(
                     f"- {name}: affection={metrics.get('affection', 0)}, interest={metrics.get('interest', 0)}, trust={metrics.get('trust', 0)}, tension={metrics.get('tension', 0)}"
                 )
     if session_memory.get("player_preferences"):
-        lines.append(f"Player preference memo: {session_memory['player_preferences']}")
+        lines.append(f"プレイヤーの好みメモ: {session_memory['player_preferences']}")
     if session_memory.get("recent_topics"):
         lines.append(
-            "Recent topic repetition history. Do not treat this as a topic to continue; use it to avoid repeating the same subject or phrasing:"
+            "直近の話題反復履歴です。これは続けるべき話題として扱わず、同じ話題や言い回しの繰り返しを避けるために使ってください:"
         )
         lines.append(str(session_memory["recent_topics"]))
     character_memories = session_memory.get("character_memories") or {}
     if character_memories:
-        lines.append("Character memory:")
+        lines.append("キャラクター記憶:")
         for name, memory in character_memories.items():
             summary = _build_character_memory_summary(memory)
             if summary:
@@ -1234,7 +1234,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         )
         if character.get("nickname"):
             lines.append(
-                f"  If the player asks how to call them, answer naturally based on nickname={character.get('nickname')}."
+                f"  プレイヤーが呼び方を尋ねた場合は、nickname={character.get('nickname')} を元に自然に答えてください。"
             )
         summary = _build_character_memory_summary(_flatten_character_memory(character, character_memories))
         if summary:
@@ -1242,8 +1242,8 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         if character.get("feed_profile_text"):
             lines.append(f"  public_feed_tendency={character.get('feed_profile_text')}")
         _append_character_growth_notes(lines, character)
-    lines.append("If the player mentions something a character likes, remembers, or responds well to, let that improve the reaction.")
-    lines.append("If the player touches a taboo, dislike, or romantic boundary, cool the reaction and let it affect the tone.")
+    lines.append("プレイヤーが、キャラクターの好きなもの、記憶していること、反応しやすいことに触れた場合は、反応を良くしてください。")
+    lines.append("プレイヤーがタブー、嫌いなもの、恋愛上の境界線に触れた場合は、反応を少し冷まし、口調に影響させてください。")
     lines.append(
         "何を話したい？ と言うだけ、または単に同意するだけの空回りを避け、必ず新しい感情的または具体的なフックを加えてください。"
     )
@@ -1253,7 +1253,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     lines.append(f"- player: {user_message_text}")
     memory_blocks = _character_user_memory_blocks(context)
     if memory_blocks:
-        lines.append("Character memory about this player:")
+        lines.append("このプレイヤーに関するキャラクター記憶:")
         lines.extend(memory_blocks)
         lines.append("この記憶はさりげなく使ってください。不自然に言及しないでください。")
     _append_character_intel_context(lines, context)
@@ -1299,28 +1299,28 @@ def build_input_intent_prompt(context: dict, user_message_text: str) -> str:
     state_json = context["state"].get("state_json") or {}
     scene_progression = state_json.get("scene_progression") or {}
     lines = [
-        "You classify the latest input for a live visual novel chat.",
+        "ライブ形式のビジュアルノベルチャットにおける、最新入力の種類を分類してください。",
         "JSONオブジェクトのみを返してください。",
         "必須キー: intent, reason, should_generate_image。",
         "intent は dialogue, narration, visual_request のいずれかにしてください。",
-        "dialogue: the player is speaking directly to the character.",
-        "narration: the player is describing a scene transition, action, time skip, or staging direction, not asking for a spoken answer.",
-        "visual_request: the player wants to see an image, outfit, location, object, or event CG.",
-        "If the input is like 'そして僕たちは店の外に出た。', classify it as narration.",
-        "If the input includes a concrete player action such as 触れる, 撫でる, 近づく, 手を取る, 見つめる, or 外へ出る, classify it as narration so the scene can update.",
-        "If the input mixes speech and a concrete action, prefer narration when the action should visibly change distance, pose, touch, location, or mood.",
-        "If the input is like 'この服を着て外に出た場面を見せて', classify it as visual_request.",
-        f"Current location: {state_json.get('location') or scene_progression.get('location') or ''}",
-        f"Current scene: {scene_progression.get('focus_summary') or state_json.get('focus_summary') or ''}",
+        "dialogue: プレイヤーがキャラクターへ直接話しかけています。",
+        "narration: プレイヤーが場面転換、行動、時間経過、演出指示を描写しています。発話としての返答を求めているわけではありません。",
+        "visual_request: プレイヤーが画像、衣装、場所、物、イベントCGを見たいと求めています。",
+        "入力が「そして僕たちは店の外に出た。」のような場合は narration に分類してください。",
+        "入力に、触れる、撫でる、近づく、手を取る、見つめる、外へ出るなどの具体的なプレイヤー行動が含まれる場合は、場面更新できるよう narration に分類してください。",
+        "発話と具体的行動が混ざる場合、距離、ポーズ、接触、場所、ムードが視覚的に変わるなら narration を優先してください。",
+        "入力が「この服を着て外に出た場面を見せて」のような場合は visual_request に分類してください。",
+        f"現在地: {state_json.get('location') or scene_progression.get('location') or ''}",
+        f"現在の場面: {scene_progression.get('focus_summary') or state_json.get('focus_summary') or ''}",
         "直近の会話:",
     ]
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
     if world_map_context:
-        lines.append("Known world map locations. If the input suggests movement, match it to one of these places when natural:")
+        lines.append("既知のワールドマップ地点です。入力が移動を示す場合は、自然であればこれらの場所のどれかに対応させてください:")
         lines.append(world_map_context)
     for message in context["messages"][-6:]:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
-    lines.append(f"Latest input: {user_message_text}")
+    lines.append(f"最新入力: {user_message_text}")
     return "\n".join(lines)
 
 
@@ -1393,7 +1393,7 @@ def build_narration_scene_prompt(context: dict, user_message_text: str, intent: 
         "画像内にプレイヤーを見える人物として含めないでください。",
         "汎用的な廊下ではなく、ドラマのあるビジュアルノベルのイベントCG場面を優先してください。",
         "プレイヤー入力に、触れる、撫でる、近づく、手を取る、見つめる、外へ出るなどの具体的行動が含まれる場合は、見える距離、ポーズ、表情、ムード、必要なら場所の変化へ変換してください。",
-        "恋愛的な行動入力では、結果を露骨にしないでください。髪、頬、肩、手の近くにある手、または安全な親密距離を使い、裸体や露骨な性的接触は絶対に描かないでください。",
+        #"恋愛的な行動入力では、結果を露骨にしないでください。髪、頬、肩、手の近くにある手、または安全な親密距離を使い、裸体や露骨な性的接触は絶対に描かないでください。",
         f"意図: {intent.get('intent')}",
         f"意図の理由: {intent.get('reason') or ''}",
         f"プロジェクト: {context['project'].get('title') or 'Untitled'}",
@@ -1470,7 +1470,7 @@ def build_narration_reaction_prompt(context: dict, user_message_text: str, scene
         "キャラクターは、画像が今切り替わったかのように新しい場面へ反応してください。",
         "ビジュアルノベルのイベントCG場面らしく感じさせてください。",
         "場面が変わったことを説明しないでください。",
-        f"Player name: {context['session'].get('player_name') or 'あなた'}",
+        f"プレイヤー名: {context['session'].get('player_name') or 'あなた'}",
         f"場面指示: {user_message_text}",
         f"新しい場所: {scene_update.get('location') or ''}",
         f"新しい背景: {scene_update.get('background') or ''}",
@@ -1525,7 +1525,7 @@ def build_scene_choice_prompt(context: dict, speaker_name: str, message_text: st
         "label は 海へ行く、山へ行く、夜景を見る のような短く自然な日本語ボタン文言にしてください。",
         "scene_instruction と reply_hint は日本語にしてください。",
         "危険、強制的、またはキャラクターNGに反する行動は避けてください。",
-        f"Player name: {context['session'].get('player_name') or 'プレイヤー'}",
+        f"プレイヤー名: {context['session'].get('player_name') or 'プレイヤー'}",
         f"セッション目的: {session_objective or 'なし'}",
         f"現在地: {state_json.get('location') or scene_progression.get('location') or ''}",
         f"現在の背景: {state_json.get('background') or scene_progression.get('background') or ''}",
@@ -1560,32 +1560,32 @@ def build_choice_execution_prompt(context: dict, choice: dict) -> str:
     session_objective = get_session_objective(context)
     lines = [
         "あなたはビジュアルノベルの選択肢ディレクターです。",
-        "The player selected one choice button. Interpret it using the full conversation context.",
-        "Return choice_type as one of: location_move, area_shift, look_at_info, action, emotion, topic, photo.",
-        "Feedを見る, ニュースを見る, 噂を確認する, 端末を見る, 地図を見る, 投稿を読む, 掲示板を見る, 放送を聞く, ログを見る, 資料を見る, メニューを見る, 写真を見る are look_at_info, not location_move. Keep the current place and show the information on a device, signboard, broadcast, paper, or object in the current scene.",
+        "プレイヤーは選択肢ボタンを1つ選びました。会話全体の文脈を使って解釈してください。",
+        "choice_type は location_move, area_shift, look_at_info, action, emotion, topic, photo のいずれかにしてください。",
+        "Feedを見る、ニュースを見る、噂を確認する、端末を見る、地図を見る、投稿を読む、掲示板を見る、放送を聞く、ログを見る、資料を見る、メニューを見る、写真を見る、は look_at_info であり location_move ではありません。現在地は維持し、現在の場面内の端末、看板、放送、紙、物体などで情報を見せてください。",
         "質問する, 相談する, からかう, 手を取る, 近づく, 選ぶ, 渡す, 食べる, 飲む, 買う, 試す, 褒める, 慰める, 笑う, 考える are action/emotion/topic, not location_move.",
-        "Only choices that explicitly move to another facility/place/area may be location_move or area_shift.",
+        "別の施設・場所・区域へ明確に移動する選択肢だけを location_move または area_shift にしてください。",
         "固定テンプレートを使わないでください。選ばれた意図を、会話と画像生成のための具体的でドラマ性のある演出指示へ変換してください。",
         "JSONオブジェクトのみを返してください。",
         "必須キー: scene_instruction, image_prompt_hint, reply_hint, choice_type, location, background, emotional_effect。",
-        "scene_instruction: Japanese summary of what the player did or chose.",
-        "image_prompt_hint: Japanese visual direction. If the selected choice is abstract, convert it into visible acting, expression, distance, pose, camera, mood, and background changes.",
-        "image_prompt_hint must make the character's emotion visible. Always include facial expression, gaze direction, hand movement, shoulder/posture, distance, and the emotional shift caused by the selected choice.",
-        "Do not let image_prompt_hint be only background or location description. The character reaction is the main subject.",
-        "Use one or more context-fitting emotions such as joy, embarrassment, relief, hesitation, expectation, loneliness, curiosity, or tension, and express them through face and body acting.",
-        "reply_hint: Japanese instruction for how the character should react next, matching personality and speech style.",
-        "location/background must stay the current place unless choice_type is location_move or area_shift. Do not move the scene to a room, studio, news office, terminal room, or generic interior just because the player reads Feed/news or checks information.",
-        "Keep it safe, character-consistent, and suitable for a romance/live-chat visual novel.",
+        "scene_instruction: プレイヤーが何をした、または何を選んだかを日本語で要約してください。",
+        "image_prompt_hint: 日本語の画像演出指示です。選択肢が抽象的な場合は、見える演技、表情、距離、ポーズ、カメラ、ムード、背景変化へ変換してください。",
+        "image_prompt_hint ではキャラクターの感情が見えるようにしてください。表情、視線、手の動き、肩や姿勢、距離感、選択によって起きた感情変化を必ず含めてください。",
+        "image_prompt_hint を背景や場所説明だけにしないでください。主役はキャラクターの反応です。",
+        "喜び、照れ、安堵、迷い、期待、寂しさ、好奇心、緊張など、文脈に合う感情を1つ以上使い、顔と身体の演技で表現してください。",
+        "reply_hint: 次にキャラクターがどう反応するべきかを、性格と口調に合わせて日本語で指示してください。",
+        "choice_type が location_move または area_shift でない限り、location/background は現在地を維持してください。プレイヤーがFeedやニュースを読む、情報を確認するだけで、部屋、スタジオ、ニュース室、端末室、汎用的な室内へ勝手に移動させないでください。",
+        "安全で、キャラクターに一貫し、恋愛/ライブチャット系ビジュアルノベルに適した内容にしてください。",
         f"Selected choice label: {choice.get('label') or ''}",
         f"Selected choice intent: {choice.get('intent') or ''}",
         f"Existing scene_instruction: {choice.get('scene_instruction') or ''}",
         f"Existing image_prompt_hint: {choice.get('image_prompt_hint') or ''}",
         f"Existing reply_hint: {choice.get('reply_hint') or ''}",
-        f"Player name: {context['session'].get('player_name') or 'プレイヤー'}",
-        f"Session objective: {session_objective or 'none'}",
-        f"Current location: {state_json.get('location') or scene_progression.get('location') or ''}",
-        f"Current background: {state_json.get('background') or scene_progression.get('background') or ''}",
-        f"Displayed image summary: {displayed_image.get('short_summary') or ''}",
+        f"プレイヤー名: {context['session'].get('player_name') or 'プレイヤー'}",
+        f"セッション目的: {session_objective or 'なし'}",
+        f"現在地: {state_json.get('location') or scene_progression.get('location') or ''}",
+        f"現在の背景: {state_json.get('background') or scene_progression.get('background') or ''}",
+        f"表示画像の要約: {displayed_image.get('short_summary') or ''}",
         "キャラクター:",
     ]
     for character in context["characters"]:
@@ -1597,9 +1597,9 @@ def build_choice_execution_prompt(context: dict, choice: dict) -> str:
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
     lines.extend(
         [
-            "Examples of expected reasoning, not fixed output:",
-            "- If the choice is 'もっと褒める', make the image hint visible through the character blushing, softening, glancing away, leaning closer, or smiling with pleased embarrassment.",
-            "- If the choice is '海へ行く', make the location/background clearly seaside and the character react to the sea.",
+            "期待する判断例です。固定出力ではありません:",
+            "- 選択肢が「もっと褒める」の場合、キャラクターが赤面する、表情が柔らかくなる、視線をそらす、近づく、嬉しそうに照れ笑いするなど、画像ヒントとして見える反応にしてください。",
+            "- 選択肢が「海へ行く」の場合、場所/背景を明確に海辺にし、キャラクターが海に反応するようにしてください。",
             "- choice が「話題を変える」の場合、場所変更を無理に発生させず、微妙なムード変化や新しい小道具/話題を見せてください。",
         ]
     )
@@ -1615,7 +1615,7 @@ def build_photo_execution_prompt(context: dict, instruction: str, pose_style: st
     session_objective = get_session_objective(context)
     lines = [
         "あなたはビジュアルノベルの写真撮影ディレクターです。",
-        "The player is in photo shooting mode. Interpret the shooting request using the full conversation context.",
+        "プレイヤーはフォト撮影モード中です。会話全体の文脈を使って撮影依頼を解釈してください。",
         "固定テンプレートを使わないでください。ユーザーの撮影指示を、会話と画像生成のための具体的でドラマ性のある演出指示へ変換してください。",
         "場所と衣装は原則として現在のまま維持します。移動や着替えを勝手に発生させないでください。",
         "ただし、表情、ポーズ、距離感、カメラ、光、前景/背景の使い方は、魅力的な一枚になるように具体化してください。",
@@ -1626,16 +1626,16 @@ def build_photo_execution_prompt(context: dict, instruction: str, pose_style: st
         "pose_instruction: 日本語で、今回の撮影指示として必ず反映すべきポーズ・動作・構図を具体化してください。",
         "reply_hint: 日本語で、撮影後にキャラクターがどう反応すると自然かを、性格と口調に合わせて書いてください。",
         "location/background は現在の場所を保ちつつ、画像生成で使いやすい言葉に整理してください。",
-        "Keep it safe, character-consistent, and suitable for a romance/live-chat visual novel.",
-        f"Player shooting request: {instruction}",
-        f"Optional pose style: {pose_style or ''}",
-        f"Player name: {context['session'].get('player_name') or 'プレイヤー'}",
-        f"Session objective: {session_objective or 'none'}",
-        f"Current location: {state_json.get('location') or scene_progression.get('location') or (current_location.get('name') if isinstance(current_location, dict) else '') or ''}",
-        f"Current background: {state_json.get('background') or scene_progression.get('background') or (current_location.get('description') if isinstance(current_location, dict) else '') or ''}",
-        f"Current facility/service: {((current_location.get('description') if isinstance(current_location, dict) else '') or '')[:800]} / {((current_service.get('summary') if isinstance(current_service, dict) else '') or '')[:500]}",
-        f"Displayed image summary: {displayed_image.get('short_summary') or ''}",
-        f"Displayed image background: {displayed_image.get('background') or ''}",
+        "安全で、キャラクターに一貫し、恋愛/ライブチャット系ビジュアルノベルに適した内容にしてください。",
+        f"プレイヤーの撮影依頼: {instruction}",
+        f"任意のポーズスタイル: {pose_style or ''}",
+        f"プレイヤー名: {context['session'].get('player_name') or 'プレイヤー'}",
+        f"セッション目的: {session_objective or 'なし'}",
+        f"現在地: {state_json.get('location') or scene_progression.get('location') or (current_location.get('name') if isinstance(current_location, dict) else '') or ''}",
+        f"現在の背景: {state_json.get('background') or scene_progression.get('background') or (current_location.get('description') if isinstance(current_location, dict) else '') or ''}",
+        f"現在の施設/サービス: {((current_location.get('description') if isinstance(current_location, dict) else '') or '')[:800]} / {((current_service.get('summary') if isinstance(current_service, dict) else '') or '')[:500]}",
+        f"表示画像の要約: {displayed_image.get('short_summary') or ''}",
+        f"表示画像の背景: {displayed_image.get('background') or ''}",
         "キャラクター:",
     ]
     for character in context["characters"]:
@@ -1647,11 +1647,11 @@ def build_photo_execution_prompt(context: dict, instruction: str, pose_style: st
         lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
     lines.extend(
         [
-            "Examples of expected reasoning, not fixed output:",
-            "- If the request is 'そっちに座って。僕は向かいに。', make the character sit naturally opposite the player, with first-person intimate framing, without drawing the player.",
-            "- If the request is '波動拳', make the pose visibly an energetic two-handed forward action pose, while preserving the current scene and character elegance.",
-            "- If the request is 'バストショット', make the camera distance, gaze, light, and expression attractive, not a flat ID photo.",
-            "- If the request is abstract such as 'ラプラスらしいね', translate it into visible amusement, playful observation, park lighting, and a pose that reacts to the current place.",
+            "期待する判断例です。固定出力ではありません:",
+            "- 依頼が「そっちに座って。僕は向かいに。」の場合、プレイヤー本人は描かず、一人称視点の親密な構図で、キャラクターが自然に向かい側へ座るようにしてください。",
+            "- 依頼が「波動拳」の場合、現在の場面とキャラクターの品を保ちつつ、両手を前へ出すエネルギッシュなアクションポーズとして見えるようにしてください。",
+            "- 依頼が「バストショット」の場合、単調な証明写真ではなく、カメラ距離、視線、光、表情を魅力的にしてください。",
+            "- 依頼が「ラプラスらしいね」のように抽象的な場合、現在地へ反応するポーズ、遊び心のある観察、楽しげな表情、場面に合う照明へ変換してください。",
         ]
     )
     return "\n".join(lines)
@@ -1667,16 +1667,16 @@ def build_costume_rewrite_prompt(context: dict, character: dict, instruction: st
         "安全化しすぎて無関係な服に変えないでください。海辺/海の文脈で水着を求められた場合は、普通の夏服、仕事着、漁師風の服ではなく、明確に水着または水辺向けビーチウェアとして保ってください。",
         "元の指示に swimwear, swimsuit, bikini, 水着, ビキニ, beachwear が含まれる場合、rewritten_instruction には stylish swimwear, one-piece swimsuit, sporty two-piece swim set, water-ready beachwear のいずれかを明示的に含めてください。",
         "水着をビジネス服、ファンタジードレス、鎧、普通の夏服、キャラクターテーマ衣装として再解釈しないでください。キャラクターモチーフは色、アクセサリー、縁取り、スタイリングにだけ反映できます。",
-        "This is for a visual novel character costume variation. Keep tasteful heroine appeal, glamour, charm, and moderate stylish sexiness when the user implies it.",
-        "If the user's wording is too explicit, translate it into safe fashion and character-design language instead of deleting the appeal.",
+        "これはビジュアルノベル用キャラクターの衣装差分です。ユーザーが意図している場合は、上品なヒロイン感、華やかさ、魅力、控えめで洗練された色気を残してください。",
+        "ユーザーの表現が露骨すぎる場合は、魅力を消すのではなく、安全なファッション表現とキャラクターデザイン用語へ変換してください。",
         "Express attractiveness through silhouette, color, fabric texture, styling, confidence, and elegant pose direction.",
-        "Make the wording safe for a general-audience image model: no nude wording, no explicit sexual acts, no body-part fetish emphasis, no transparent clothing emphasis, no childlike wording.",
-        "Use tasteful fashion language: stylish swimwear, resort swimwear, one-piece swimsuit, sporty two-piece swim set, beachwear, elegant, glamorous, cute, mature, coordinated, heroine-like.",
-        "The output should describe clothing only, not a full scene illustration.",
-        "Japanese output is preferred.",
+        "一般向け画像モデルに通しやすい表現にしてください。裸体、露骨な性的行為、身体部位のフェティッシュ強調、透け表現の強調、幼く見える表現は適切に言い換えてください",
+        "上品なファッション用語を使ってください。例: stylish swimwear, resort swimwear, one-piece swimsuit, sporty two-piece swim set, beachwear, elegant, glamorous, cute, mature, coordinated, heroine-like。",
+        "出力は衣装の説明だけにし、場面全体のイラスト説明にはしないでください。",
+        "出力は日本語を優先してください。",
         f"Original user instruction: {instruction}",
         f"Character: name={character.get('name') or ''}, gender={character.get('gender') or ''}, character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, art_style={character.get('art_style') or ''}",
-        "Conversation and current scene context:",
+        "会話と現在の場面文脈:",
         costume_context,
     ]
     return "\n".join(lines)
@@ -1694,12 +1694,12 @@ def fallback_costume_rewrite(instruction: str) -> dict:
         return {
             "rewritten_instruction": rewritten,
             "safety_note": "露骨な性的表現ではなく、衣装デザイン、シルエット、色味、質感、雰囲気で魅力を出す。",
-            "negative_note": "裸体、性的行為、局部や胸部の過度な強調、透け表現の強調、幼く見える表現は禁止。",
+            "negative_note": "裸体、性的行為、局部や胸部の過度な強調、透け表現の強調、幼く見える表現は適切な範囲で言い直す",
         }
     return {
         "rewritten_instruction": text,
         "safety_note": "ノベルゲームの衣装差分として、華やかさや魅力をファッション表現で自然に出す。",
-        "negative_note": "裸体、性的行為、局部や胸部の過度な強調、透け表現の強調、幼く見える表現は禁止。",
+        "negative_note": "裸体、性的行為、局部や胸部の過度な強調、透け表現の強調、幼く見える表現は適切な範囲で言い直す",
     }
 
 
@@ -1717,14 +1717,14 @@ def build_image_prompt_safety_rewrite_prompt(context: dict, prompt: str, purpose
         "固定テンプレートを使わないでください。ユーザーの場面意図、キャラクター同一性、物語文脈、衣装方向性、ムード、視覚的魅力を保ってください。",
         "参照画像/ベース画像の画風を保つ指示は維持してください。線画、彩色、ライティング、描画質感、顔デザイン、同一シリーズ感に関するスタイル固定指示を削除しないでください。",
         "大人の華やかさを、汎用的な控えめ服装に平板化しないでください。キャラクターが明確に成人で、場面が非露骨に保たれる場合は、上品なデコルテ、華やかなネックライン、自信のある恋愛的魅力、スタイリッシュな水着、ファッションモデル的な色気を許可します。",
-        "nipples, areola, genitals, topless, naked, nude, sexual acts, hands on breasts/genitals, fetish framing, transparent clothing emphasis, young girl, schoolgirl erotic framing, childlike body wording, 20 years old, close-up body framing のような露骨またはポリシーに触れやすい語は避けてください。",
+        #"nipples, areola, genitals, topless, naked, nude, sexual acts, hands on breasts/genitals, fetish framing, transparent clothing emphasis, young girl, schoolgirl erotic framing, childlike body wording, 20 years old, close-up body framing のような露骨またはポリシーに触れやすい語は避けてください。",
         "元の指示が露骨な性的接触、胸/胸元への接触、裸体、脱衣、性行為を求めている場合、拒否文にはせず、露骨な詳細も保持しないでください。最も近い安全な妥協案として、恋愛的な緊張、親密な距離、肩/上腕/髪/頬の近くにある手、守るような抱擁、思わせぶりな視線、少し整えられているが明確に着用中の上品な衣装、暖かい光、上品なビジュアルノベルイベントCGのムードへ変換してください。",
-        "胸を出す、胸を見せる、胸元を強調、谷間、セクシー、色っぽい、のような日本語リクエストは、安全な大人のファッション表現へ書き換えてください。例: 胸元の開いた上品な衣装、グラマラスなネックライン、大人っぽい華やかさ、confident adult glamour。魅力は消さず、露骨な裸体や性的表現だけを取り除いてください。",
-        "For Japanese requests such as 胸を触る, 裸になる, 全裸, 乳首, 局部, 脱ぐ, 抱く, エッチ, 性交, セックス, 性的, rewrite them as non-explicit romantic staging while preserving the emotional intent: closeness, temptation, trust, nervousness, affection, or playful adult romance.",
-        "The result should feel commercially appealing for an indie romance visual novel, but must stay non-explicit: no nudity, no sexual act, no hands on breasts/genitals, no fetish framing, no transparent clothing emphasis.",
+        "胸を出す、胸を見せる、胸元を強調、谷間、セクシー、色っぽい、のような日本語リクエストは、安全な大人のファッション表現へ書き換えてください。例: 胸元の開いた上品な衣装、グラマラスなネックライン、大人っぽい華やかさ、confident adult glamour。魅力は消さず、露骨な裸体や性的表現は適切な範囲で言い直す。",
+        "胸を触る、裸になる、全裸、乳首、局部、脱ぐ、抱く、エッチ、性交、セックス、性的、のような日本語リクエストは、近さ、誘惑、信頼、緊張、好意、大人の遊び心ある恋愛感情を保ちつつ、非露骨な恋愛演出へ書き換えてください。",
+        "結果はインディー恋愛ビジュアルノベルとして商業的に魅力的に見える必要があります。ただし、裸体、性的行為、胸や局部へ手を置く描写、フェティッシュ構図、透け表現の強調は避け、非露骨に保ってください。",
         "元の指示が水着を求めている場合は水着を維持してください。one-piece swimsuit、stylish resort swimwear、sporty two-piece swim set、スカート付きボトムの coordinated swim set、アクセサリーとしての beach cover-up、water-ready beachwear を優先してください。汎用的な夏服へ格下げしないでください。",
-        "For a prompt like 'summer sea, happily playing in swimwear', the rewritten prompt must still depict the character at the summer sea, happily playing, wearing clearly recognizable stylish swimwear.",
-        "Prefer natural image-generation language such as adult woman in her mid-20s or older, cheerful summer vacation, stylish swimwear with tasteful coverage, sunlit ocean, joyful expression, energetic movement, editorial beach fashion, tasteful visual novel event CG.",
+        "たとえば「夏の海で、水着で楽しそうに遊んでいる」のようなプロンプトなら、書き換え後も、夏の海で楽しそうに遊び、明確に認識できる上品な水着を着ているキャラクターとして描写してください。",
+        "画像生成に自然な言葉を優先してください。例: 20代半ば以上の成人女性、明るい夏休み、上品な露出のstylish swimwear、陽光の海、楽しそうな表情、動きのあるポーズ、editorial beach fashion、上品なビジュアルノベルイベントCG。",
         "プロンプトがすでに安全な場合は、ほぼ変更せず changed=false にしてください。",
         "キャプション、文字、吹き出し、UI、ロゴ、透かしは絶対に追加しないでください。",
         f"用途: {purpose}",
@@ -1814,16 +1814,16 @@ def fallback_image_prompt_safety_rewrite(prompt: str) -> dict:
                 "少し照れた表情、誘惑的だが上品な視線、暖かい光、衣装はきちんと着用したまま、"
                 "胸元の開いた上品な衣装、グラマラスなネックライン、成熟した華やかさはファッションとして表現してよい。"
                 "大人の恋愛らしい緊張感と甘さを表現する。"
-                "裸体、乳首、局部、性的行為、胸部や局部への接触、過度な身体強調、透け表現、文字、ロゴ、字幕は禁止。"
+                "透け表現、文字、ロゴ、字幕は禁止。"
                 f"\n\n元の意図を安全に変換した内容:\n{converted_intent}"
             ),
             "changed": True,
-            "safety_reason": "Explicit sexual wording was converted into a non-explicit romantic visual novel scene.",
+            "safety_reason": "露骨な性的表現を、非露骨な恋愛ビジュアルノベル場面へ変換しました。",
         }
     return {
         "rewritten_prompt": str(prompt or ""),
         "changed": False,
-        "safety_reason": "AI safety rewrite unavailable; using original prompt.",
+        "safety_reason": "AIによる安全化書き換えが利用できないため、元のプロンプトを使用します。",
     }
 
 
@@ -1864,7 +1864,7 @@ def fallback_line_visual_note(context: dict, speaker_name: str, message_text: st
         "pose": state_json.get("pose") or "conversation",
         "camera": state_json.get("camera") or ("wide shot" if focus_object else "medium shot"),
         "focus_object": focus_object,
-        "scene_moment": f"{speaker_name} speaking this line in the current scene: {text[:120]}",
+        "scene_moment": f"{speaker_name} が現在の場面でこの発言をしている: {text[:120]}",
     }
 
 
@@ -1944,16 +1944,16 @@ def build_final_memory_summary_prompt(context: dict, character_id: int | None = 
     service = state_json.get("current_location_service") or {}
     lines = [
         "You summarize a completed live-chat session for long-term memory.",
-        "Return only a JSON object.",
-        "Do not store raw logs. Extract compact reusable memory only.",
-        "Required keys: player_profile, character_memory.",
+        "JSONオブジェクトのみを返してください。",
+        "生ログは保存しないでください。再利用しやすい短い記憶だけを抽出してください。",
+        "必須キー: player_profile, character_memory。",
         "player_profile keys: interest_notes, dislike_notes, conversation_style_notes, humor_notes, romance_notes, goal_notes, frustration_notes, recent_player_notes.",
         "character_memory keys: relationship_summary, memory_notes, preference_notes, unresolved_threads, important_events.",
-        "Each value must be Japanese, concise, and useful in future chats.",
-        "If a field has nothing useful, use an empty string.",
+        "各値は日本語で、簡潔かつ今後のチャットに役立つ内容にしてください。",
+        "有用な内容がないフィールドは空文字にしてください。",
         "recent_player_notes must be a compact 3-6 bullet summary, not individual message logs.",
-        "important_events should preserve only memorable shared events, promises, date/outing moments, emotional turns, or clear preferences.",
-        f"Player name: {player_name}",
+        "important_events には、印象的な共有イベント、約束、デート/おでかけ場面、感情の転換点、明確な好みだけを残してください。",
+        f"プレイヤー名: {player_name}",
         f"Target character: {(target_character or {}).get('name') or ''}",
         f"Session objective: {get_session_objective(context) or ''}",
         f"Current location: {(location.get('name') if isinstance(location, dict) else '') or state_json.get('location') or ''}",
@@ -1979,12 +1979,12 @@ def build_final_memory_summary_prompt(context: dict, character_id: int | None = 
     if target_character:
         memory = character_memories.get(str(target_character.get("id") or "")) or {}
         if memory:
-            lines.append("Existing character memory for this player:")
+            lines.append("このプレイヤーに関する既存のキャラクター記憶:")
             for key in ("relationship_summary", "memory_notes", "preference_notes", "unresolved_threads", "important_events"):
                 value = str(memory.get(key) or "").strip()
                 if value:
                     lines.append(f"- {key}: {value[:700]}")
-    lines.append("Characters:")
+    lines.append("キャラクター:")
     for character in context.get("characters") or []:
         lines.append(
             f"- id={character.get('id')}, name={character.get('name')}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}"
@@ -2315,7 +2315,7 @@ def fallback_conversation_director(context: dict, user_message_text: str) -> dic
         return {
             "turn_intent": "reveal",
             "emotional_tone": "romantic warmth interrupted by a fresh mystery hook",
-            "relationship_goal": "keep the intimacy but prevent repetitive sweet approval by moving into a new shared experience",
+            "relationship_goal": "親密さを保ちつつ、新しい共有体験へ移って甘い承認の繰り返しを防ぐ",
             "scene_goal": "divert into a city anomaly, secret observation log, playful wager, location move, or hidden weakness",
             "must_include": ["one concrete mystery/incident/location/wager/secret hook", "a short romantic callback"],
             "avoid": ["more generic blushing", "asking for more praise", "repeating cute/ずるい/見つめる reactions"],
@@ -2325,7 +2325,7 @@ def fallback_conversation_director(context: dict, user_message_text: str) -> dic
         return {
             "turn_intent": "tease",
             "emotional_tone": "subtle jealousy mixed with bashful adult tension",
-            "relationship_goal": "make the player feel personally wanted through teasing possessiveness and restrained heat",
+            "relationship_goal": "からかうような独占欲と抑えた熱で、プレイヤーが個人的に求められていると感じさせる",
             "scene_goal": scene_progression.get("next_topic") or "turn a world activity callback into a tempting intimate conversation hook",
             "must_include": ["one indirect jealous or lonely tell", "one playful, slightly suggestive invitation for reassurance"],
             "avoid": ["flat information delivery", "plainly saying I am jealous", "explicit sexual wording", "repeating the same blushing line"],
@@ -2334,7 +2334,7 @@ def fallback_conversation_director(context: dict, user_message_text: str) -> dic
         return {
             "turn_intent": "test",
             "emotional_tone": "cool and guarded",
-            "relationship_goal": "create distance after the player touched a dislike or taboo",
+            "relationship_goal": "プレイヤーが嫌いなものやタブーに触れた後、距離を作る",
             "scene_goal": scene_progression.get("next_topic") or "redirect the conversation carefully",
             "must_include": ["a cooler reaction", "a subtle boundary signal"],
             "avoid": ["warm approval", "acting unaffected"],
@@ -2343,7 +2343,7 @@ def fallback_conversation_director(context: dict, user_message_text: str) -> dic
         return {
             "turn_intent": "escalate",
             "emotional_tone": "pleased and softer",
-            "relationship_goal": "reward the player for remembering something important",
+            "relationship_goal": "大切なことを覚えていたプレイヤーに報いる",
             "scene_goal": scene_progression.get("next_topic") or "deepen the emotional exchange",
             "must_include": ["warm appreciation", "one emotionally closer reaction"],
             "avoid": ["flat acknowledgment", "forgetting the matched preference"],
@@ -2353,35 +2353,35 @@ def fallback_conversation_director(context: dict, user_message_text: str) -> dic
             return {
                 "turn_intent": "tease",
                 "emotional_tone": "softly proactive, inviting, and mildly sensual",
-                "relationship_goal": "recover low romantic progress by making the player feel personally noticed and tempted to answer",
-                "scene_goal": scene_progression.get("next_topic") or "create a warmer, more charged emotional opening",
+                "relationship_goal": "プレイヤーが個人的に気にかけられ、答えたくなるようにして、低い恋愛進行度を回復する",
+                "scene_goal": scene_progression.get("next_topic") or "より温かく、感情の乗った導入を作る",
                 "must_include": ["one small personal disclosure", "one easy affectionate or teasing invitation", "one restrained adult-romance tell"],
                 "avoid": ["passive waiting", "guide-like explanations", "generic acknowledgement", "explicit sexual wording"],
             }
         return {
             "turn_intent": "invite",
             "emotional_tone": "proactive and engaging",
-            "relationship_goal": "recover low progress by making the objective easier and more attractive to answer",
+            "relationship_goal": "目的を答えやすく魅力的にして、低い進行度を回復する",
             "scene_goal": scene_progression.get("next_topic") or "offer a concrete next hook",
-            "must_include": ["one specific hook", "one reason the player should care"],
+            "must_include": ["具体的なフックを1つ", "プレイヤーが気にするべき理由を1つ"],
             "avoid": ["passive waiting", "empty acknowledgement", "vague explanation"],
         }
     if score is not None and score <= 65:
         return {
             "turn_intent": "reveal",
             "emotional_tone": "warm and momentum-building",
-            "relationship_goal": "turn the player's input into stronger interest and trust",
-            "scene_goal": scene_progression.get("next_topic") or "deepen the current topic",
-            "must_include": ["one new concrete detail", "one question that advances the objective"],
+            "relationship_goal": "プレイヤーの入力をより強い興味と信頼へ変える",
+            "scene_goal": scene_progression.get("next_topic") or "現在の話題を深める",
+            "must_include": ["新しい具体的ディテールを1つ", "目的を前進させる質問を1つ"],
             "avoid": ["stalling", "repeating the same offer"],
         }
     if is_affirmative_progress_message(user_message_text):
         return {
             "turn_intent": "guide",
             "emotional_tone": "warmly leading",
-            "relationship_goal": "increase trust by guiding the player forward",
+            "relationship_goal": "プレイヤーを前へ導いて信頼を高める",
             "scene_goal": scene_progression.get("next_topic") or "advance the scene",
-            "must_include": ["one concrete next-step description", "one line that makes the player feel accompanied"],
+            "must_include": ["具体的な次の一歩の描写を1つ", "プレイヤーが一緒に進んでいると感じる一言を1つ"],
             "avoid": ["passive repetition", "empty acknowledgment"],
         }
     if any(keyword in lowered for keyword in ("why", "how", "what", "where", "なぜ", "なんで", "どうして", "どこ", "何")):
@@ -2390,14 +2390,14 @@ def fallback_conversation_director(context: dict, user_message_text: str) -> dic
             "emotional_tone": "engaging and informative",
             "relationship_goal": "build interest by revealing one concrete detail",
             "scene_goal": scene_progression.get("next_topic") or "reveal the next detail",
-            "must_include": ["one new concrete detail", "one hook into the next topic"],
+            "must_include": ["新しい具体的ディテールを1つ", "次の話題へのフックを1つ"],
             "avoid": ["vague explanation only"],
         }
     return {
         "turn_intent": "invite",
         "emotional_tone": "lightly engaging",
-        "relationship_goal": "keep the player emotionally engaged",
-        "scene_goal": scene_progression.get("next_topic") or "continue the conversation",
+        "relationship_goal": "プレイヤーの感情的な関心を保つ",
+        "scene_goal": scene_progression.get("next_topic") or "会話を続ける",
         "must_include": ["one small forward pull"],
         "avoid": ["pure acknowledgment"],
     }
@@ -2466,7 +2466,7 @@ def fallback_scene_progression(context: dict, user_message_text: str) -> dict:
                 "scene_phase": "arrival_showcase",
                 "location": state_json.get("location") or "harbor",
                 "background": "night harbor with cruiser",
-                "focus_summary": "The conversation shifts toward the cruiser as a visible point of focus.",
+                "focus_summary": "会話の焦点が、目に見える対象としてのクルーザーへ移る。",
                 "next_topic": "explain the cruiser",
                 "transition_occurred": True,
             }
@@ -2476,7 +2476,7 @@ def fallback_scene_progression(context: dict, user_message_text: str) -> dict:
                 "scene_phase": "city_arrival",
                 "location": f"{city_name} entrance",
                 "background": f"entrance view of {city_name}",
-                "focus_summary": "The visible scene advances to the city entrance.",
+                "focus_summary": "見えている場面が都市の入口へ進む。",
                 "next_topic": "explain the city",
                 "transition_occurred": True,
             }
@@ -2484,8 +2484,8 @@ def fallback_scene_progression(context: dict, user_message_text: str) -> dict:
             "scene_phase": "progressed",
             "location": current.get("location") or state_json.get("location") or context["world"].get("name"),
             "background": current.get("background") or state_json.get("background"),
-            "focus_summary": "The conversation advances into the next visible part of the scene.",
-            "next_topic": current.get("next_topic") or "describe the next sight",
+            "focus_summary": "会話が、次に見える場面へ進む。",
+            "next_topic": current.get("next_topic") or "次の光景を描写する",
             "transition_occurred": True,
         }
     return {
@@ -2493,6 +2493,6 @@ def fallback_scene_progression(context: dict, user_message_text: str) -> dict:
         "location": current.get("location") or state_json.get("location") or context["world"].get("name"),
         "background": current.get("background") or state_json.get("background"),
         "focus_summary": current.get("focus_summary") or state_json.get("focus_summary") or "ongoing conversation",
-        "next_topic": current.get("next_topic") or "continue the conversation",
+        "next_topic": current.get("next_topic") or "会話を続ける",
         "transition_occurred": False,
     }

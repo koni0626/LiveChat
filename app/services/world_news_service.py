@@ -166,30 +166,30 @@ class WorldNewsService:
         outings = self._outings.list_by_project_user(project_id, 1, limit=8)
         novels = self._recent_cinema_novel_contexts(project_id, limit=6)
         prompt = f"""
-Return only JSON.
-Create {count} world news / rumor items for a Japanese character world app.
-They should make the world feel alive outside direct chat.
+JSONのみを返してください。
+日本語キャラクター世界観アプリ向けに、世界ニュース/噂を {count} 件作成してください。
+直接チャットしていない場所でも世界が生きているように感じさせてください。
 
-Required shape:
+必須形式:
 {{"items":[{{"news_type":"location_news|character_sighting|relationship|event_hint|cinema_novel","title":"...", "body":"...", "summary":"...", "importance":1-5, "related_character_id": null or number, "related_location_id": null or number, "source_ref_type": null or "cinema_novel", "source_ref_id": null or number}}]}}
 
-Rules:
-- Japanese only.
-- Keep each body 100-220 chars.
-- Include a mix of facility news, character sightings, character relationship rumors, and novel-related rumors if cinema novels are provided.
-- Do not claim huge irreversible events. Make them small hooks for chat or outing.
-- Use only provided character/location IDs.
-- If using a cinema novel as inspiration, make it sound like an in-world screening rumor, production note, audience reaction, character sighting around the theater, or a small story-world echo. Do not summarize the whole novel.
-- For novel-related items, set news_type to "cinema_novel", source_ref_type to "cinema_novel", and source_ref_id to the provided novel id.
+ルール:
+- 日本語のみ。
+- 各 body は100〜220文字。
+- 施設ニュース、キャラクター目撃談、キャラクター関係の噂、シネマノベルが提供されている場合はノベル関連の噂を混ぜてください。
+- 大規模で不可逆な事件を断定しないでください。チャットやおでかけの小さなフックにしてください。
+- 提供されたキャラクターID/場所IDだけを使ってください。
+- シネマノベルを着想に使う場合は、世界内の上映噂、制作メモ、観客反応、劇場周辺のキャラクター目撃、小さな物語世界の反響のようにしてください。ノベル全体の要約はしないでください。
+- ノベル関連項目では、news_type を "cinema_novel"、source_ref_type を "cinema_novel"、source_ref_id を提供されたノベルIDにしてください。
 
-Project: {getattr(project, "title", "") or ""}
-Project summary: {getattr(project, "summary", "") or ""}
-World tone: {getattr(world, "tone", "") if world else ""}
-World overview: {getattr(world, "overview", "") if world else ""}
-Characters: {json_util.dumps([self._character_context(c) for c in characters])}
-Locations: {json_util.dumps([self._location_context(l) for l in locations])}
-Recent outings: {json_util.dumps([{"id": o.id, "title": o.title, "summary": o.memory_summary or o.summary} for o in outings])}
-Cinema novels: {json_util.dumps(novels)}
+プロジェクト: {getattr(project, "title", "") or ""}
+プロジェクト概要: {getattr(project, "summary", "") or ""}
+世界観トーン: {getattr(world, "tone", "") if world else ""}
+世界観概要: {getattr(world, "overview", "") if world else ""}
+キャラクター: {json_util.dumps([self._character_context(c) for c in characters])}
+場所: {json_util.dumps([self._location_context(l) for l in locations])}
+最近のおでかけ: {json_util.dumps([{"id": o.id, "title": o.title, "summary": o.memory_summary or o.summary} for o in outings])}
+シネマノベル: {json_util.dumps(novels)}
 """.strip()
         result = self._text_ai_client.generate_text(
             prompt,
@@ -205,23 +205,23 @@ Cinema novels: {json_util.dumps(novels)}
 
     def _generate_outing_candidate(self, outing, character, location, state: dict) -> dict:
         prompt = f"""
-Return only JSON.
-Create one small world news / rumor item that appears after an outing mini event.
-It should sound like a city rumor, sighting, or local note, not a private diary.
+JSONのみを返してください。
+おでかけミニイベントの後に出る、小さな世界ニュース/噂を1件作成してください。
+私的な日記ではなく、都市の噂、目撃談、地域メモのように聞こえる内容にしてください。
 
-Required keys:
+必須キー:
 {{"news_type":"outing_afterglow|character_sighting|relationship", "title":"...", "body":"...", "summary":"...", "importance":1-5}}
 
-Character: {character.name or ""}
-Character overview: {getattr(character, "character_summary", None) or ""}
-Character personality: {character.personality or ""}
-Location: {location.name or ""}
-Location description: {location.description or ""}
-Outing title: {outing.title or ""}
-Mood: {outing.mood or ""}
-Memory title: {outing.memory_title or ""}
-Memory summary: {outing.memory_summary or ""}
-Selected choices: {json_util.dumps((state or {}).get("selected_choices") or [])}
+キャラクター: {character.name or ""}
+キャラクター概要: {getattr(character, "character_summary", None) or ""}
+キャラクター性格: {character.personality or ""}
+場所: {location.name or ""}
+場所説明: {location.description or ""}
+おでかけタイトル: {outing.title or ""}
+ムード: {outing.mood or ""}
+記憶タイトル: {outing.memory_title or ""}
+記憶概要: {outing.memory_summary or ""}
+選択された選択肢: {json_util.dumps((state or {}).get("selected_choices") or [])}
 """.strip()
         result = self._text_ai_client.generate_text(
             prompt,
@@ -470,28 +470,28 @@ Selected choices: {json_util.dumps((state or {}).get("selected_choices") or [])}
     def _build_news_image_prompt(self, item, character, location, project, reference_characters: list | None = None) -> str:
         reference_characters = reference_characters or []
         lines = [
-            "Create a polished in-world news image for a Japanese character/world app.",
+            "日本語キャラクター/世界観アプリ向けに、世界内ニュースらしい完成度の高い画像を作成してください。",
             "It should look like a modern local news card, not a plain illustration.",
             "Landscape 1536x1024, cinematic news photography with a clear news graphic layout.",
-            "Use realistic editorial photography, documentary/event-news lighting, natural camera perspective, and believable environment detail.",
-            "Avoid anime illustration, painterly rendering, visual novel CG style, cel shading, manga line art, or stylized character poster framing.",
-            "Include a fictional news logo in the upper left: LAPLACE NEWS.",
+            "リアルなエディトリアル写真、ドキュメンタリー/イベントニュース風の照明、自然なカメラ視点、説得力のある環境ディテールを使ってください。",
+            "アニメイラスト、絵画調、ビジュアルノベルCG、セル塗り、漫画線画、キャラクターポスター風の構図は避けてください。",
+            "左上に架空のニュースロゴ「LAPLACE NEWS」を入れてください。",
             "Include broadcast-style elements: top logo bar, lower-third headline strip, small category badge, subtle ticker-like decorative line.",
-            "Use large, readable Japanese headline text based on the title. Keep text short; avoid long paragraphs.",
-            "Do not use real broadcaster logos, real newspaper brands, watermarks, QR codes, or UI screenshots.",
-            "The image should still show the reported scene: city, facility, character sighting, local event, or rumor atmosphere.",
-            "Avoid making it look like a character standing portrait only.",
+            "タイトルを元に、大きく読みやすい日本語見出しを使ってください。文字は短くし、長い段落は避けてください。",
+            "実在の放送局ロゴ、実在の新聞ブランド、透かし、QRコード、UIスクリーンショットは使わないでください。",
+            "画像には、都市、施設、キャラクター目撃、地域イベント、噂の空気など、報道されている場面そのものが見えるようにしてください。",
+            "キャラクターの立ち絵だけに見える画像は避けてください。",
         ]
         if reference_characters:
             lines.extend(
                 [
                     f"{len(reference_characters)} base character reference image(s) are provided.",
-                    "Use each provided base character image as a separate identity reference.",
-                    "Preserve each referenced character's face identity, hairstyle, hair color, eye shape, body impression, and overall character design.",
-                    "If two referenced characters are present in the news title/body, show both of them and do not invent a different second person.",
-                    "Use the references for identity, not as a reason to make the whole image illustrated; if a reference is illustrated, translate that identity into a realistic news-photo look.",
-                    "Do not use thumbnails, icons, avatars, or cropped portraits as identity references.",
-                    "Adapt the character(s) into the news scene while preserving identity from the base image(s).",
+                    "提供された各キャラクター基準画像を、それぞれ別人の同一性参照として使ってください。",
+                    "参照キャラクターごとに、顔の同一性、髪型、髪色、目の形、体の印象、全体のキャラクターデザインを維持してください。",
+                    "ニュースのタイトル/本文に2人の参照キャラクターがいる場合は、両方を描き、別の2人目を創作しないでください。",
+                    "参照画像は同一性のために使ってください。画像全体をイラスト調にする理由にはしないでください。参照がイラストでも、その同一性をリアルなニュース写真風へ変換してください。",
+                    "サムネイル、アイコン、アバター、切り抜きポートレートを同一性参照として使わないでください。",
+                    "基準画像の同一性を保ったまま、キャラクターをニュース場面へ自然に適応させてください。",
                 ]
             )
             for index, referenced_character in enumerate(reference_characters, start=1):

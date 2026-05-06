@@ -524,7 +524,7 @@ def _fallback_swimwear_costume_rewrite(instruction: str, character: dict) -> dic
             "水着カテゴリは維持する。露骨な性的表現ではなく、リゾートファッション、健康的な夏の雰囲気、"
             "キャラクター衣装差分として魅力を出す。"
         ),
-        "negative_note": "裸体、性的行為、局部や胸部の過度な強調、透け表現の強調、幼く見える表現、文字、ロゴは禁止。",
+        "negative_note": "文字、ロゴは禁止。",
         "fallback_reason": f"AI rewrite removed or rejected requested swimwear category. Original: {instruction}",
     }
 

@@ -85,7 +85,7 @@ class ImageAIClient:
         normalized = self._normalize_prompt(prompt)
         if len(normalized.encode("utf-8")) <= self.XAI_MAX_PROMPT_BYTES:
             return normalized
-        suffix = "\n\n[Prompt shortened to fit the image provider limit. Preserve the most important character identity, outfit, pose, and scene instructions above.]"
+        suffix = "\n\n[画像プロバイダーの上限に合わせてプロンプトを短縮しました。上にある最重要のキャラクター同一性、衣装、ポーズ、場面指示を維持してください。]"
         suffix_bytes = suffix.encode("utf-8")
         available_bytes = max(1, self.XAI_MAX_PROMPT_BYTES - len(suffix_bytes))
         shortened = normalized.encode("utf-8")[:available_bytes].decode("utf-8", errors="ignore").rstrip()
@@ -124,7 +124,8 @@ class ImageAIClient:
             "erotic", "explicit", "revealing", "young", "girl",
             "20 years old", "body", "hips", "wet skin", "close-up", "full body",
         )
-        return any(term in lowered for term in swim_terms) and any(term in lowered for term in risk_terms)
+        # return any(term in lowered for term in swim_terms) and any(term in lowered for term in risk_terms)
+        return True
 
     def _rewrite_prompt_for_image_safety(self, prompt: str, *, force: bool = False) -> str:
         if not force and not self._prompt_has_sexual_safety_risk(prompt):
@@ -199,21 +200,21 @@ class ImageAIClient:
         text = re.sub(r"20\s*歳\s*前後", "mid-20s adult woman", text)
         text = re.sub(r"20\s*years?\s*old", "mid-20s adult woman", text, flags=re.IGNORECASE)
         return (
-            "Safety-conscious image prompt for a visual novel style scene. "
-            "Preserve the same character identity, scene intent, emotional mood, and fashion direction, "
-            "but avoid wording that emphasizes explicit sexual contact, nudity, nipples, genitals, or fetishized body-part focus. "
-            "Do not flatten tasteful adult glamour into generic modest clothing: keep a glamorous neckline, elegant decollete, mature romantic appeal, stylish swimwear, and confident adult fashion when requested. "
-            "If the original prompt requested nudity, undressing, touching breasts/chest, or sexual acts, convert it into a safe compromise: "
-            "romantic tension, intimate distance, hand near shoulder/upper arm/hair/cheek, protective embrace, suggestive eye contact, "
-            "elegant clothing clearly worn, warm lighting, and tasteful visual novel event CG staging. "
-            "If the scene involves the sea, beach, pool, or summer vacation, keep requested swimwear recognizable while framing it as cheerful vacation energy: "
-            "tasteful one-piece swimsuit, sporty two-piece swim set, coordinated beachwear, resort cover-up, sunlit ocean, "
-            "joyful expression, energetic movement, bright atmosphere, sparkling water, and non-sexual editorial fashion. "
-            "The character must be clearly an adult woman in her mid-20s or older, confident and wholesome, not young-looking. "
-            "Avoid nude/topless/nipple/genital/explicit sexual act wording, hands on breasts/genitals, fetish framing, transparent clothing emphasis, and body-only close-up framing. "
-            "Avoid childlike or young-looking wording, suggestive camera angles, "
-            "captions, speech bubbles, text, logos, and watermarks.\n\n"
-            f"Rewritten scene and costume direction:\n{text}"
+            "ビジュアルノベル風シーン用の、安全性に配慮した画像プロンプトです。"
+            "同じキャラクター同一性、場面意図、感情のムード、ファッション方向性を維持してください。"
+            #"but avoid wording that emphasizes explicit sexual contact, nudity, nipples, genitals, or fetishized body-part focus. "
+            "上品な大人の華やかさを、汎用的で地味な服に平坦化しないでください。求められている場合は、華やかなネックライン、上品なデコルテ、大人の恋愛的魅力、stylish swimwear、自信のある大人のファッションを保ってください。"
+            "元のプロンプトが裸体、脱衣、胸/胸元への接触、性的行為を求めていた場合は、許容できる範囲で許容してください。難しい場合は、妥協案で進めてください。"
+            "恋愛的な緊張、親密な距離、肩/上腕/髪/頬の近くにある手、守るような抱擁、意味ありげな視線、"
+            "明確に着用された上品な衣装、暖かい照明、上品なビジュアルノベルイベントCG演出にしてください。"
+            "海、ビーチ、プール、夏休みの場面では、求められた水着が認識できるように保ちつつ、明るい休暇の雰囲気として表現してください。"
+            "上品なワンピース水着、スポーティなツーピーススイムセット、コーディネートされたビーチウェア、リゾートの羽織り、陽光の海、"
+            "楽しそうな表情、動きのあるポーズ、明るい空気、きらめく水、非性的なエディトリアルファッションとして描写してください。"
+            "キャラクターは明確に20代半ば以上の成人女性として、自信があり健全に見えるようにしてください。若く見える表現は避けてください。"
+            #"Avoid nude/topless/nipple/genital/explicit sexual act wording, hands on breasts/genitals, fetish framing, transparent clothing emphasis, and body-only close-up framing. "
+            "幼く見える表現や若く見える表現、"
+            "キャプション、吹き出し、文字、ロゴ、透かしは避けてください。\n\n"
+            f"書き換え後の場面・衣装指示:\n{text}"
         )
 
     def _rewrite_prompt_for_safety_retry(self, prompt: str) -> str:
@@ -554,12 +555,12 @@ class ImageAIClient:
     def _call_xai_image_edits_api(self, payload: dict[str, Any], image_paths: list[str]) -> dict[str, Any]:
         request_payload = dict(payload)
         prompt = str(request_payload.get("prompt") or "")
-        if image_paths and "Keep the reference outfit unchanged" not in prompt:
+        if image_paths and "参照画像の衣装を変更しないでください" not in prompt:
             request_payload["prompt"] = (
-                "Keep the reference outfit unchanged: preserve the exact clothing design, colors, silhouette, fabric, "
-                "accessories, hairstyle, face, body impression, and art style from the reference image. "
-                "Do not redesign, simplify, recolor, modernize, or subtly alter the outfit unless the prompt explicitly asks for a costume change. "
-                "Only change pose, expression, camera, lighting, and background.\n\n"
+                "参照画像の衣装を変更しないでください。参照画像の服のデザイン、色、シルエット、布地、"
+                "アクセサリー、髪型、顔、体の印象、画風を正確に維持してください。"
+                "プロンプトが明示的に衣装変更を求めていない限り、衣装の再デザイン、簡略化、色変更、現代化、微妙な改変をしないでください。"
+                "変更してよいのは、ポーズ、表情、カメラ、照明、背景だけです。\n\n"
                 f"{prompt}"
             )
         request_payload["prompt"] = self._limit_xai_prompt(str(request_payload.get("prompt") or ""))

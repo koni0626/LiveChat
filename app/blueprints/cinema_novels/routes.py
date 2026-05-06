@@ -400,6 +400,76 @@ def update_cinema_novel_status(novel_id: int):
     return json_response(cinema_novel_service.serialize_novel(updated, include_chapters=True, user_id=user.id))
 
 
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/comic-scenes", methods=["PUT"])
+def update_cinema_novel_comic_scene(novel_id: int):
+    novel, _project, _user = _require_novel(novel_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = cinema_novel_service.update_comic_scene(novel.id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result)
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/comic-scenes/regenerate", methods=["POST"])
+def regenerate_cinema_novel_comic_scene(novel_id: int):
+    novel, _project, _user = _require_novel(novel_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        if any(key in payload for key in ("caption", "text", "page_title", "image_prompt", "visual_focus")):
+            cinema_novel_service.update_comic_scene(novel.id, payload)
+        result = cinema_novel_service.generate_short_comic_panel_images(
+            novel.id,
+            {**payload, "overwrite": True, "parallel": False},
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/comic-scenes/mutate", methods=["POST"])
+def mutate_cinema_novel_comic_scene(novel_id: int):
+    novel, _project, _user = _require_novel(novel_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = cinema_novel_service.mutate_comic_scene(novel.id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/comic-special-image", methods=["PUT"])
+def update_cinema_novel_comic_special_image(novel_id: int):
+    novel, _project, _user = _require_novel(novel_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = cinema_novel_service.update_comic_special_image(novel.id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result)
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/comic-special-image/regenerate", methods=["POST"])
+def regenerate_cinema_novel_comic_special_image(novel_id: int):
+    novel, _project, _user = _require_novel(novel_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = cinema_novel_service.regenerate_comic_special_image(novel.id, payload)
+    except (RuntimeError, ValueError) as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result, status=201)
+
+
 @cinema_novels_bp.route("/cinema-novels/<int:novel_id>/image-edit", methods=["POST"])
 def edit_cinema_novel_display_image(novel_id: int):
     novel, _project, user = _require_novel(novel_id)
@@ -441,6 +511,28 @@ def delete_cinema_novel_display_image(novel_id: int):
     payload = request.get_json(silent=True) or {}
     try:
         result = cinema_novel_service.delete_scene_display_image(novel.id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not result:
+        raise NotFoundError()
+    return json_response(result)
+
+
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/image-history", methods=["PUT"])
+def select_cinema_novel_image_history(novel_id: int):
+    novel, _project, user = _require_novel(novel_id)
+    if int(user.id) != int(novel.created_by_user_id):
+        raise ForbiddenError()
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = cinema_novel_service.update_comic_scene(
+            novel.id,
+            {
+                "chapter_id": payload.get("chapter_id"),
+                "scene_index": payload.get("scene_index"),
+                "selected_asset_id": payload.get("selected_asset_id"),
+            },
+        )
     except ValueError as exc:
         raise ValidationError(str(exc))
     if not result:

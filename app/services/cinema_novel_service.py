@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import copy
 import hashlib
 import mimetypes
 import os
@@ -1064,7 +1065,7 @@ figcaption {
 
         if payload.get("generate_images", True):
             self.generate_short_comic_thumbnail(novel.id, payload)
-            panel_result = self.generate_short_comic_panel_images(novel.id, {"parallel": True, "overwrite": False})
+            panel_result = self.generate_short_comic_panel_images(novel.id, {"parallel": True, "max_workers": 5, "overwrite": False})
             created_count = len((panel_result or {}).get("assets") or [])
             failed_count = len((panel_result or {}).get("failed_assets") or [])
             production = self._load_json(novel.production_json, default={})
@@ -1094,7 +1095,7 @@ figcaption {
         first_panel = panels[0] if panels and isinstance(panels[0], dict) else {}
         title = str(storyboard.get("title") or novel.title or "").strip()
         logline = str(storyboard.get("logline") or novel.subtitle or novel.description or "").strip()
-        headline = self._normalize_short_comic_caption(title or logline or "ショート漫画")
+        headline = self._normalize_short_comic_caption(payload.get("caption") or title or logline or "ショート漫画")
         source_input = production.get("source_input") if isinstance(production.get("source_input"), dict) else payload
         main_character = self._main_character_name_from_payload(novel.project_id, source_input)
         searchable = "\n".join(
@@ -1117,6 +1118,13 @@ figcaption {
         options["model"] = options.get("model") or options.get("image_ai_model") or "gpt-image-2"
         art_style = self._short_comic_art_style(source_input)
         prompt = self._short_comic_thumbnail_prompt(novel, headline, first_panel, main_character=main_character, logline=logline, art_style=art_style)
+        revision_prompt = "\n".join(
+            str(payload.get(key) or "").strip()
+            for key in ("image_prompt", "revision_prompt")
+            if str(payload.get(key) or "").strip()
+        )
+        if revision_prompt:
+            prompt = f"{prompt}\n\nUser revision request:\n{revision_prompt}"
         asset = self._generate_cinema_asset(
             project_id=novel.project_id,
             asset_type="cinema_novel_comic_thumbnail",
@@ -1131,8 +1139,10 @@ figcaption {
             },
             reference_paths=reference_paths,
         )
+        self._push_asset_history(production, "cover_asset_history_ids", novel.poster_asset_id or novel.cover_asset_id)
         novel.cover_asset_id = asset.id
         novel.poster_asset_id = asset.id
+        novel.production_json = json_util.dumps(production)
         db.session.add(novel)
         db.session.commit()
         return {
@@ -1171,6 +1181,13 @@ figcaption {
         options["model"] = options.get("model") or options.get("image_ai_model") or "gpt-image-2"
         art_style = self._short_comic_art_style(source_input)
         prompt = self._short_comic_end_card_prompt(novel, last_panel, main_character=main_character, art_style=art_style)
+        revision_prompt = "\n".join(
+            str(payload.get(key) or "").strip()
+            for key in ("caption", "image_prompt", "revision_prompt")
+            if str(payload.get(key) or "").strip()
+        )
+        if revision_prompt:
+            prompt = f"{prompt}\n\nUser revision request:\n{revision_prompt}"
         asset = self._generate_cinema_asset(
             project_id=novel.project_id,
             asset_type="cinema_novel_comic_end_card",
@@ -1184,6 +1201,7 @@ figcaption {
             },
             reference_paths=reference_paths,
         )
+        self._push_asset_history(production, "end_card_asset_history_ids", production.get("end_card_asset_id"))
         production["end_card_asset_id"] = asset.id
         novel.production_json = json_util.dumps(production)
         db.session.add(novel)
@@ -1210,7 +1228,7 @@ figcaption {
             "衣装違い、笑顔、少し照れた表情など、同じ構図の繰り返しを避けた多彩なシーンにする。"
             "caption は『おはよう』『歌声が光る』『踊る夜』のように短く、サムネ文字として映える言葉にする。"
             "image_prompt は人物写真集・MVスチル・アイドル/モデル撮影のような構図、ポーズ、光、背景を具体的に書く。"
-            "ただし露骨な性的表現や過度な露出にはしない。"
+            #"ただし露骨な性的表現や過度な露出にはしない。"
         ) if is_photo_book else (
             "ジャンルに合わせて、短い物語として続きが気になる展開、変化、オチ、余韻を作ってください。"
         )
@@ -1431,14 +1449,24 @@ figcaption {
         production = self._load_json(novel.production_json, default={})
         source_input = production.get("source_input") if isinstance(production.get("source_input"), dict) else {}
         art_style = self._short_comic_art_style(source_input)
+        target_scene_index = payload.get("scene_index")
+        if target_scene_index is not None:
+            try:
+                target_scene_index = int(target_scene_index)
+            except (TypeError, ValueError):
+                raise ValueError("scene_index is invalid")
+            if target_scene_index < 0 or target_scene_index >= len(scenes):
+                raise ValueError("scene was not found")
         image_jobs = []
         for scene_index, scene in enumerate(scenes):
+            if target_scene_index is not None and scene_index != target_scene_index:
+                continue
             if not isinstance(scene, dict):
                 continue
             if scene.get("still_asset_id") and not overwrite:
                 continue
             caption = self._normalize_short_comic_caption(scene.get("caption") or scene.get("text") or "")
-            if not caption:
+            if not caption and not str(scene.get("image_prompt") or scene.get("visual_focus") or "").strip():
                 continue
             searchable = "\n".join(
                 [
@@ -1480,7 +1508,11 @@ figcaption {
 
         created_assets = []
         failed_assets = []
-        for job, result, error in self._generate_cinema_asset_jobs(image_jobs, parallel=bool(payload.get("parallel", True))):
+        for job, result, error in self._generate_cinema_asset_jobs(
+            image_jobs,
+            parallel=bool(payload.get("parallel", True)),
+            max_workers=payload.get("max_workers"),
+        ):
             if error or not result:
                 failed_assets.append({"scene_index": job.get("scene_index"), "error": error or "image generation failed"})
                 continue
@@ -1492,17 +1524,257 @@ figcaption {
                 metadata=job["metadata"],
                 result=result,
             )
-            scenes[job["scene_index"]]["still_asset_id"] = asset.id
+            scene = scenes[job["scene_index"]]
+            if not isinstance(scene, dict):
+                scene = {}
+                scenes[job["scene_index"]] = scene
+            self._push_scene_still_history(scene, scene.get("still_asset_id"))
+            scene["still_asset_id"] = asset.id
             created_assets.append(self._serialize_asset(asset.id))
-        chapter.scene_json = json_util.dumps(scenes)
-        db.session.add(chapter)
-        db.session.commit()
+            chapter.scene_json = json_util.dumps(scenes)
+            db.session.add(chapter)
+            db.session.commit()
         return {
             "novel": self.serialize_novel(novel, include_chapters=True),
             "chapter": self.serialize_chapter(chapter),
             "assets": created_assets,
             "failed_assets": failed_assets,
         }
+
+    def update_comic_scene(self, novel_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        chapter_id = payload.get("chapter_id")
+        try:
+            chapter_id = int(chapter_id)
+            scene_index = int(payload.get("scene_index"))
+        except (TypeError, ValueError):
+            raise ValueError("chapter_id and scene_index are required")
+        chapter = self.get_chapter(chapter_id)
+        if not chapter or int(chapter.novel_id) != int(novel.id):
+            raise ValueError("chapter was not found")
+        scenes = self._load_json(chapter.scene_json, default=[])
+        if not isinstance(scenes, list) or scene_index < 0 or scene_index >= len(scenes):
+            raise ValueError("scene was not found")
+        scene = scenes[scene_index]
+        if not isinstance(scene, dict):
+            scene = {}
+            scenes[scene_index] = scene
+
+        if "caption" in payload or "text" in payload:
+            raw_text = payload.get("caption") if "caption" in payload else payload.get("text")
+            text = str(raw_text or "").strip()
+            scene["caption"] = text
+            scene["text"] = text
+        for key in ("page_title", "image_prompt", "visual_focus"):
+            if key in payload:
+                value = str(payload.get(key) or "").strip()
+                if value:
+                    scene[key] = value
+                else:
+                    scene.pop(key, None)
+
+        if "selected_asset_id" in payload:
+            try:
+                selected_asset_id = int(payload.get("selected_asset_id") or 0)
+            except (TypeError, ValueError):
+                raise ValueError("selected_asset_id is invalid")
+            asset = Asset.query.get(selected_asset_id)
+            if not asset or getattr(asset, "deleted_at", None) or int(asset.project_id) != int(novel.project_id):
+                raise ValueError("selected image was not found")
+            current_asset_id = scene.get("still_asset_id")
+            if int(current_asset_id or 0) != selected_asset_id:
+                self._push_scene_still_history(scene, current_asset_id)
+                scene["still_asset_id"] = selected_asset_id
+            scene["still_asset_history_ids"] = [
+                asset_id for asset_id in self._scene_still_history_ids(scene)
+                if int(asset_id) != selected_asset_id
+            ]
+
+        chapter.scene_json = json_util.dumps(scenes)
+        db.session.add(chapter)
+        db.session.commit()
+        return {
+            "novel": self.serialize_novel(novel, include_chapters=True),
+            "chapter": self.serialize_chapter(chapter),
+            "scene_index": scene_index,
+        }
+
+    def mutate_comic_scene(self, novel_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        chapter_id = payload.get("chapter_id")
+        try:
+            chapter_id = int(chapter_id)
+            scene_index = int(payload.get("scene_index") or 0)
+        except (TypeError, ValueError):
+            raise ValueError("chapter_id and scene_index are required")
+        chapter = self.get_chapter(chapter_id)
+        if not chapter or int(chapter.novel_id) != int(novel.id):
+            raise ValueError("chapter was not found")
+        scenes = self._load_json(chapter.scene_json, default=[])
+        if not isinstance(scenes, list):
+            scenes = []
+        operation = str(payload.get("operation") or "").strip()
+        if operation not in {"add_after", "copy_after", "delete"}:
+            raise ValueError("operation is required")
+        if operation in {"copy_after", "delete"} and (scene_index < 0 or scene_index >= len(scenes)):
+            raise ValueError("scene was not found")
+
+        production = self._load_json(novel.production_json, default={})
+        comic_layout = production.get("comic_layout") if isinstance(production, dict) else None
+        current_scene = scenes[scene_index] if 0 <= scene_index < len(scenes) and isinstance(scenes[scene_index], dict) else {}
+        new_scene_index = max(0, min(scene_index + 1, len(scenes)))
+
+        if operation == "delete":
+            scenes.pop(scene_index)
+            new_scene_index = min(scene_index, max(0, len(scenes) - 1))
+        elif operation == "copy_after":
+            scene = copy.deepcopy(current_scene)
+            scene["id"] = f"manual-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+            scene.pop("still_asset_history_ids", None)
+            scenes.insert(new_scene_index, scene)
+        else:
+            caption = str(payload.get("caption") or "新しいコマ").strip() or "新しいコマ"
+            image_prompt = str(payload.get("image_prompt") or current_scene.get("image_prompt") or current_scene.get("visual_focus") or "").strip()
+            characters = current_scene.get("characters") if isinstance(current_scene.get("characters"), list) else []
+            scene = {
+                "id": f"manual-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}",
+                "type": "narration",
+                "speaker": "",
+                "text": caption,
+                "caption": caption,
+                "page_title": caption,
+                "visual_focus": image_prompt or caption,
+                "image_prompt": image_prompt or caption,
+                "tone": str(current_scene.get("tone") or "").strip(),
+                "emotion": str(current_scene.get("emotion") or "").strip(),
+                "shot": str(current_scene.get("shot") or "thumbnail composition").strip(),
+                "characters": characters,
+                "comic_page": bool(current_scene.get("comic_page")) or comic_layout == "page",
+                "page_panels": copy.deepcopy(current_scene.get("page_panels") or []),
+                "dialogue": copy.deepcopy(current_scene.get("dialogue") or []),
+                "background_asset_id": None,
+                "still_asset_id": None,
+                "choice_list": [],
+            }
+            scenes.insert(new_scene_index, scene)
+
+        chapter.scene_json = json_util.dumps(scenes)
+        db.session.add(chapter)
+        db.session.commit()
+        return {
+            "novel": self.serialize_novel(novel, include_chapters=True),
+            "chapter": self.serialize_chapter(chapter),
+            "scene_index": new_scene_index,
+            "operation": operation,
+        }
+
+    def update_comic_special_image(self, novel_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        kind = str(payload.get("kind") or "").strip()
+        if kind not in {"cover", "end_card"}:
+            raise ValueError("kind is required")
+        try:
+            selected_asset_id = int(payload.get("selected_asset_id") or 0)
+        except (TypeError, ValueError):
+            raise ValueError("selected_asset_id is invalid")
+        asset = Asset.query.get(selected_asset_id)
+        if not asset or getattr(asset, "deleted_at", None) or int(asset.project_id) != int(novel.project_id):
+            raise ValueError("selected image was not found")
+
+        production = self._load_json(novel.production_json, default={})
+        if kind == "cover":
+            current_asset_id = novel.poster_asset_id or novel.cover_asset_id
+            if int(current_asset_id or 0) != selected_asset_id:
+                self._push_asset_history(production, "cover_asset_history_ids", current_asset_id)
+                novel.cover_asset_id = selected_asset_id
+                novel.poster_asset_id = selected_asset_id
+            production["cover_asset_history_ids"] = [
+                asset_id for asset_id in self._asset_history_ids(production, "cover_asset_history_ids")
+                if int(asset_id) != selected_asset_id
+            ]
+        else:
+            current_asset_id = production.get("end_card_asset_id")
+            if int(current_asset_id or 0) != selected_asset_id:
+                self._push_asset_history(production, "end_card_asset_history_ids", current_asset_id)
+                production["end_card_asset_id"] = selected_asset_id
+            production["end_card_asset_history_ids"] = [
+                asset_id for asset_id in self._asset_history_ids(production, "end_card_asset_history_ids")
+                if int(asset_id) != selected_asset_id
+            ]
+        novel.production_json = json_util.dumps(production)
+        db.session.add(novel)
+        db.session.commit()
+        return {"novel": self.serialize_novel(novel, include_chapters=True), "kind": kind}
+
+    def regenerate_comic_special_image(self, novel_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        kind = str(payload.get("kind") or "").strip()
+        if kind == "cover":
+            return self.generate_short_comic_thumbnail(novel_id, payload)
+        if kind == "end_card":
+            return self.generate_short_comic_end_card(novel_id, payload)
+        raise ValueError("kind is required")
+
+    def _scene_still_history_ids(self, scene: dict) -> list[int]:
+        raw_history = scene.get("still_asset_history_ids") if isinstance(scene, dict) else []
+        if not isinstance(raw_history, list):
+            raw_history = []
+        history = []
+        for asset_id in raw_history:
+            try:
+                asset_id = int(asset_id)
+            except (TypeError, ValueError):
+                continue
+            if asset_id and asset_id not in history:
+                history.append(asset_id)
+        return history[:12]
+
+    def _push_scene_still_history(self, scene: dict, asset_id):
+        if not isinstance(scene, dict):
+            return
+        try:
+            asset_id = int(asset_id or 0)
+        except (TypeError, ValueError):
+            asset_id = 0
+        if not asset_id:
+            return
+        history = [item for item in self._scene_still_history_ids(scene) if int(item) != asset_id]
+        scene["still_asset_history_ids"] = [asset_id, *history][:12]
+
+    def _asset_history_ids(self, source: dict, key: str) -> list[int]:
+        raw_history = source.get(key) if isinstance(source, dict) else []
+        if not isinstance(raw_history, list):
+            raw_history = []
+        history = []
+        for asset_id in raw_history:
+            try:
+                asset_id = int(asset_id)
+            except (TypeError, ValueError):
+                continue
+            if asset_id and asset_id not in history:
+                history.append(asset_id)
+        return history[:12]
+
+    def _push_asset_history(self, source: dict, key: str, asset_id):
+        if not isinstance(source, dict):
+            return
+        try:
+            asset_id = int(asset_id or 0)
+        except (TypeError, ValueError):
+            asset_id = 0
+        if not asset_id:
+            return
+        history = [item for item in self._asset_history_ids(source, key) if int(item) != asset_id]
+        source[key] = [asset_id, *history][:12]
 
     def _asset_file_path(self, asset_id: int | None):
         if not asset_id:
@@ -1828,6 +2100,20 @@ figcaption {
             composition_instruction = "Use a dramatic social-video still composition while preserving the reference image rendering style. Do not convert the character into anime, manga, cel shading, comic line art, chibi, or a different illustration style."
             headline_instruction = "The headline should be bold, clean Japanese lettering with strong contrast, but the character/background art must remain in the reference-image style."
         style_instruction = self._short_comic_art_style_instruction(art_style)
+        text_lines = (
+            [
+                "Text rendering requirement:",
+                f"Add this exact Japanese headline text inside the image, large and readable: 「{caption}」",
+                headline_instruction,
+                "Do not add any other text, gibberish, watermark, logo, speech bubble text, UI text, or extra captions.",
+                "Keep enough contrast behind the headline using a simple dark translucent band or outlined letters if needed.",
+            ]
+            if caption
+            else [
+                "Text rendering requirement:",
+                "Do not add headline text, captions, subtitles, UI text, gibberish, watermark, logo, or speech bubble text.",
+            ]
+        )
         return "\n".join(
             [
                 f"Create one finished {aspect_instruction}",
@@ -1840,11 +2126,7 @@ figcaption {
                 f"Shot/composition: {shot}",
                 f"Visual focus: {visual_focus}",
                 "",
-                "Text rendering requirement:",
-                f"Add this exact Japanese headline text inside the image, large and readable: 「{caption}」",
-                headline_instruction,
-                "Do not add any other text, gibberish, watermark, logo, speech bubble text, UI text, or extra captions.",
-                "Keep enough contrast behind the headline using a simple dark translucent band or outlined letters if needed.",
+                *text_lines,
                 "",
                 "Scene prompt:",
                 base_prompt or visual_focus or caption,
@@ -2161,6 +2443,18 @@ figcaption {
     def serialize_novel(self, novel, *, include_chapters: bool = False, user_id: int | None = None):
         if not novel:
             return None
+        production = self._load_json(novel.production_json)
+        if not isinstance(production, dict):
+            production = {}
+        end_card_asset_id = production.get("end_card_asset_id")
+        cover_history_ids = [
+            asset_id for asset_id in self._asset_history_ids(production, "cover_asset_history_ids")
+            if int(asset_id) != int((novel.poster_asset_id or novel.cover_asset_id) or 0)
+        ]
+        end_card_history_ids = [
+            asset_id for asset_id in self._asset_history_ids(production, "end_card_asset_history_ids")
+            if int(asset_id) != int(end_card_asset_id or 0)
+        ]
         payload = {
             "id": novel.id,
             "project_id": novel.project_id,
@@ -2176,7 +2470,17 @@ figcaption {
             "cover_asset": self._serialize_asset(novel.cover_asset_id),
             "poster_asset": self._serialize_asset(novel.poster_asset_id),
             "source_path": novel.source_path,
-            "production_json": self._load_json(novel.production_json),
+            "production_json": production,
+            "comic_cover_asset_history": [
+                asset for asset in (self._serialize_asset(asset_id) for asset_id in cover_history_ids)
+                if asset
+            ],
+            "comic_end_card_asset_id": end_card_asset_id,
+            "comic_end_card_asset": self._serialize_asset(end_card_asset_id),
+            "comic_end_card_asset_history": [
+                asset for asset in (self._serialize_asset(asset_id) for asset_id in end_card_history_ids)
+                if asset
+            ],
             "sort_order": novel.sort_order,
             "created_at": novel.created_at.isoformat() if novel.created_at else None,
             "updated_at": novel.updated_at.isoformat() if novel.updated_at else None,
@@ -2467,6 +2771,15 @@ figcaption {
         payload = dict(scene)
         payload["background_asset"] = self._serialize_asset(payload.get("background_asset_id"))
         payload["still_asset"] = self._serialize_asset(payload.get("still_asset_id"))
+        history_ids = [
+            asset_id for asset_id in self._scene_still_history_ids(payload)
+            if int(asset_id) != int(payload.get("still_asset_id") or 0)
+        ]
+        payload["still_asset_history_ids"] = history_ids
+        payload["still_asset_history"] = [
+            asset for asset in (self._serialize_asset(asset_id) for asset_id in history_ids)
+            if asset
+        ]
         return payload
 
     def _chapter_generated_assets(self, chapter):
@@ -3842,7 +4155,12 @@ figcaption {
             if job["kind"] == "cover":
                 chapter.cover_asset_id = asset.id
             elif job["kind"] == "still":
-                scenes[job["scene_index"]]["still_asset_id"] = asset.id
+                scene = scenes[job["scene_index"]]
+                if not isinstance(scene, dict):
+                    scene = {}
+                    scenes[job["scene_index"]] = scene
+                self._push_scene_still_history(scene, scene.get("still_asset_id"))
+                scene["still_asset_id"] = asset.id
             created_assets.append(self._serialize_asset(asset.id))
             used_reference_asset_ids.extend(job.get("reference_asset_ids") or [])
 
@@ -3968,6 +4286,7 @@ figcaption {
             if not isinstance(scene, dict):
                 scene = {}
                 scenes[scene_index] = scene
+            self._push_scene_still_history(scene, scene.get("still_asset_id"))
             scene["still_asset_id"] = asset.id
             chapter.scene_json = json_util.dumps(scenes)
             db.session.add(chapter)
@@ -4020,6 +4339,7 @@ figcaption {
         if not isinstance(scene, dict):
             scene = {}
             scenes[scene_index] = scene
+        self._push_scene_still_history(scene, scene.get("still_asset_id"))
         scene["still_asset_id"] = asset.id
         chapter.scene_json = json_util.dumps(scenes)
         db.session.add(chapter)
@@ -4373,20 +4693,22 @@ figcaption {
             result=result,
         )
 
-    def _generate_cinema_asset_jobs(self, jobs: list[dict], *, parallel: bool = True):
+    def _generate_cinema_asset_jobs(self, jobs: list[dict], *, parallel: bool = True, max_workers: int | None = None):
         if not jobs:
-            return []
+            return
         if not parallel or len(jobs) == 1:
-            results = []
             for job in jobs:
                 try:
-                    results.append((job, self._generate_cinema_image_result(job["prompt"], job["image_options"], job["reference_paths"]), None))
+                    yield (job, self._generate_cinema_image_result(job["prompt"], job["image_options"], job["reference_paths"]), None)
                 except Exception as exc:
-                    results.append((job, None, self._friendly_image_error_message(exc)))
-            return results
-        results = []
-        max_workers = min(len(jobs), 2)
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    yield (job, None, self._friendly_image_error_message(exc))
+            return
+        try:
+            worker_count = int(max_workers or 2)
+        except (TypeError, ValueError):
+            worker_count = 2
+        worker_count = max(1, min(len(jobs), worker_count, 8))
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
             future_to_job = {
                 executor.submit(
                     self._generate_cinema_image_result,
@@ -4399,12 +4721,9 @@ figcaption {
             for future in as_completed(future_to_job):
                 job = future_to_job[future]
                 try:
-                    results.append((job, future.result(), None))
+                    yield (job, future.result(), None)
                 except Exception as exc:
-                    results.append((job, None, self._friendly_image_error_message(exc)))
-        job_order = {id(job): index for index, job in enumerate(jobs)}
-        results.sort(key=lambda item: job_order.get(id(item[0]), 0))
-        return results
+                    yield (job, None, self._friendly_image_error_message(exc))
 
     def _generate_cinema_image_result(self, prompt: str, image_options: dict, reference_paths: list[str]):
         final_prompt = prompt
@@ -4463,6 +4782,10 @@ figcaption {
             return "画像生成APIが一時的に失敗しました (502 Bad Gateway)。本文は反映済みです。少し待ってから画像生成だけ再実行してください。"
         if "timed out" in lowered or "timeout" in lowered:
             return "画像生成がタイムアウトしました。本文は反映済みです。少し待ってから画像生成だけ再実行してください。"
+        if any(token in lowered for token in ("sexual", "sexually", "fetish", "content policy", "safety", "moderation", "blocked", "policy violation")):
+            return (
+                "性的な表現です"
+            )
         return message[:500] or "画像生成に失敗しました。本文は反映済みです。画像生成だけ再実行してください。"
 
     def _create_cinema_asset_from_result(

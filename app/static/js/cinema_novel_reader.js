@@ -28,6 +28,7 @@
     imageEditForm: document.getElementById("cinemaReaderImageEditForm"),
     imageEditPrompt: document.getElementById("cinemaReaderImageEditPrompt"),
     imageEditSubmit: document.getElementById("cinemaReaderImageEditSubmit"),
+    imageHistory: document.getElementById("cinemaReaderImageHistory"),
     imageUploadDrop: document.getElementById("cinemaReaderImageUploadDrop"),
     imageUploadInput: document.getElementById("cinemaReaderImageUploadInput"),
     imageUploadLabel: document.getElementById("cinemaReaderImageUploadLabel"),
@@ -91,6 +92,11 @@
 
   function currentSceneImageAsset() {
     return sceneImageAsset(currentScene());
+  }
+
+  function currentSceneImageHistory() {
+    const history = currentScene()?.still_asset_history;
+    return Array.isArray(history) ? history : [];
   }
 
   function isShortComicNovel() {
@@ -176,6 +182,17 @@
     if (els.sceneDeleteButton) {
       els.sceneDeleteButton.disabled = state.isEditingImage || state.isUploadingImage || state.isDeletingImage || !canDeleteScene();
     }
+  }
+
+  function renderImageHistory() {
+    if (!els.imageHistory) return;
+    const history = currentSceneImageHistory();
+    els.imageHistory.innerHTML = history.length ? history.map((asset, index) => `
+      <button class="cinema-reader-image-history-item" type="button" data-reader-history-asset-id="${asset.id}">
+        <img src="${escape(asset.media_url || "")}" alt="">
+        <span>履歴 ${index + 1}</span>
+      </button>
+    `).join("") : `<div class="cinema-reader-image-history-empty">画像を再生成/アップロードすると前の画像がここに残ります。</div>`;
   }
 
   function render() {
@@ -297,6 +314,30 @@
     }
   }
 
+  async function selectHistoryImage(assetId) {
+    const chapter = currentChapter();
+    if (!assetId || !chapter || !currentScene()) return;
+    const previousChapterId = chapter.id;
+    const previousSceneIndex = state.sceneIndex;
+    try {
+      const result = await api(`/api/v1/cinema-novels/${novelId}/image-history`, {
+        method: "PUT",
+        body: JSON.stringify({
+          chapter_id: chapter.id,
+          scene_index: state.sceneIndex,
+          selected_asset_id: assetId,
+        }),
+      });
+      state.novel = result.novel;
+      restorePosition(previousChapterId, previousSceneIndex);
+      window.NovelUI?.toast?.("履歴画像を反映しました。");
+      render();
+      renderImageHistory();
+    } catch (error) {
+      window.NovelUI?.toast?.(error.message || "履歴画像の反映に失敗しました。", "danger");
+    }
+  }
+
   async function uploadSceneImage(file) {
     if (!file || state.isUploadingImage) return;
     if (!String(file.type || "").startsWith("image/")) {
@@ -392,6 +433,7 @@
   });
   els.imageEditButton?.addEventListener("click", () => {
     els.imageEditPrompt.value = "";
+    renderImageHistory();
     imageEditModal?.show();
     window.setTimeout(() => els.imageEditPrompt?.focus(), 160);
   });
@@ -402,6 +444,11 @@
     deleteSceneImage({ deleteScene: true }).catch(console.error);
   });
   els.imageEditForm?.addEventListener("submit", submitImageEdit);
+  els.imageHistory?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-reader-history-asset-id]");
+    if (!button) return;
+    selectHistoryImage(Number(button.dataset.readerHistoryAssetId || 0)).catch(console.error);
+  });
   els.imageUploadInput?.addEventListener("change", () => {
     uploadSceneImage(els.imageUploadInput.files?.[0]).catch(console.error);
   });

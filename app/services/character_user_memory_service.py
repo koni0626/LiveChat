@@ -148,15 +148,15 @@ class CharacterUserMemoryService:
             return ""
         data = self.serialize_memory(row)
         lines = [
-            "Character memory about this player:",
-            f"relationship_summary: {data['relationship_summary'] or '(none)'}",
-            f"shared_memories: {data['memory_notes'] or '(none)'}",
-            f"player_preferences: {data['preference_notes'] or '(none)'}",
-            f"open_threads: {data['unresolved_threads'] or '(none)'}",
-            f"important_events: {data['important_events'] or '(none)'}",
-            "Session affinity is managed separately per chat session. Use the current session affinity from context, not long-term memory, for warmth and physical closeness.",
-            "Respect the character profile, NG rules, and explicit refusal. Do not force contact or make it graphically sexual.",
-            "Use this memory subtly. Do not mention it unnaturally.",
+            "このプレイヤーに関するキャラクター記憶:",
+            f"関係性要約: {data['relationship_summary'] or '(なし)'}",
+            f"共有記憶: {data['memory_notes'] or '(なし)'}",
+            f"プレイヤーの好み: {data['preference_notes'] or '(なし)'}",
+            f"未解決の話題: {data['unresolved_threads'] or '(なし)'}",
+            f"重要イベント: {data['important_events'] or '(なし)'}",
+            "セッション好感度はチャットセッションごとに別管理です。温かさや身体的距離感は、長期記憶ではなく現在のセッション文脈にある好感度を使ってください。",
+            #"Respect the character profile, NG rules, and explicit refusal. Do not force contact or make it graphically sexual.",
+            "この記憶はさりげなく使ってください。不自然に言及しないでください。",
         ]
         return "\n".join(lines)
 

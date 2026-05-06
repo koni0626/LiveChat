@@ -458,12 +458,12 @@ class CharacterService:
         art_style = str(payload.get("art_style") or getattr(character, "art_style", None) or "").strip()
         world = self._world_service.get_world(character.project_id)
         parts = [
-            "Create a full-body character reference image for a visual novel / live chat character.",
-            "Show exactly one character, full body from head to shoes, clear face, clear outfit, centered composition.",
-            "Use a light natural standing pose, not a stiff straight reference-sheet stance: a gentle contrapposto, relaxed weight shift, one hand near the waist/hair/collar, or a small characterful gesture is ideal.",
-            "Keep the body readable for future costume references. Do not crop the feet. Do not use extreme action, sitting, lying, jumping, heavy foreshortening, or a pose that hides the outfit.",
-            "No text, no words, no letters, no subtitles, no captions, no speech bubbles, no UI overlay, no watermark, no logo.",
-            "Make it attractive and polished like a collectible full-body character key visual, while still usable as the character's base reference.",
+            "ビジュアルノベル/ライブチャット用キャラクターの全身基準画像を作成してください。",
+            "キャラクターは必ず1人だけ。頭から靴までの全身、明瞭な顔、明瞭な衣装、中央配置にしてください。",
+            "硬い直立の設定画ではなく、自然で軽い立ち姿にしてください。ゆるいコントラポスト、力の抜けた重心移動、腰/髪/襟元の近くに片手を添える、小さなキャラクターらしい仕草などが理想です。",
+            "今後の衣装参照に使えるよう、体の形と衣装を読み取りやすくしてください。足を切らないでください。激しいアクション、座り、寝姿、ジャンプ、強いパース、衣装が隠れるポーズは避けてください。",
+            "文字、単語、字幕、キャプション、吹き出し、UIオーバーレイ、透かし、ロゴは入れないでください。",
+            "キャラクター基準画像として使いやすく保ちながら、コレクション性のある全身キービジュアルのように魅力的で磨かれた見た目にしてください。",
             f"Name: {character.name}",
         ]
         if getattr(character, "nickname", None):
@@ -475,7 +475,7 @@ class CharacterService:
         if getattr(character, "first_person", None):
             parts.append(f"First person: {character.first_person}")
         if getattr(character, "second_person", None):
-            parts.append(f"How they call the player: {character.second_person}")
+            parts.append(f"プレイヤーの呼び方: {character.second_person}")
         if getattr(character, "character_summary", None):
             parts.append(f"Character overview and concept: {character.character_summary}")
         if getattr(character, "appearance_summary", None):
@@ -485,11 +485,11 @@ class CharacterService:
         if getattr(character, "speech_style", None):
             parts.append(f"Speech style: {character.speech_style}")
         if getattr(character, "ng_rules", None):
-            parts.append(f"Do not violate these character rules: {character.ng_rules}")
+            parts.append(f"このキャラクタールールに違反しないこと: {character.ng_rules}")
         if art_style:
             parts.append(f"Art style: {art_style}")
         else:
-            parts.append("Art style: high-quality Japanese anime visual novel character art, consistent linework and colors.")
+            parts.append("画風: 高品質な日本アニメ系ビジュアルノベルのキャラクターアート。一貫した線画と色使い。")
         if world:
             parts.extend(
                 [
@@ -501,9 +501,9 @@ class CharacterService:
                 ]
             )
         parts.append(
-            "Background: include a tasteful, non-distracting environment that reflects the character concept and world setting. "
-            "It should feel like where this character belongs, with atmospheric lighting and a few setting-specific motifs. "
-            "Keep enough separation around the silhouette so the character remains reusable as a reference; avoid plain gray studio backgrounds."
+            "背景: キャラクターコンセプトと世界観設定を反映した、上品で邪魔にならない環境を入れてください。"
+            "このキャラクターが自然に属している場所に見えるよう、雰囲気のある照明と設定固有のモチーフを少し加えてください。"
+            "基準画像として再利用しやすいよう、シルエット周辺に十分な分離を保ってください。無地の灰色スタジオ背景は避けてください。"
         )
         return "\n".join(parts)
 
@@ -575,31 +575,31 @@ class CharacterService:
     def _build_bromide_image_prompt(self, character, *, has_reference: bool, payload: dict) -> str:
         art_style = str(payload.get("art_style") or getattr(character, "art_style", None) or "").strip()
         parts = [
-            "Create a glamorous 3:4 character bromide portrait for a Japanese visual novel / live chat character.",
-            "This is a premium collectible profile image, not a plain ID icon. Make it visually striking, polished, and memorable.",
-            "Show exactly one character. Use a vertical composition with the face clearly readable and the upper body or full figure attractively staged.",
-            "Use cinematic lighting, a charming pose, expressive eyes, and a background motif that supports the character concept.",
-            "No text, no words, no letters, no subtitles, no captions, no speech bubbles, no UI overlay, no watermark, no logo.",
-            "Final image will be cropped to a 3:4 aspect ratio, so keep the character centered with safe margins around the head and body.",
+            "日本語ビジュアルノベル/ライブチャット用キャラクターの、華やかな3:4ブロマイドポートレートを作成してください。",
+            "これは単なるIDアイコンではなく、プレミアムなコレクション用プロフィール画像です。視覚的に強く、磨かれていて、記憶に残るものにしてください。",
+            "キャラクターは必ず1人だけ。縦構図で、顔が明瞭に読め、上半身または全身が魅力的に演出されているようにしてください。",
+            "映画的な照明、魅力的なポーズ、表情豊かな目、キャラクターコンセプトを支える背景モチーフを使ってください。",
+            "文字、単語、字幕、キャプション、吹き出し、UIオーバーレイ、透かし、ロゴは入れないでください。",
+            "最終画像は3:4比率へクロップされるため、頭と体の周囲に安全な余白を取り、キャラクターを中央に配置してください。",
             f"Name: {character.name}",
         ]
         if has_reference:
             parts.append(
-                "Use the provided reference image as the primary identity reference. Preserve the same character, face impression, hairstyle, body impression, outfit motifs, color palette, and art style."
+                "提供された参照画像を主要な同一性参照として使ってください。同じキャラクター、顔の印象、髪型、体の印象、衣装モチーフ、カラーパレット、画風を維持してください。"
             )
         field_map = [
             ("Nickname", getattr(character, "nickname", None)),
             ("Gender", getattr(character, "gender", None)),
             ("Age impression", getattr(character, "age_impression", None)),
             ("First person", getattr(character, "first_person", None)),
-            ("How they call the player", getattr(character, "second_person", None)),
+            ("プレイヤーの呼び方", getattr(character, "second_person", None)),
             ("Character overview and concept", getattr(character, "character_summary", None)),
             ("Appearance", getattr(character, "appearance_summary", None)),
             ("Personality", getattr(character, "personality", None)),
             ("Speech style", getattr(character, "speech_style", None)),
             ("Sample lines", getattr(character, "speech_sample", None)),
             ("Self introduction", getattr(character, "introduction_text", None)),
-            ("Do not violate these character rules", getattr(character, "ng_rules", None)),
+            ("このキャラクタールールに違反しないこと", getattr(character, "ng_rules", None)),
         ]
         for label, value in field_map:
             text = self._shorten_for_prompt(value, limit=800)
@@ -608,7 +608,7 @@ class CharacterService:
         if art_style:
             parts.append(f"Art style: {art_style}")
         else:
-            parts.append("Art style: high-quality Japanese anime visual novel key art, consistent linework and colors.")
+            parts.append("画風: 高品質な日本アニメ系ビジュアルノベルのキービジュアル。一貫した線画と色使い。")
         return "\n".join(parts)
 
     def _build_character_draft_prompt(self, world, payload: dict, existing_characters=None) -> str:
@@ -620,15 +620,15 @@ class CharacterService:
             if not current_name or str(character.name or "").strip() != current_name
         ]
         lines = [
-            "Return only JSON.",
-            "Create a draft character for a Japanese character live chat tool.",
-            "The character must fit the given world setting and be engaging in one-on-one conversation.",
-            "Do not create a generic guide. The character should have personal motives, preferences, voice, and boundaries.",
-            "Avoid overlap with existing characters in the same project.",
-            "Do not reuse existing character names, nicknames, visual motifs, personality archetypes, speech style, romantic preferences, or conversation role.",
-            "If the world already has several characters, create a new contrastive character who expands the cast dynamics.",
-            "Required JSON keys: name, nickname, gender, age_impression, first_person, second_person, character_summary, appearance_summary, art_style, personality, likes_text, dislikes_text, hobbies_text, taboos_text, romance_favorite_approach_text, romance_avoid_approach_text, romance_attraction_points_text, romance_boundaries_text, memorable_events_text, memory_notes, speech_style, speech_sample, ng_rules.",
-            "All values must be Japanese strings. Long fields should be Markdown-friendly with bullet lists where useful.",
+            "JSONのみを返してください。",
+            "日本語キャラクターのライブチャットツール向けに、キャラクタードラフトを作成してください。",
+            "キャラクターは与えられた世界観に合い、1対1の会話で魅力が出る必要があります。",
+            "汎用的な案内役にしないでください。個人的な動機、好み、声、境界線を持つキャラクターにしてください。",
+            "同じプロジェクト内の既存キャラクターと重複しないようにしてください。",
+            "既存キャラクターの名前、ニックネーム、視覚モチーフ、性格類型、話し方、恋愛傾向、会話上の役割を再利用しないでください。",
+            "すでに世界内に複数キャラクターがいる場合は、キャスト間の力学を広げる、対照的な新キャラクターを作ってください。",
+            "必須JSONキー: name, nickname, gender, age_impression, first_person, second_person, character_summary, appearance_summary, art_style, personality, likes_text, dislikes_text, hobbies_text, taboos_text, romance_favorite_approach_text, romance_avoid_approach_text, romance_attraction_points_text, romance_boundaries_text, memorable_events_text, memory_notes, speech_style, speech_sample, ng_rules。",
+            "すべての値は日本語文字列にしてください。長い項目は、必要に応じてMarkdownで扱いやすい箇条書きにしてください。",
             "",
             "World setting:",
             f"name: {world.name or ''}",
@@ -641,7 +641,7 @@ class CharacterService:
             f"forbidden_settings: {world.forbidden_json or ''}",
         ]
         if existing_characters:
-            lines.extend(["", "Existing characters to avoid duplicating:"])
+            lines.extend(["", "重複を避けるべき既存キャラクター:"])
             for character in existing_characters[:30]:
                 lines.extend(
                     [
@@ -660,7 +660,7 @@ class CharacterService:
                 )
         if current:
             lines.append("")
-            lines.append("Current form input. Respect filled values when they are useful, and complete empty fields:")
+            lines.append("現在のフォーム入力です。有用な入力済み値は尊重し、空欄を補完してください:")
             for key, value in current.items():
                 lines.append(f"{key}: {value or ''}")
         return "\n".join(lines)
