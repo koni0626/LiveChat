@@ -19,6 +19,8 @@
   const bgmSelect = document.getElementById("cinemaBgmSelect");
   const bgmVolumeSelect = document.getElementById("cinemaBgmVolumeSelect");
   const bgmUploadInput = document.getElementById("cinemaBgmUploadInput");
+  const suggestPremiseButtonDefaultHtml = suggestPremiseButton?.innerHTML || '<i class="bi bi-stars"></i> ノベルゲームを生成';
+  const createShortComicButtonDefaultHtml = createShortComicButton?.innerHTML || '<i class="bi bi-badge-cc"></i> ショート漫画を生成';
   const chapterPanel = document.getElementById("cinemaChapterProductionPanel");
   const chapterPanelTitle = document.getElementById("cinemaChapterProductionTitle");
   const chapterSelect = document.getElementById("cinemaProductionChapterSelect");
@@ -155,22 +157,38 @@
   }
 
   function setProductionMode(mode) {
-    productionMode = mode === "comic" ? "comic" : "novel";
+    productionMode = ["novel", "comic", "both"].includes(mode) ? mode : "novel";
     productionModeButtons.forEach((button) => {
       button.classList.toggle("is-active", button.dataset.productionMode === productionMode);
     });
     productionModeFields.forEach((field) => {
-      const visible = field.dataset.productionField === productionMode;
+      const visible = productionMode === "both"
+        ? ["novel", "comic"].includes(field.dataset.productionField)
+        : field.dataset.productionField === productionMode;
       field.hidden = !visible;
       if ("disabled" in field) field.disabled = !visible;
       field.querySelectorAll?.("input, select, textarea, button").forEach((control) => {
         control.disabled = !visible;
       });
     });
+    if (suggestPremiseButton) {
+      suggestPremiseButton.hidden = productionMode !== "novel";
+      suggestPremiseButton.disabled = productionMode !== "novel";
+      suggestPremiseButton.innerHTML = suggestPremiseButtonDefaultHtml;
+    }
+    if (createShortComicButton) {
+      createShortComicButton.hidden = productionMode === "novel";
+      createShortComicButton.disabled = productionMode === "novel";
+      createShortComicButton.innerHTML = productionMode === "both"
+        ? '<i class="bi bi-layers"></i> ノベルとショート漫画を生成'
+        : createShortComicButtonDefaultHtml;
+    }
     if (productionModeHelp) {
-      productionModeHelp.textContent = productionMode === "comic"
-        ? "ショート漫画または漫画ページを作成します。作成後に漫画動画やEPUBとして出力できます。"
-        : "ノベルゲームを作成します。作成後にPPT化や動画化ができます。";
+      productionModeHelp.textContent = productionMode === "both"
+        ? "まずノベルゲームを作成し、その本文を元にショート漫画または漫画ページを作成します。"
+        : productionMode === "comic"
+          ? "ショート漫画または漫画ページを作成します。作成後に漫画動画やEPUBとして出力できます。"
+          : "ノベルゲームを作成します。作成後にPPT化や動画化ができます。";
     }
   }
 
@@ -899,64 +917,70 @@
     }
   }
 
-  async function suggestProductionPremise() {
-    if (!outlineForm || !suggestPremiseButton) return;
+  async function createNovelFromProduction({ openEditor = true } = {}) {
+    if (!outlineForm) return null;
     const currentBody = productionFormBody();
-    suggestPremiseButton.disabled = true;
-    suggestPremiseButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 自動生成中`;
     if (outlineResult) {
       outlineResult.hidden = false;
       outlineResult.innerHTML = `<div class="cinema-production-result-meta">1/5 DBキャラクターと世界観から企画案を作っています。</div>`;
     }
+    const premise = await api(`/api/v1/projects/${projectId}/cinema-novels/production-premise`, {
+      method: "POST",
+      body: JSON.stringify({ current_input: currentBody }),
+    });
+    for (const [name, value] of Object.entries({
+      title: premise.title,
+      genre: premise.genre,
+      chapter_count: premise.chapter_count,
+      theme: premise.theme,
+    })) {
+      const field = outlineForm.querySelector(`[name="${name}"]`);
+      if (field && value !== undefined && value !== null) field.value = value;
+    }
+    setMainCharacterByName(premise.main_character);
+    const outlineInput = productionFormBody();
+    if (outlineResult) {
+      outlineResult.hidden = false;
+      outlineResult.innerHTML = `<div class="cinema-production-result-meta">2/5 企画を元に章立てを生成しています。</div>`;
+    }
+    const outlineJob = await api(`/api/v1/projects/${projectId}/cinema-novels/production-outline-jobs`, {
+      method: "POST",
+      body: JSON.stringify(outlineInput),
+    });
+    const outline = await waitProductionOutlineJob(outlineJob);
+    latestProductionOutline = outline;
+    latestProductionInput = outlineInput;
+    if (outlineResult) {
+      outlineResult.innerHTML = `<div class="cinema-production-result-meta">3/5 作品を保存して章データを作成しています。</div>`;
+    }
+    const saved = await saveProductionOutline(outlineInput, outline, premise);
+    const chaptersPromise = api(`/api/v1/cinema-novels/${saved.id}/chapters/from-production-outline`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    if (outlineResult) {
+      outlineResult.innerHTML = `<div class="cinema-production-result-meta">4/5 タイトル画像を生成しています。ロゴ入りのオープニング画像を作っています。</div>`;
+    }
+    const titleImagePromise = api(`/api/v1/cinema-novels/${saved.id}/title-image`, {
+      method: "POST",
+      body: JSON.stringify({ premise: premiseText(premise) }),
+    });
+    const [, titleImage] = await Promise.all([chaptersPromise, titleImagePromise]);
+    if (outlineResult) {
+      outlineResult.innerHTML = `<div class="cinema-production-result-meta">5/5 画面へ反映しています。</div>`;
+    }
+    await loadNovels();
+    if (openEditor) await openChapterProduction(saved.id);
+    renderAutoBuildResult({ premise, outline, titleImage });
+    return { saved, premise, outline, titleImage };
+  }
+
+  async function suggestProductionPremise() {
+    if (!outlineForm || !suggestPremiseButton) return;
+    suggestPremiseButton.disabled = true;
+    suggestPremiseButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 自動生成中`;
     try {
-      const premise = await api(`/api/v1/projects/${projectId}/cinema-novels/production-premise`, {
-        method: "POST",
-        body: JSON.stringify({ current_input: currentBody }),
-      });
-      for (const [name, value] of Object.entries({
-        title: premise.title,
-        genre: premise.genre,
-        chapter_count: premise.chapter_count,
-        theme: premise.theme,
-      })) {
-        const field = outlineForm.querySelector(`[name="${name}"]`);
-        if (field && value !== undefined && value !== null) field.value = value;
-      }
-      setMainCharacterByName(premise.main_character);
-      const outlineInput = productionFormBody();
-      if (outlineResult) {
-        outlineResult.hidden = false;
-        outlineResult.innerHTML = `<div class="cinema-production-result-meta">2/5 企画を元に章立てを生成しています。</div>`;
-      }
-      const outlineJob = await api(`/api/v1/projects/${projectId}/cinema-novels/production-outline-jobs`, {
-        method: "POST",
-        body: JSON.stringify(outlineInput),
-      });
-      const outline = await waitProductionOutlineJob(outlineJob);
-      latestProductionOutline = outline;
-      latestProductionInput = outlineInput;
-      if (outlineResult) {
-        outlineResult.innerHTML = `<div class="cinema-production-result-meta">3/5 作品を保存して章データを作成しています。</div>`;
-      }
-      const saved = await saveProductionOutline(outlineInput, outline, premise);
-      const chaptersPromise = api(`/api/v1/cinema-novels/${saved.id}/chapters/from-production-outline`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      if (outlineResult) {
-        outlineResult.innerHTML = `<div class="cinema-production-result-meta">4/5 タイトル画像を生成しています。ロゴ入りのオープニング画像を作っています。</div>`;
-      }
-      const titleImagePromise = api(`/api/v1/cinema-novels/${saved.id}/title-image`, {
-        method: "POST",
-        body: JSON.stringify({ premise: premiseText(premise) }),
-      });
-      const [, titleImage] = await Promise.all([chaptersPromise, titleImagePromise]);
-      if (outlineResult) {
-        outlineResult.innerHTML = `<div class="cinema-production-result-meta">5/5 画面へ反映しています。</div>`;
-      }
-      await loadNovels();
-      await openChapterProduction(saved.id);
-      renderAutoBuildResult({ premise, outline, titleImage });
+      await createNovelFromProduction({ openEditor: true });
     } catch (error) {
       if (outlineResult) {
         outlineResult.hidden = false;
@@ -964,21 +988,26 @@
       }
     } finally {
       suggestPremiseButton.disabled = false;
-      suggestPremiseButton.innerHTML = `<i class="bi bi-stars"></i> 企画を自動提案`;
+      suggestPremiseButton.innerHTML = suggestPremiseButtonDefaultHtml;
     }
   }
 
-  async function createShortComic() {
+  async function createShortComic(options = {}) {
     if (!outlineForm || !createShortComicButton) return;
     syncComicLayoutDefaults();
     const body = productionFormBody();
     body.target_panel_count = Number(body.target_panel_count || 20);
     if (body.comic_layout === "page") body.target_page_count = body.target_panel_count;
     body.generate_images = true;
+    if (options.sourceNovelId) body.source_novel_id = Number(options.sourceNovelId);
+    if (options.sourceNovelTitle && !body.title) body.title = options.sourceNovelTitle;
+    const manageButtons = options.manageButtons !== false;
     const originalHtml = createShortComicButton.innerHTML;
-    createShortComicButton.disabled = true;
-    if (suggestPremiseButton) suggestPremiseButton.disabled = true;
-    createShortComicButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 生成中`;
+    if (manageButtons) {
+      createShortComicButton.disabled = true;
+      if (suggestPremiseButton) suggestPremiseButton.disabled = true;
+      createShortComicButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 生成中`;
+    }
     try {
       const job = await api(`/api/v1/projects/${projectId}/cinema-novels/short-comic-jobs`, {
         method: "POST",
@@ -1008,6 +1037,55 @@
           <pre>${escape(novel.title || "")}\n${escape(novel.subtitle || "")}</pre>
         `;
       }
+      return novel;
+    } catch (error) {
+      if (outlineResult) {
+        outlineResult.hidden = false;
+        outlineResult.innerHTML = `<div class="alert alert-danger">${escape(cleanErrorMessage(error.message))}</div>`;
+      }
+      if (options.propagateError) throw error;
+    } finally {
+      if (manageButtons) {
+        createShortComicButton.disabled = false;
+        if (suggestPremiseButton) suggestPremiseButton.disabled = productionMode !== "novel";
+        createShortComicButton.innerHTML = originalHtml;
+      }
+    }
+  }
+
+  async function createNovelAndShortComic() {
+    if (!outlineForm || !createShortComicButton) return;
+    const originalHtml = createShortComicButton.innerHTML;
+    createShortComicButton.disabled = true;
+    if (suggestPremiseButton) suggestPremiseButton.disabled = true;
+    createShortComicButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> ノベル生成中`;
+    try {
+      const novelResult = await createNovelFromProduction({ openEditor: false });
+      if (!novelResult?.saved?.id) throw new Error("ノベルの作成結果を取得できませんでした。");
+      if (outlineResult) {
+        outlineResult.hidden = false;
+        outlineResult.innerHTML = `<div class="cinema-production-result-meta">ノベルが完成しました。本文を元にショート漫画を作成しています。</div>`;
+      }
+      createShortComicButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 漫画生成中`;
+      const comicNovel = await createShortComic({
+        sourceNovelId: novelResult.saved.id,
+        sourceNovelTitle: novelResult.saved.title,
+        manageButtons: false,
+        propagateError: true,
+      });
+      await loadNovels();
+      await openChapterProduction(novelResult.saved.id);
+      if (outlineResult) {
+        const scenes = comicNovel?.chapters?.[0]?.scene_json || [];
+        const comicPage = isComicPageNovel(comicNovel);
+        outlineResult.hidden = false;
+        outlineResult.innerHTML = `
+          <div class="cinema-production-result-meta">
+            ノベルと${comicPage ? "漫画ページ" : "ショート漫画"}を作成しました。漫画はノベル本文を元にしています。${scenes.length}${comicPage ? "ページ" : "コマ"}
+          </div>
+          <pre>ノベル: ${escape(novelResult.saved.title || "")}\n漫画: ${escape(comicNovel?.title || "")}</pre>
+        `;
+      }
     } catch (error) {
       if (outlineResult) {
         outlineResult.hidden = false;
@@ -1015,7 +1093,7 @@
       }
     } finally {
       createShortComicButton.disabled = false;
-      if (suggestPremiseButton) suggestPremiseButton.disabled = false;
+      if (suggestPremiseButton) suggestPremiseButton.disabled = productionMode !== "novel";
       createShortComicButton.innerHTML = originalHtml;
     }
   }
@@ -1315,7 +1393,13 @@
 
   importButton?.addEventListener("click", importAkagane);
   suggestPremiseButton?.addEventListener("click", suggestProductionPremise);
-  createShortComicButton?.addEventListener("click", createShortComic);
+  createShortComicButton?.addEventListener("click", () => {
+    if (productionMode === "both") {
+      createNovelAndShortComic();
+    } else {
+      createShortComic();
+    }
+  });
   comicLayoutSelect?.addEventListener("change", syncComicLayoutDefaults);
   bgmUploadInput?.addEventListener("change", () => {
     uploadBgmAsset(bgmUploadInput.files?.[0]);
@@ -1434,7 +1518,9 @@
   createReviewButton?.addEventListener("click", createReview);
   outlineForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (productionMode === "comic") {
+    if (productionMode === "both") {
+      createNovelAndShortComic();
+    } else if (productionMode === "comic") {
       createShortComic();
     } else {
       suggestProductionPremise();

@@ -1251,11 +1251,17 @@ figcaption {
             world=world,
             include_characters=False,
         )
+        source_novel_context = self._source_novel_context_for_prompt(project_id, payload)
         prompt = "\n".join(
             [
                 "Return only JSON.",
                 "縦ショート漫画動画用の絵コンテを日本語で作ってください。",
                 "これは小説ではなく、1コマ1画像で流すショート動画です。",
+                (
+                    "原作ノベルが提供されています。その章順、主要場面、感情の流れ、結末を圧縮してショート漫画化してください。別の新作にしないこと。"
+                    if source_novel_context
+                    else ""
+                ),
                 f"Hard constraint: 指定主人公は「{main_character or '未指定'}」です。未指定でない場合、title/logline/panels は必ずこの主人公を中心に作ること。",
                 f"Hard constraint: main_character が「{main_character or ''}」なら、caption または image_prompt または characters に「{main_character or ''}」を頻繁に入れること。",
                 "Hard constraint: 登録キャラクター文脈に別キャラがいても、指定主人公を別キャラへ置き換えないこと。",
@@ -1290,6 +1296,9 @@ figcaption {
                 "",
                 "Reference material:",
                 reference_context or "追加参照なし",
+                "",
+                "Source novel to adapt:",
+                source_novel_context or "none",
                 "",
                 "Registered characters:",
                 character_context or "なし",
@@ -1357,11 +1366,17 @@ figcaption {
             world=world,
             include_characters=False,
         )
+        source_novel_context = self._source_novel_context_for_prompt(project_id, payload)
         prompt = "\n".join(
             [
                 "Return only JSON.",
                 "Create a Japanese manga-page storyboard, not a prose novel and not single-panel social video frames.",
                 "The output will be used by gpt-image-2 to draw one complete manga page per page item.",
+                (
+                    "Source novel is provided. Adapt that novel's plot, chapter order, important scenes, character emotions, and ending into manga pages. Do not make a different story."
+                    if source_novel_context
+                    else ""
+                ),
                 "Each manga page should contain 2 to 6 panels, clear gutters, speech balloons, short readable dialogue, and optional small narration boxes.",
                 "Keep each speech balloon short. Use Japanese dialogue of about 4 to 16 characters per balloon whenever possible.",
                 "Avoid tiny text, dense paragraphs, excessive captions, or too many balloons.",
@@ -1388,6 +1403,9 @@ figcaption {
                 "",
                 "Reference material:",
                 reference_context or "none",
+                "",
+                "Source novel to adapt:",
+                source_novel_context or "none",
                 "",
                 "Registered characters:",
                 character_context or "none",
@@ -3650,6 +3668,36 @@ figcaption {
         if len(text) <= limit:
             return text
         return text[:limit].rstrip() + "..."
+
+    def _source_novel_context_for_prompt(self, project_id: int, payload: dict | None, limit: int = 9000) -> str:
+        payload = payload or {}
+        try:
+            source_novel_id = int(payload.get("source_novel_id") or 0)
+        except (TypeError, ValueError):
+            source_novel_id = 0
+        if not source_novel_id:
+            return ""
+        novel = self.get_novel(source_novel_id)
+        if not novel or int(novel.project_id) != int(project_id):
+            raise ValueError("source_novel_id is invalid")
+        chapters = self.list_chapters(novel.id)
+        lines = [
+            f"原作ノベルID: {novel.id}",
+            f"原作タイトル: {novel.title or ''}",
+            f"原作サブタイトル: {novel.subtitle or ''}",
+            f"原作説明: {novel.description or ''}",
+            "",
+            "原作本文:",
+        ]
+        for chapter in chapters:
+            lines.extend(
+                [
+                    f"## 第{chapter.chapter_no}章 {chapter.title or ''}",
+                    self._shorten_for_prompt(chapter.body_markdown or "", 1800),
+                    "",
+                ]
+            )
+        return self._shorten_for_prompt("\n".join(lines), limit)
 
     def _normalize_bool(self, value, default: bool = False) -> bool:
         if value is None:
