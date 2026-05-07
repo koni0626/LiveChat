@@ -38,7 +38,7 @@ class CharacterService:
 
     def create_character(self, project_id: int, payload: dict, *, created_by_user_id: int | None = None):
         character = self._repo.create(project_id, payload)
-        if not payload.get("thumbnail_asset_id"):
+        if not payload.get("thumbnail_asset_id") and not self._normalize_bool(payload.get("skip_thumbnail_refresh")):
             try:
                 character = self._refresh_thumbnail(character)
             except Exception:
@@ -47,11 +47,6 @@ class CharacterService:
             self._ensure_character_home_location(character)
         except Exception:
             current_app.logger.exception("character home location creation failed during character creation")
-        if created_by_user_id:
-            try:
-                self._ensure_default_live_chat_room(character, created_by_user_id=created_by_user_id)
-            except Exception:
-                current_app.logger.exception("default live chat room creation failed during character creation")
         return self.get_character(character.id)
 
     def get_character(self, character_id: int, include_deleted: bool = False):
@@ -59,7 +54,12 @@ class CharacterService:
 
     def update_character(self, character_id: int, payload: dict):
         character = self._repo.update(character_id, payload)
-        if character and "base_asset_id" in payload and self._can_refresh_thumbnail(character):
+        if (
+            character
+            and "base_asset_id" in payload
+            and not self._normalize_bool(payload.get("skip_thumbnail_refresh"))
+            and self._can_refresh_thumbnail(character)
+        ):
             try:
                 character = self._refresh_thumbnail(character)
             except Exception:
@@ -235,21 +235,14 @@ class CharacterService:
             character = self._repo.update(character.id, {"thumbnail_asset_id": thumbnail.id})
         return character
 
-    def _ensure_default_live_chat_room(self, character, *, created_by_user_id: int):
-        if not character:
-            return None
-        from .live_chat_room_service import LiveChatRoomService
-
-        room_service = LiveChatRoomService(character_service=self)
-        existing = room_service.get_room_by_character(character.id)
-        if existing:
-            return existing
-        payload = room_service.build_objective_draft(character.project_id, {"character_id": character.id})
-        return room_service.create_room(
-            character.project_id,
-            payload,
-            created_by_user_id=created_by_user_id,
-        )
+    def _normalize_bool(self, value) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+        if isinstance(value, (int, float)):
+            return bool(value)
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
     def _ensure_character_home_location(self, character):
         if not character:

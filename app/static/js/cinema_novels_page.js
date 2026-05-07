@@ -13,6 +13,9 @@
   const createShortComicButton = document.getElementById("cinemaCreateShortComicButton");
   const comicLayoutSelect = document.querySelector('[name="comic_layout"]');
   const targetPanelInput = document.querySelector('[name="target_panel_count"]');
+  const useSourceNovelCheck = document.getElementById("cinemaUseSourceNovelCheck");
+  const sourceNovelSelect = document.getElementById("cinemaSourceNovelSelect");
+  const sourceNovelFields = Array.from(document.querySelectorAll("[data-production-source-novel]"));
   const productionModeHelp = document.getElementById("cinemaProductionModeHelp");
   const productionModeButtons = Array.from(document.querySelectorAll("[data-production-mode]"));
   const productionModeFields = Array.from(document.querySelectorAll("[data-production-field]"));
@@ -68,6 +71,7 @@
   let latestProductionInput = null;
   let productionCharacters = [];
   let bgmAssets = [];
+  let cinemaNovels = [];
   let productionMode = "novel";
 
   function escape(value) {
@@ -156,6 +160,40 @@
     return novel?.mode === "short_comic_video" && production?.comic_layout === "page";
   }
 
+  function syncSourceNovelControls() {
+    const visible = productionMode === "comic";
+    const checked = Boolean(useSourceNovelCheck?.checked);
+    sourceNovelFields.forEach((field) => {
+      field.hidden = !visible;
+      field.querySelectorAll?.("input, select, textarea, button").forEach((control) => {
+        if (control === sourceNovelSelect) {
+          control.disabled = !visible || !checked;
+        } else {
+          control.disabled = !visible;
+        }
+      });
+    });
+    if (sourceNovelSelect) sourceNovelSelect.disabled = !visible || !checked;
+  }
+
+  function renderSourceNovelOptions() {
+    if (!sourceNovelSelect) return;
+    const current = sourceNovelSelect.value;
+    const sourceNovels = (cinemaNovels || []).filter((novel) => !isShortComicNovel(novel));
+    sourceNovelSelect.innerHTML = [
+      '<option value="">小説を選択してください</option>',
+      ...sourceNovels.map((novel) => {
+        const chapterText = novel.chapter_count ? ` / ${novel.chapter_count}章` : "";
+        const statusText = novel.status === "published" ? "公開" : "非公開";
+        return `<option value="${escape(novel.id)}">${escape(novel.title || `#${novel.id}`)}${escape(chapterText)} (${escape(statusText)})</option>`;
+      }),
+    ].join("");
+    if (sourceNovels.some((novel) => String(novel.id) === String(current))) {
+      sourceNovelSelect.value = current;
+    }
+    syncSourceNovelControls();
+  }
+
   function setProductionMode(mode) {
     productionMode = ["novel", "comic", "both"].includes(mode) ? mode : "novel";
     productionModeButtons.forEach((button) => {
@@ -190,13 +228,14 @@
           ? "ショート漫画または漫画ページを作成します。作成後に漫画動画やEPUBとして出力できます。"
           : "ノベルゲームを作成します。作成後にPPT化や動画化ができます。";
     }
+    syncSourceNovelControls();
   }
 
   function syncComicLayoutDefaults() {
     if (!comicLayoutSelect || !targetPanelInput) return;
     if (comicLayoutSelect.value === "page" && Number(targetPanelInput.value || 0) > 12) {
       targetPanelInput.value = "4";
-    } else if (comicLayoutSelect.value !== "page" && Number(targetPanelInput.value || 0) < 6) {
+    } else if (comicLayoutSelect.value !== "page" && !targetPanelInput.value) {
       targetPanelInput.value = "20";
     }
   }
@@ -468,7 +507,9 @@
 
   async function loadNovels() {
     const novels = await api(`/api/v1/projects/${projectId}/cinema-novels`);
+    cinemaNovels = Array.isArray(novels) ? novels : [];
     window.__cinemaNovels = novels;
+    renderSourceNovelOptions();
     list.innerHTML = novels.map(renderNovel).join("");
     decorateReviewControls(novels);
     empty.hidden = novels.length > 0;
@@ -999,8 +1040,17 @@
     body.target_panel_count = Number(body.target_panel_count || 20);
     if (body.comic_layout === "page") body.target_page_count = body.target_panel_count;
     body.generate_images = true;
-    if (options.sourceNovelId) body.source_novel_id = Number(options.sourceNovelId);
-    if (options.sourceNovelTitle && !body.title) body.title = options.sourceNovelTitle;
+    const selectedSourceNovelId = Number(options.sourceNovelId || (useSourceNovelCheck?.checked ? sourceNovelSelect?.value : 0) || 0);
+    if (useSourceNovelCheck?.checked && !selectedSourceNovelId && !options.sourceNovelId) {
+      if (outlineResult) {
+        outlineResult.hidden = false;
+        outlineResult.innerHTML = `<div class="alert alert-warning">元にする小説を選択してください。</div>`;
+      }
+      return null;
+    }
+    if (selectedSourceNovelId) body.source_novel_id = selectedSourceNovelId;
+    const selectedSourceNovel = (cinemaNovels || []).find((novel) => Number(novel.id) === selectedSourceNovelId);
+    if (!body.title) body.title = options.sourceNovelTitle || selectedSourceNovel?.title || body.title;
     const manageButtons = options.manageButtons !== false;
     const originalHtml = createShortComicButton.innerHTML;
     if (manageButtons) {
@@ -1401,6 +1451,7 @@
     }
   });
   comicLayoutSelect?.addEventListener("change", syncComicLayoutDefaults);
+  useSourceNovelCheck?.addEventListener("change", syncSourceNovelControls);
   bgmUploadInput?.addEventListener("change", () => {
     uploadBgmAsset(bgmUploadInput.files?.[0]);
   });

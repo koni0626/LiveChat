@@ -32,6 +32,7 @@
   let portraitGenerationInProgress = false;
   let introductionGenerationInProgress = false;
   let bromideGenerationInProgress = false;
+  let saveInProgress = false;
   const markdownGrid = document.getElementById("characterMarkdownGrid");
   const modalElement = document.getElementById("markdownEditorModal");
   document.body.appendChild(modalElement);
@@ -154,8 +155,9 @@
     renderBromideAsset(character?.bromide_asset || null);
   }
 
-  async function saveCharacter({ silent = false } = {}) {
+  async function saveCharacter({ silent = false, skipThumbnailRefresh = false } = {}) {
     const body = characterPayload();
+    if (skipThumbnailRefresh) body.skip_thumbnail_refresh = true;
     let character;
     if (currentCharacterId) {
       character = await NovelUI.api(`/api/v1/characters/${currentCharacterId}`, { method: "PATCH", body });
@@ -287,7 +289,7 @@
   async function generateBaseImage() {
     setGenerating(true);
     try {
-      const character = await saveCharacter({ silent: true });
+      const character = await saveCharacter({ silent: true, skipThumbnailRefresh: true });
       const body = Object.fromEntries(new FormData(generateForm).entries());
       const generated = await NovelUI.api(`/api/v1/characters/${character.id}/base-image/generate`, { method: "POST", body });
       NovelUI.fillForm(form, generated);
@@ -311,7 +313,7 @@
     portraitGenerationInProgress = true;
     setPortraitGenerating(true);
     try {
-      const character = await saveCharacter({ silent: true });
+      const character = await saveCharacter({ silent: true, skipThumbnailRefresh: true });
       const generated = await NovelUI.api(`/api/v1/characters/${character.id}/portrait/generate`, {
         method: "POST",
         body: { size: "1024x1024", quality: "medium" },
@@ -338,7 +340,7 @@
     introductionGenerationInProgress = true;
     setIntroductionGenerating(true);
     try {
-      const character = await saveCharacter({ silent: true });
+      const character = await saveCharacter({ silent: true, skipThumbnailRefresh: true });
       const generated = await NovelUI.api(`/api/v1/characters/${character.id}/introduction/generate`, {
         method: "POST",
         body: { current_character: characterPayload() },
@@ -363,7 +365,7 @@
     bromideGenerationInProgress = true;
     setBromideGenerating(true);
     try {
-      const character = await saveCharacter({ silent: true });
+      const character = await saveCharacter({ silent: true, skipThumbnailRefresh: true });
       const generated = await NovelUI.api(`/api/v1/characters/${character.id}/bromide/generate`, {
         method: "POST",
         body: { size: "1024x1536", quality: "medium" },
@@ -495,13 +497,17 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (saveInProgress) return;
+      saveInProgress = true;
       try {
-        const character = await saveCharacter();
+        await saveCharacter();
         if (!initialCharacterId) {
-          location.href = `/projects/${projectId}/characters/${character.id}/edit`;
+          location.href = `/projects/${projectId}/characters`;
         }
       } catch (error) {
         NovelUI.toast(error.message || "保存に失敗しました。", "danger");
+      } finally {
+        saveInProgress = false;
       }
     });
 

@@ -748,23 +748,26 @@ figcaption {
             title=True,
             duration=3.2,
         )
+        previous_scene_image_path = None
 
         for chapter in chapters:
             scenes = self._load_json(chapter.scene_json, default=[])
             if not isinstance(scenes, list):
                 scenes = []
-            chapter_fallback = self._asset_file_path(chapter.cover_asset_id) or title_image
+            chapter_fallback = self._asset_file_path(chapter.cover_asset_id)
             for scene_index, scene in enumerate(scenes):
                 if not isinstance(scene, dict):
                     continue
                 scene_text = self._short_video_scene_text(str(scene.get("text") or ""))
                 if not scene_text:
                     continue
-                image_path = (
+                direct_image_path = (
                     self._asset_file_path(scene.get("still_asset_id"))
                     or self._asset_file_path(scene.get("background_asset_id"))
-                    or chapter_fallback
                 )
+                image_path = direct_image_path or previous_scene_image_path or chapter_fallback
+                if direct_image_path:
+                    previous_scene_image_path = direct_image_path
                 duration = 3.0 if len(scene_text) < 50 else 3.8
                 add_frame(
                     image_path,
@@ -891,12 +894,13 @@ figcaption {
             fade_in=False,
             duration=2.8,
         )
+        previous_image_path = None
 
         for chapter in chapters:
             scenes = self._load_json(chapter.scene_json, default=[])
             if not isinstance(scenes, list):
                 scenes = []
-            chapter_fallback = self._asset_file_path(chapter.cover_asset_id) or title_image
+            chapter_fallback = self._asset_file_path(chapter.cover_asset_id)
             for scene_index, scene in enumerate(scenes):
                 if not isinstance(scene, dict):
                     continue
@@ -907,9 +911,12 @@ figcaption {
                 image_path = (
                     self._asset_file_path(scene.get("still_asset_id"))
                     or self._asset_file_path(scene.get("background_asset_id"))
+                    or previous_image_path
+                    or chapter_fallback
                 )
                 if not image_path:
                     continue
+                previous_image_path = image_path
                 add_panel(
                     image_path,
                     caption,
@@ -1236,7 +1243,7 @@ figcaption {
             target_panel_count = int(payload.get("target_panel_count") or 20)
         except (TypeError, ValueError):
             target_panel_count = 20
-        target_panel_count = max(6, min(40, target_panel_count))
+        target_panel_count = max(4, min(40, target_panel_count))
         reference_sources = self._reference_sources(payload)
         character_context = (
             self._registered_character_context(project_id, main_character=main_character)
