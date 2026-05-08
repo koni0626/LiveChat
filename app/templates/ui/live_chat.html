@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="live-chat-shell" data-session-id="{{ session_id }}" data-is-superuser="{{ 'true' if current_user_role == 'superuser' else 'false' }}">
+<section class="live-chat-shell" data-session-id="{{ session_id }}" data-is-superuser="{{ 'true' if current_user_role == 'superuser' else 'false' }}" data-can-manage-project="{{ 'true' if can_manage_project else 'false' }}">
   <section class="panel-card live-chat-main">
     <div class="panel-head">
       <h3 id="liveChatTitle">ライブチャット</h3>
@@ -172,6 +172,8 @@
           <span class="live-chat-action-chip-label" id="liveChatActionChipLabel"></span>
           <button type="button" id="liveChatActionClearButton" aria-label="アクションを解除"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
         </div>
+        <div class="live-chat-scene-suggestion-bar is-hidden" id="liveChatSceneSuggestionBar" aria-label="返信候補"></div>
+        <div class="live-chat-photo-opportunity-bar is-hidden" id="liveChatPhotoOpportunityBar" aria-label="シャッターチャンス"></div>
         <div class="live-chat-compose-editor">
           <textarea
             class="form-control"

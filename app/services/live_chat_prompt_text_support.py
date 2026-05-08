@@ -1105,6 +1105,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
         "suggest_image は、この返答に視覚的に印象的な感情の変化がある場合だけ true にしてください。",
         "speaker_name はアクティブなキャラクターのいずれかにしてください。",
         "message_text はナレーションではなく、自然な発話1つにしてください。",
+        "message_text に Markdown 記法を使わないでください。**強調**、見出し、箇条書き、引用、コード記法は禁止です。",
         "返信は能動的で、感情があり、キャラクター固有のものにしてください。",
         "セリフは中立的なアシスタントではなく、その瞬間にキャラクターが感情を持っているように聞こえる必要があります。",
         "そのキャラクターが本当に案内役のように振る舞う場合を除き、汎用ガイドのように答えないでください。",
@@ -1551,6 +1552,151 @@ def build_scene_choice_prompt(context: dict, speaker_name: str, message_text: st
 
 def fallback_scene_choices(context: dict, speaker_name: str, message_text: str) -> dict:
     return {"should_show_choices": False, "choices": []}
+
+
+def build_chat_suggestion_prompt(context: dict, speaker_name: str, message_text: str) -> str:
+    state_json = context["state"].get("state_json") or {}
+    scene_progression = state_json.get("scene_progression") or {}
+    session_objective = get_session_objective(context)
+    player_name = context["session"].get("player_name") or "プレイヤー"
+    lines = [
+        "You create lightweight reply chips for a live character chat UI.",
+        "Return only a JSON object.",
+        "Required key: suggestions.",
+        "suggestions must be an array with 2 or 3 items.",
+        "Each suggestion must include id, type, label, message_text.",
+        "type must be one of: talk, action.",
+        "These are not story-branch choices. They should be casual next replies the player can send immediately.",
+        "Do not move the scene, skip time, force a major event, or decide the player's emotions too strongly.",
+        "Keep label in natural Japanese, 4 to 14 characters if possible.",
+        "Keep message_text in natural Japanese and under 80 characters.",
+        "Include at most one action suggestion. Do not include photo suggestions here; shutter chances are generated separately.",
+        "Respect the world setting, character personality, speech style, and NG rules.",
+        f"Player name: {player_name}",
+        f"Session objective: {session_objective or ''}",
+        f"Current location: {state_json.get('location') or scene_progression.get('location') or ''}",
+        f"Current background: {state_json.get('background') or scene_progression.get('background') or ''}",
+        "Characters:",
+    ]
+    for character in context["characters"]:
+        lines.append(
+            f"- {character.get('name')}: character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, ng_rules={character.get('ng_rules') or ''}"
+        )
+    lines.append("Recent chat:")
+    for message in context["messages"][-8:]:
+        lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
+    lines.append("Latest character message:")
+    lines.append(f"- {speaker_name}: {message_text}")
+    lines.append(
+        'Example shape: {"suggestions":[{"id":"suggestion_1","type":"talk","label":"続きを聞く","message_text":"その話、もう少し聞かせて。"}]}'
+    )
+    return "\n".join(lines)
+
+
+def fallback_chat_suggestions(context: dict, speaker_name: str, message_text: str) -> dict:
+    return {
+        "suggestions": [
+            {
+                "id": "suggestion_1",
+                "type": "talk",
+                "label": "続きを聞く",
+                "message_text": "その話、もう少し聞かせて。",
+            },
+            {
+                "id": "suggestion_2",
+                "type": "talk",
+                "label": "気持ちを聞く",
+                "message_text": "今、どんな気分？",
+            },
+        ]
+    }
+
+
+def build_photo_opportunity_prompt(context: dict, speaker_name: str, message_text: str) -> str:
+    state_json = context["state"].get("state_json") or {}
+    displayed_image = state_json.get("displayed_image_observation") or {}
+    scene_progression = state_json.get("scene_progression") or {}
+    session_objective = get_session_objective(context)
+    player_name = context["session"].get("player_name") or "プレイヤー"
+    lines = [
+        "You create natural shutter-chance chips for a live visual novel chat.",
+        "Return only a JSON object.",
+        "Required keys: should_show, opportunities.",
+        "opportunities must be an array with 0 to 3 items.",
+        "Each opportunity must include id, display_color, label, shot_instruction, pose_style, tone.",
+        "display_color must be green, yellow, or red. Use each color at most once.",
+        "The UI will show three shutter chance buttons with the familiar green/blue-ish button, yellow, and red variants. It will not show label or shot_instruction.",
+        "These are not player pose commands. They are naturally occurring moments after the latest character reaction.",
+        "Only show opportunities when the latest chat or current image has a believable photogenic instant.",
+        "Prefer subtle romantic visual beats: looking back, shy smile, soft eye contact, leaning closer, close distance, a small upward glance.",
+        "Sometimes suggest detail shots instead of full face/body shots: feet taking one step closer, hands at sleeves or a cup, mouth/chin and shoulder cropped close, hem of clothes, floor shadows, or a partial profile.",
+        "Detail shots must express closeness, accidental framing, aftermath, or the feeling that the character is very near. Do not make them fetishistic body-part shots.",
+        "Keep it non-explicit, elegant, and character-consistent. No nudity, sexual acts, coercion, or childish framing.",
+        "Avoid cleavage focus, underwear, crotch, buttocks, transparent clothing emphasis, or sexualized body-part framing.",
+        "Do not change outfits, teleport, or force a new location. If using scene transition, keep it as a tiny camera/framing shift in the current place.",
+        "label must be natural Japanese under 14 characters, like 照れた瞬間 or 見つめ返す一枚.",
+        "shot_instruction must be Japanese and describe the captured instant, expression, gaze, distance, camera, and light.",
+        "pose_style should be a short Japanese phrase such as 見つめる, 照れる, 寄り添う, 上目遣い, 足元, 手元, 口元, 近距離, or 自然な横顔.",
+        f"Player name: {player_name}",
+        f"Session objective: {session_objective or ''}",
+        f"Current location: {state_json.get('location') or scene_progression.get('location') or ''}",
+        f"Current background: {state_json.get('background') or scene_progression.get('background') or ''}",
+        f"Displayed image summary: {displayed_image.get('short_summary') or ''}",
+        f"Displayed poses: {displayed_image.get('character_poses') or ''}",
+        f"Displayed expressions: {displayed_image.get('character_expressions') or ''}",
+        "Characters:",
+    ]
+    for character in context["characters"]:
+        lines.append(
+            f"- {character.get('name')}: character_summary={character.get('character_summary') or ''}, personality={character.get('personality') or ''}, speech_style={character.get('speech_style') or ''}, ng_rules={character.get('ng_rules') or ''}, appearance={character.get('appearance_summary') or ''}"
+        )
+    lines.append("Recent chat:")
+    for message in context["messages"][-8:]:
+        lines.append(f"- {message.get('speaker_name') or message.get('sender_type')}: {message.get('message_text')}")
+    lines.append("Latest character message:")
+    lines.append(f"- {speaker_name}: {message_text}")
+    lines.append(
+        'Example shape: {"should_show":true,"opportunities":[{"id":"photo_green","display_color":"green","label":"照れた瞬間","pose_style":"照れる","tone":"shy","shot_instruction":"直近の言葉に少し照れて視線をそらした直後、すぐにこちらを見つめ返す一瞬。距離は近め、柔らかい光、自然な縦構図。"},{"id":"photo_yellow","display_color":"yellow","label":"近い足元","pose_style":"足元","tone":"close_detail","shot_instruction":"キャラクターがこちらへ一歩近づいた直後の足元だけを切り取る。靴、服の裾、床に落ちる影で距離の近さと気配を出し、露骨な身体強調は避ける。"},{"id":"photo_red","display_color":"red","label":"手元だけ","pose_style":"手元","tone":"afterglow","shot_instruction":"言葉の余韻で袖口やカップに触れている手元だけを近めに切り取る。柔らかい影と背景ぼけで、すぐそばにいる気配を出す。"}]}'
+    )
+    return "\n".join(lines)
+
+
+def fallback_photo_opportunities(context: dict, speaker_name: str, message_text: str) -> dict:
+    text = str(message_text or "")
+    if not any(token in text for token in ("照", "見", "近", "隣", "寄", "恥", "好き", "うれし", "笑")):
+        return {"should_show": False, "opportunities": []}
+    opportunities = [
+        {
+            "id": "photo_1",
+            "display_color": "green",
+            "label": "今の表情",
+            "pose_style": "見つめる",
+            "tone": "soft",
+            "shot_instruction": "直近の会話で表情がふっと柔らいだ一瞬。こちらを自然に見つめ、距離は近すぎず近め、背景を軽くぼかした縦構図。",
+        }
+    ]
+    if any(token in text for token in ("近", "隣", "寄")):
+        opportunities.append(
+            {
+                "id": "photo_2",
+                "display_color": "yellow",
+                "label": "近い足元",
+                "pose_style": "足元",
+                "tone": "close_detail",
+                "shot_instruction": "キャラクターがこちらへ一歩近づいた直後の足元だけを切り取る。靴、服の裾、床に落ちる影で距離の近さと気配を出し、露骨な身体強調は避ける。",
+            }
+        )
+    opportunities.append(
+        {
+            "id": "photo_3",
+            "display_color": "red",
+            "label": "手元だけ",
+            "pose_style": "手元",
+            "tone": "afterglow",
+            "shot_instruction": "会話の余韻で袖口や小物に触れている手元だけを近めに切り取る。柔らかい影と背景ぼけで、すぐそばにいる気配を出す。",
+        }
+    )
+    return {"should_show": True, "opportunities": opportunities[:3]}
 
 
 def build_choice_execution_prompt(context: dict, choice: dict) -> str:

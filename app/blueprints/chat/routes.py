@@ -657,7 +657,7 @@ def generate_chat_photo_mode_shoot(session_id: int):
     context = live_chat_service.get_session_context(session_id)
     character_id = _active_character_id_from_context(context)
     reward = character_affinity_reward_service.get_reward(user.id, character_id) if character_id else None
-    if not authorization_service.is_superuser(user) and (not reward or not reward.event_claimed_at):
+    if not authorization_service.can_manage_project(user, _project) and (not reward or not reward.event_claimed_at):
         raise ValidationError("撮影モードは好感度100クリア後に開放されます。")
     payload = user_setting_service.apply_image_generation_settings(user.id, payload)
     point_billing_service.ensure_image_generation_balance(user)
@@ -817,7 +817,7 @@ def claim_chat_affinity_reward(session_id: int, character_id: int):
     active_ids = {int(item.get("id") or 0) for item in (context or {}).get("characters") or []}
     if int(character_id) not in active_ids:
         raise ValidationError("このセッションのキャラクターではありません。")
-    if _affinity_score_from_context(context, character_id) < 100:
+    if not authorization_service.can_manage_project(user, project) and _affinity_score_from_context(context, character_id) < 100:
         raise ValidationError("好感度100に到達していません。")
     response_payload, status = _claim_affinity_reward_payload(
         chat_session,
@@ -895,7 +895,7 @@ def list_chat_closet_outfits(session_id: int):
     _chat_session, _project, user = _require_session(session_id)
     context = live_chat_service.get_session_context(session_id)
     unlocked, character_id = _closet_unlocked_for_context(user.id, context)
-    if not unlocked:
+    if not unlocked and not authorization_service.can_manage_project(user, _project):
         return json_response(
             {
                 "outfits": [],
@@ -915,7 +915,7 @@ def select_chat_closet_outfit(session_id: int, outfit_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     context = live_chat_service.get_session_context(session_id)
     unlocked, _character_id = _closet_unlocked_for_context(user.id, context)
-    if not unlocked:
+    if not unlocked and not authorization_service.can_manage_project(user, _project):
         raise ValidationError("クローゼット選択は好感度100で開放されます。")
     result = live_chat_service.select_closet_outfit(session_id, outfit_id)
     if not result:
@@ -928,7 +928,7 @@ def select_chat_costume(session_id: int, image_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     context = live_chat_service.get_session_context(session_id)
     unlocked, _character_id = _closet_unlocked_for_context(user.id, context)
-    if not unlocked:
+    if not unlocked and not authorization_service.can_manage_project(user, _project):
         raise ValidationError("衣装の選択は好感度100で開放されます。")
     result = live_chat_service.select_costume(session_id, image_id)
     if not result:
@@ -1114,4 +1114,3 @@ def set_chat_image_reference(session_id: int, image_id: int):
     if not result:
         raise NotFoundError()
     return json_response(result)
-

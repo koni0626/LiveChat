@@ -10,6 +10,7 @@
       closetSelectButton,
       closetSelectModalElement,
       closetPicker,
+      canBypassAffinityLock = false,
       loadContext,
       isInteractionLocked,
     } = options;
@@ -23,7 +24,7 @@
       const costumes = context?.costumes || [];
       const selectedCostume = context?.selected_costume || costumes.find((item) => item.is_selected) || costumes[0] || null;
       const closetPayload = context?.closet_outfits || {};
-      const closetLocked = Boolean(closetPayload.locked);
+      const closetLocked = Boolean(closetPayload.locked) && !canBypassAffinityLock;
       const closetOutfits = Array.isArray(closetPayload.outfits) ? closetPayload.outfits : [];
       const selectedOutfit = closetOutfits.find((outfit) => outfit.is_selected_for_session) || null;
       const selectedMediaUrl = selectedOutfit?.thumbnail_asset?.media_url
@@ -85,7 +86,7 @@
     function renderClosetPicker(payload) {
       if (!closetPicker) return;
       const outfits = payload?.outfits || [];
-      if (payload?.locked) {
+      if (payload?.locked && !canBypassAffinityLock) {
         closetPicker.innerHTML = '<div class="empty-panel">クローゼット選択は好感度100で開放されます。</div>';
         return;
       }

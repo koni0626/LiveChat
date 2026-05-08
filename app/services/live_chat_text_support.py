@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from . import live_chat_prompt_support as prompt_support
 
 REPLY_EFFECT_EMOTIONS = {
@@ -14,6 +16,19 @@ REPLY_EFFECT_EMOTIONS = {
     "lonely",
     "relieved",
 }
+
+
+def sanitize_chat_message_text(message_text: str) -> str:
+    text = str(message_text or "").strip()
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
+    text = re.sub(r"\*(.+?)\*", r"\1", text)
+    text = re.sub(r"_(.+?)_", r"\1", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s{0,3}>\s?", "", text, flags=re.MULTILINE)
+    text = text.replace("```", "")
+    return text.strip()
 
 
 def normalize_reply_effect(parsed: dict, *, speaker_name: str, message_text: str) -> dict:
@@ -101,7 +116,7 @@ def generate_opening_message(text_ai_client, context: dict) -> dict:
         if not isinstance(parsed, dict):
             raise RuntimeError("opening generation response is invalid")
         speaker_name = str(parsed.get("speaker_name") or "").strip()
-        message_text = str(parsed.get("message_text") or "").strip()
+        message_text = sanitize_chat_message_text(parsed.get("message_text") or "")
         allowed_names = {character["name"] for character in context["characters"]}
         if not speaker_name or speaker_name not in allowed_names:
             raise RuntimeError("opening speaker is invalid")
@@ -144,13 +159,14 @@ def generate_reply(text_ai_client, context: dict, user_message_text: str) -> dic
         if not isinstance(parsed, dict):
             raise RuntimeError("reply generation response is invalid")
         speaker_name = str(parsed.get("speaker_name") or "").strip()
-        message_text = str(parsed.get("message_text") or "").strip()
+        message_text = sanitize_chat_message_text(parsed.get("message_text") or "")
         allowed_names = {character["name"] for character in context["characters"]}
         if not speaker_name or speaker_name not in allowed_names:
             raise RuntimeError("reply speaker is invalid")
         if not message_text:
             raise RuntimeError("reply message is empty")
         message_text = enforce_character_voice(context, speaker_name, message_text)
+        message_text = sanitize_chat_message_text(message_text)
         return {
             "speaker_name": speaker_name,
             "message_text": message_text,
@@ -171,13 +187,13 @@ def generate_player_proxy_message(text_ai_client, context: dict) -> str:
         parsed = text_ai_client._try_parse_json(result.get("text"))
         if not isinstance(parsed, dict):
             raise RuntimeError("player proxy message response is invalid")
-        message_text = str(parsed.get("message_text") or "").strip()
+        message_text = sanitize_chat_message_text(parsed.get("message_text") or "")
         if not message_text:
             raise RuntimeError("player proxy message is empty")
         forbidden = ("話を進めて", "続けて", "何か話して")
         if any(token in message_text for token in forbidden):
             raise RuntimeError("player proxy message is too generic")
-        return message_text[:160]
+        return sanitize_chat_message_text(message_text)[:160]
     except Exception:
         return prompt_support.fallback_player_proxy_message(context)
 
@@ -193,13 +209,13 @@ def generate_photo_mode_proxy_message(text_ai_client, context: dict) -> str:
         parsed = text_ai_client._try_parse_json(result.get("text"))
         if not isinstance(parsed, dict):
             raise RuntimeError("photo mode proxy message response is invalid")
-        message_text = str(parsed.get("message_text") or "").strip()
+        message_text = sanitize_chat_message_text(parsed.get("message_text") or "")
         if not message_text:
             raise RuntimeError("photo mode proxy message is empty")
         forbidden = ("話を進めて", "続けて", "何か話して")
         if any(token in message_text for token in forbidden):
             raise RuntimeError("photo mode proxy message is too generic")
-        return message_text[:220]
+        return sanitize_chat_message_text(message_text)[:220]
     except Exception:
         return prompt_support.fallback_photo_mode_proxy_message(context)
 
@@ -216,7 +232,7 @@ def generate_idle_character_message(text_ai_client, context: dict) -> dict:
         if not isinstance(parsed, dict):
             raise RuntimeError("idle character message response is invalid")
         speaker_name = str(parsed.get("speaker_name") or "").strip()
-        message_text = str(parsed.get("message_text") or "").strip()
+        message_text = sanitize_chat_message_text(parsed.get("message_text") or "")
         allowed_names = {character["name"] for character in context["characters"]}
         if not speaker_name or speaker_name not in allowed_names:
             raise RuntimeError("idle character speaker is invalid")
@@ -226,6 +242,7 @@ def generate_idle_character_message(text_ai_client, context: dict) -> dict:
         if any(token in message_text for token in forbidden):
             raise RuntimeError("idle character message is too generic")
         message_text = enforce_character_voice(context, speaker_name, message_text)
+        message_text = sanitize_chat_message_text(message_text)
         return {"speaker_name": speaker_name, "message_text": message_text[:240]}
     except Exception:
         return prompt_support.fallback_idle_character_message(context)
@@ -293,13 +310,14 @@ def generate_narration_reaction(text_ai_client, context: dict, user_message_text
         if not isinstance(parsed, dict):
             raise RuntimeError("narration reaction response is invalid")
         speaker_name = str(parsed.get("speaker_name") or "").strip()
-        message_text = str(parsed.get("message_text") or "").strip()
+        message_text = sanitize_chat_message_text(parsed.get("message_text") or "")
         allowed_names = {character["name"] for character in context["characters"]}
         if not speaker_name or speaker_name not in allowed_names:
             raise RuntimeError("narration reaction speaker is invalid")
         if not message_text:
             raise RuntimeError("narration reaction message is empty")
         message_text = enforce_character_voice(context, speaker_name, message_text)
+        message_text = sanitize_chat_message_text(message_text)
         return {"speaker_name": speaker_name, "message_text": message_text}
     except Exception:
         return prompt_support.fallback_narration_reaction(context, scene_update)
@@ -351,6 +369,116 @@ def generate_scene_choices(text_ai_client, context: dict, speaker_name: str, mes
         }
     except Exception:
         return prompt_support.fallback_scene_choices(context, speaker_name, message_text)
+
+
+def generate_chat_suggestions(text_ai_client, context: dict, speaker_name: str, message_text: str) -> dict:
+    try:
+        prompt = prompt_support.build_chat_suggestion_prompt(context, speaker_name, message_text)
+        result = text_ai_client.generate_text(
+            prompt,
+            temperature=0.35,
+            response_format={"type": "json_object"},
+            max_tokens=700,
+        )
+        parsed = text_ai_client._try_parse_json(result.get("text"))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("chat suggestion response is invalid")
+        suggestions = parsed.get("suggestions") or []
+        if not isinstance(suggestions, list):
+            suggestions = []
+        normalized = []
+        seen = set()
+        allowed_types = {"talk", "action"}
+        for index, item in enumerate(suggestions[:3], start=1):
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get("label") or "").strip()
+            message = str(item.get("message_text") or item.get("message") or "").strip()
+            if not label or not message:
+                continue
+            suggestion_type = str(item.get("type") or "talk").strip().lower()
+            if suggestion_type not in allowed_types:
+                suggestion_type = "talk"
+            if len(label) > 18:
+                label = label[:18]
+            if len(message) > 120:
+                message = message[:120]
+            key = message.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(
+                {
+                    "id": str(item.get("id") or f"suggestion_{index}").strip() or f"suggestion_{index}",
+                    "type": suggestion_type,
+                    "label": label,
+                    "message_text": message,
+                }
+            )
+        if not normalized:
+            raise RuntimeError("chat suggestion response is empty")
+        return {"suggestions": normalized[:3]}
+    except Exception:
+        return prompt_support.fallback_chat_suggestions(context, speaker_name, message_text)
+
+
+def generate_photo_opportunities(text_ai_client, context: dict, speaker_name: str, message_text: str) -> dict:
+    try:
+        prompt = prompt_support.build_photo_opportunity_prompt(context, speaker_name, message_text)
+        result = text_ai_client.generate_text(
+            prompt,
+            temperature=0.35,
+            response_format={"type": "json_object"},
+            max_tokens=900,
+        )
+        parsed = text_ai_client._try_parse_json(result.get("text"))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("photo opportunity response is invalid")
+        opportunities = parsed.get("opportunities") or []
+        if not isinstance(opportunities, list):
+            opportunities = []
+        normalized = []
+        seen = set()
+        color_order = ("green", "yellow", "red")
+        used_colors = set()
+        for index, item in enumerate(opportunities[:3], start=1):
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get("label") or "").strip()
+            instruction = str(item.get("shot_instruction") or item.get("instruction") or "").strip()
+            if not label or not instruction:
+                continue
+            display_color = str(item.get("display_color") or item.get("color") or "").strip().lower()
+            if display_color == "blue":
+                display_color = "green"
+            if display_color not in color_order or display_color in used_colors:
+                display_color = next((color for color in color_order if color not in used_colors), "")
+            if not display_color:
+                continue
+            used_colors.add(display_color)
+            if len(label) > 18:
+                label = label[:18]
+            key = instruction.lower()
+            if key in seen:
+                used_colors.discard(display_color)
+                continue
+            seen.add(key)
+            normalized.append(
+                {
+                    "id": str(item.get("id") or f"photo_{display_color}").strip() or f"photo_{display_color}",
+                    "display_color": display_color,
+                    "label": label,
+                    "shot_instruction": instruction[:650],
+                    "pose_style": str(item.get("pose_style") or "").strip()[:80],
+                    "tone": str(item.get("tone") or "").strip()[:40],
+                }
+            )
+        return {
+            "should_show": bool(parsed.get("should_show")) and bool(normalized),
+            "opportunities": normalized[:3],
+        }
+    except Exception:
+        return prompt_support.fallback_photo_opportunities(context, speaker_name, message_text)
 
 
 def generate_final_memory_summary(text_ai_client, context: dict, character_id: int | None = None) -> dict:

@@ -5,7 +5,15 @@
       .replace(/\\n/g, "\n")
       .replace(/\\r/g, "\n")
       .replace(/\r\n/g, "\n")
-      .replace(/\r/g, "\n");
+      .replace(/\r/g, "\n")
+      .replace(/\*\*(.+?)\*\*/g, "$1")
+      .replace(/__(.+?)__/g, "$1")
+      .replace(/\*(.+?)\*/g, "$1")
+      .replace(/_(.+?)_/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/^\s{0,3}#{1,6}\s*/gm, "")
+      .replace(/^\s{0,3}>\s?/gm, "")
+      .replace(/```/g, "");
   }
 
   function getLatestDisplayMessage(messages) {

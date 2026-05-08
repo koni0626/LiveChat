@@ -8,6 +8,7 @@
       getImageGenerationOptions,
       iconHtml,
       isSuperuser = false,
+      canBypassAffinityLock = isSuperuser,
       getReward,
       applyContext,
       loadContext,
@@ -21,7 +22,7 @@
     let busy = false;
 
     function canUse(context) {
-      if (isSuperuser) return true;
+      if (canBypassAffinityLock) return true;
       const reward = getReward?.(context);
       return Boolean(reward?.clear_unlocked || reward?.closet_unlocked || reward?.event_claimed);
     }

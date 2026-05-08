@@ -587,14 +587,48 @@ class LiveChatConversationService:
                 "created_at": datetime.utcnow().isoformat(),
                 "choices": choices_result["choices"][:3],
             }
+            state_json.pop("scene_suggestions", None)
+            state_json.pop("photo_opportunities", None)
         else:
             state_json.pop("scene_choices", None)
+            suggestions_result = text_support.generate_chat_suggestions(
+                self._text_ai_client,
+                context,
+                assistant_message.speaker_name,
+                assistant_message.message_text,
+            )
+            suggestions = suggestions_result.get("suggestions") or []
+            if suggestions:
+                state_json["scene_suggestions"] = {
+                    "source_message_id": assistant_message.id,
+                    "created_at": datetime.utcnow().isoformat(),
+                    "suggestions": suggestions[:3],
+                }
+            else:
+                state_json.pop("scene_suggestions", None)
+            opportunities_result = text_support.generate_photo_opportunities(
+                self._text_ai_client,
+                context,
+                assistant_message.speaker_name,
+                assistant_message.message_text,
+            )
+            opportunities = opportunities_result.get("opportunities") or []
+            if opportunities_result.get("should_show") and opportunities:
+                state_json["photo_opportunities"] = {
+                    "source_message_id": assistant_message.id,
+                    "created_at": datetime.utcnow().isoformat(),
+                    "opportunities": opportunities[:3],
+                }
+            else:
+                state_json.pop("photo_opportunities", None)
         return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
 
     def clear_scene_choices(self, session_id: int):
         state_row = self._session_state_service.get_state(session_id)
         state_json = self._load_json(getattr(state_row, "state_json", None)) or {}
         state_json.pop("scene_choices", None)
+        state_json.pop("scene_suggestions", None)
+        state_json.pop("photo_opportunities", None)
         return self._session_state_service.upsert_state(session_id, {"state_json": state_json})
 
     def build_choice_image_prompt(self, context: dict, choice: dict) -> str:
@@ -2259,6 +2293,7 @@ class LiveChatConversationService:
                 message_text,
                 initial_context,
             )
+        self.clear_scene_choices(session_id)
         player_prompt_text = self._player_intent_service.prompt_text(player_intent, message_text)
         forced_intent = str(payload.get("input_intent") or "").strip()
         if forced_intent in {"dialogue", "narration", "visual_request"}:

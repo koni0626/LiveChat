@@ -24,6 +24,7 @@
   const sessionId = Number(root.dataset.sessionId || 0);
   const projectId = Number(document.body?.dataset?.projectId || 0);
   const isSuperuser = root.dataset.isSuperuser === "true";
+  const canManageProject = root.dataset.canManageProject === "true";
   const stateBoard = document.getElementById("liveChatStateBoard");
   const memoryBoard = document.getElementById("liveChatMemoryBoard");
   const selectedImagePanel = document.getElementById("liveChatSelectedImagePanel");
@@ -43,6 +44,8 @@
   const closetSelectModalElement = document.getElementById("liveChatClosetSelectModal");
   const closetPicker = document.getElementById("liveChatClosetPicker");
   const sceneChoicePanel = document.getElementById("liveChatSceneChoicePanel");
+  const sceneSuggestionBar = document.getElementById("liveChatSceneSuggestionBar");
+  const photoOpportunityBar = document.getElementById("liveChatPhotoOpportunityBar");
   const lccdPanel = document.getElementById("liveChatLccdPanel");
   const toggleLccdButton = document.getElementById("liveChatToggleLccdButton");
   const costumeTicketBadge = document.getElementById("liveChatCostumeTicketBadge");
@@ -149,6 +152,30 @@
   function hasActiveSceneChoices() {
     const choiceState = currentContext?.state?.state_json?.scene_choices || {};
     return Array.isArray(choiceState.choices) && choiceState.choices.length > 0;
+  }
+
+  function currentSceneSuggestions(context = currentContext) {
+    const stateJson = context?.state?.state_json || {};
+    const choiceState = stateJson.scene_choices || {};
+    if (Array.isArray(choiceState.choices) && choiceState.choices.length > 0) {
+      return [];
+    }
+    const suggestionState = stateJson.scene_suggestions || {};
+    return Array.isArray(suggestionState.suggestions)
+      ? suggestionState.suggestions.filter((item) => item && (item.label || item.message_text)).slice(0, 3)
+      : [];
+  }
+
+  function currentPhotoOpportunities(context = currentContext) {
+    const stateJson = context?.state?.state_json || {};
+    const choiceState = stateJson.scene_choices || {};
+    if (Array.isArray(choiceState.choices) && choiceState.choices.length > 0) {
+      return [];
+    }
+    const opportunityState = stateJson.photo_opportunities || {};
+    return Array.isArray(opportunityState.opportunities)
+      ? opportunityState.opportunities.filter((item) => item && (item.label || item.shot_instruction)).slice(0, 3)
+      : [];
   }
 
   function isInteractionLocked() {
@@ -397,6 +424,7 @@
     imageForm,
     generateSessionImage,
     getActiveCharacters: () => activeCharacters(currentContext),
+    getPhotoOpportunities: () => currentPhotoOpportunities(currentContext),
     hasSceneChoices: hasActiveSceneChoices,
     isInteractionLocked,
     onMoodChange: (speakerName, mood) => characterGuideController.setMood(speakerName, mood),
@@ -433,7 +461,7 @@
     imageForm,
     getImageGenerationOptions: imageGenerationOptions,
     iconHtml: stageActionIcons.photoMode,
-    isSuperuser,
+    canBypassAffinityLock: isSuperuser || canManageProject,
     getReward: (context) => activeAffinityReward(context || currentContext),
     applyContext,
     loadContext,
@@ -518,6 +546,8 @@
     updateGalleryCount(context.images || []);
     costumeRoomController?.render(context);
     renderSceneChoices(context);
+    renderSceneSuggestions(context);
+    renderPhotoOpportunities(context);
     locationController.renderMovePanel(context);
     locationController.renderServicePanel();
     renderLccdPanel();
@@ -1127,6 +1157,34 @@
     sceneChoicePanel.innerHTML = "";
   }
 
+  function renderSceneSuggestions(context) {
+    if (!sceneSuggestionBar) return;
+    const suggestions = currentSceneSuggestions(context);
+    sceneSuggestionBar.classList.toggle("is-hidden", suggestions.length === 0);
+    sceneSuggestionBar.innerHTML = suggestions.map((suggestion) => {
+      const type = String(suggestion.type || "talk").toLowerCase();
+      const icon = type === "photo" ? "bi-camera" : type === "action" ? "bi-stars" : "bi-chat-dots";
+      return `
+        <button
+          class="live-chat-scene-suggestion"
+          type="button"
+          data-scene-suggestion-id="${NovelUI.escape(suggestion.id || "")}"
+          data-scene-suggestion-type="${NovelUI.escape(type)}"
+          title="${NovelUI.escape(suggestion.message_text || suggestion.label || "")}"
+        >
+          <i class="bi ${icon}" aria-hidden="true"></i>
+          <span>${NovelUI.escape(suggestion.label || suggestion.message_text || "")}</span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function renderPhotoOpportunities(context) {
+    if (!photoOpportunityBar) return;
+    photoOpportunityBar.classList.add("is-hidden");
+    photoOpportunityBar.innerHTML = "";
+  }
+
   function renderLccdPanel() {
     if (!lccdPanel) return;
     lccdPanel.classList.add("is-hidden");
@@ -1223,6 +1281,7 @@
     closetSelectButton,
     closetSelectModalElement,
     closetPicker,
+    canBypassAffinityLock: isSuperuser || canManageProject,
     loadContext,
     isInteractionLocked,
   });
@@ -1321,6 +1380,47 @@
       clearIdleTalkTimer();
     } else {
       scheduleIdleTalk();
+    }
+  });
+
+  sceneSuggestionBar?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-scene-suggestion-id]");
+    if (!button || endingInProgress) return;
+    const suggestions = currentSceneSuggestions();
+    const suggestion = suggestions.find((item) => String(item.id || "") === String(button.dataset.sceneSuggestionId || ""));
+    if (!suggestion) return;
+    const messageText = String(suggestion.message_text || suggestion.label || "").trim();
+    if (!messageText) return;
+    window.LiveChatSound?.unlock?.();
+    window.LiveChatSound?.play("choice");
+    button.disabled = true;
+    try {
+      await composerController?.submitText(messageText);
+      sceneSuggestionBar.classList.add("is-hidden");
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  photoOpportunityBar?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-photo-opportunity-id]");
+    if (!button || endingInProgress) return;
+    const opportunities = currentPhotoOpportunities();
+    const opportunity = opportunities.find((item) => String(item.id || "") === String(button.dataset.photoOpportunityId || ""));
+    if (!opportunity) return;
+    const instruction = String(opportunity.shot_instruction || opportunity.label || "").trim();
+    if (!instruction) return;
+    window.LiveChatSound?.unlock?.();
+    window.LiveChatSound?.play("shutter");
+    button.disabled = true;
+    try {
+      const ok = await photoModeController.generateShoot(instruction, opportunity.pose_style || "シャッターチャンス");
+      if (ok) {
+        photoOpportunityBar.classList.add("is-hidden");
+        NovelUI.toast("シャッターチャンスを撮影しました。");
+      }
+    } finally {
+      button.disabled = false;
     }
   });
 

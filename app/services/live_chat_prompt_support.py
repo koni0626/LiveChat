@@ -108,6 +108,22 @@ def fallback_scene_choices(context: dict, speaker_name: str, message_text: str) 
     return text_prompt_support.fallback_scene_choices(context, speaker_name, message_text)
 
 
+def build_chat_suggestion_prompt(context: dict, speaker_name: str, message_text: str) -> str:
+    return text_prompt_support.build_chat_suggestion_prompt(context, speaker_name, message_text)
+
+
+def fallback_chat_suggestions(context: dict, speaker_name: str, message_text: str) -> dict:
+    return text_prompt_support.fallback_chat_suggestions(context, speaker_name, message_text)
+
+
+def build_photo_opportunity_prompt(context: dict, speaker_name: str, message_text: str) -> str:
+    return text_prompt_support.build_photo_opportunity_prompt(context, speaker_name, message_text)
+
+
+def fallback_photo_opportunities(context: dict, speaker_name: str, message_text: str) -> dict:
+    return text_prompt_support.fallback_photo_opportunities(context, speaker_name, message_text)
+
+
 def build_final_memory_summary_prompt(context: dict, character_id: int | None = None) -> str:
     return text_prompt_support.build_final_memory_summary_prompt(context, character_id)
 

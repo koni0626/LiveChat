@@ -8,9 +8,11 @@
       hasSceneChoices,
       isInteractionLocked,
       onMoodChange,
+      getPhotoOpportunities,
     } = options;
 
     let latestVisualMomentHint = "";
+    let latestPhotoOpportunities = [];
     let replyEffectTimer = null;
     let shutterChanceBusy = false;
 
@@ -87,6 +89,35 @@
       }
     }
 
+    function normalizeColor(value, index) {
+      const fallbackColors = ["green", "yellow", "red"];
+      const rawColor = String(value || "").toLowerCase();
+      if (rawColor === "blue") return "green";
+      return fallbackColors.includes(rawColor) ? rawColor : fallbackColors[index % fallbackColors.length];
+    }
+
+    function renderShutterButtons(chances) {
+      return `
+        <div class="live-chat-reply-effect-image-group" aria-label="シャッターチャンス">
+          ${chances.map((chance, index) => {
+            const color = normalizeColor(chance.display_color, index);
+            return `
+              <button
+                class="live-chat-reply-effect-image is-${NovelUI.escape(color)}"
+                type="button"
+                data-reply-effect-image
+                data-reply-effect-image-index="${index}"
+                title="シャッターチャンス"
+                aria-label="シャッターチャンス"
+              >
+                <i class="bi bi-camera-fill" aria-hidden="true"></i>
+              </button>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
     function trigger(effect) {
       const normalized = normalize(effect);
       if (!normalized) return;
@@ -118,18 +149,18 @@
       const layer = ensureLayer();
       if (layer) {
         latestVisualMomentHint = normalized.visualMomentHint;
-        const canSuggestImage = normalized.suggestImage && normalized.visualMomentHint && !hasSceneChoices?.() && !isInteractionLocked?.();
+        latestPhotoOpportunities = Array.isArray(getPhotoOpportunities?.()) ? getPhotoOpportunities().slice(0, 3) : [];
+        const shutterChances = latestPhotoOpportunities.length
+          ? latestPhotoOpportunities
+          : [{ id: "visual_moment", display_color: "green", shot_instruction: normalized.visualMomentHint, pose_style: "" }];
+        const canSuggestImage = normalized.suggestImage && (normalized.visualMomentHint || latestPhotoOpportunities.length) && !hasSceneChoices?.() && !isInteractionLocked?.();
         layer.className = `live-chat-reply-effect is-visible is-${normalized.emotion}`;
         layer.innerHTML = `
           <div class="live-chat-reply-effect-badge">
             <i class="bi ${icon(normalized.emotion)}" aria-hidden="true"></i>
             <span>${NovelUI.escape(normalized.moodLabel)}</span>
           </div>
-          ${canSuggestImage ? `
-            <button class="live-chat-reply-effect-image" type="button" data-reply-effect-image title="シャッターチャンス" aria-label="シャッターチャンス">
-              <i class="bi bi-camera-fill" aria-hidden="true"></i>
-            </button>
-          ` : ""}
+          ${canSuggestImage ? renderShutterButtons(shutterChances) : ""}
         `;
         clearReplyEffectTimer();
         if (!canSuggestImage) {
@@ -148,9 +179,9 @@
       }
     }
 
-    async function generateImageFromLatestHint(button = null) {
+    async function generateImageFromLatestHint(button = null, opportunity = null) {
       if (shutterChanceBusy || isInteractionLocked?.()) return;
-      const prompt = String(latestVisualMomentHint || "").trim();
+      const prompt = String(opportunity?.shot_instruction || latestVisualMomentHint || "").trim();
       if (!prompt) {
         NovelUI.toast("画像化できる表情メモがありません。", "warning");
         return;
@@ -186,7 +217,9 @@
         if (shutterChanceBusy || isInteractionLocked?.()) return;
         window.LiveChatSound?.unlock?.();
         window.LiveChatSound?.play("shutter");
-        await generateImageFromLatestHint(button);
+        const index = Number(button.dataset.replyEffectImageIndex || 0);
+        const opportunity = latestPhotoOpportunities[index] || null;
+        await generateImageFromLatestHint(button, opportunity);
       });
     }
 

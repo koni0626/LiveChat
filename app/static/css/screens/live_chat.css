@@ -2851,7 +2851,9 @@ body[data-screen="live-chat"].live-chat-ending-in-progress .live-chat-main {
 }
 
 .live-chat-action-panel.is-hidden,
-.live-chat-action-chip.is-hidden {
+.live-chat-action-chip.is-hidden,
+.live-chat-scene-suggestion-bar.is-hidden,
+.live-chat-photo-opportunity-bar.is-hidden {
   display: none;
 }
 
@@ -2944,6 +2946,90 @@ body[data-screen="live-chat"].live-chat-ending-in-progress .live-chat-main {
   border-radius: 999px;
   background: rgba(236, 111, 50, 0.12);
   color: inherit;
+}
+
+.live-chat-scene-suggestion-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.live-chat-photo-opportunity-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.live-chat-scene-suggestion,
+.live-chat-photo-opportunity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  max-width: min(100%, 16rem);
+  min-height: 2.2rem;
+  padding: 0.42rem 0.72rem;
+  border: 1px solid rgba(32, 73, 95, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #253044;
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.2;
+  box-shadow: 0 8px 18px rgba(17, 24, 39, 0.08);
+}
+
+.live-chat-photo-opportunity {
+  width: auto;
+  min-width: 9.4rem;
+  justify-content: flex-start;
+  padding-inline: 0.82rem 0.95rem;
+  border-color: rgba(17, 24, 39, 0.12);
+  color: #ffffff;
+  font-size: 0.86rem;
+  letter-spacing: 0;
+}
+
+.live-chat-scene-suggestion span,
+.live-chat-photo-opportunity span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-chat-scene-suggestion:hover,
+.live-chat-scene-suggestion:focus-visible,
+.live-chat-photo-opportunity:hover,
+.live-chat-photo-opportunity:focus-visible {
+  border-color: rgba(236, 111, 50, 0.38);
+  background: rgba(255, 255, 255, 0.94);
+  color: #111827;
+}
+
+.live-chat-scene-suggestion:disabled,
+.live-chat-photo-opportunity:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.live-chat-photo-opportunity.is-green,
+.live-chat-photo-opportunity.is-blue {
+  background:
+    linear-gradient(135deg, rgba(0, 245, 212, 0.16), rgba(236, 111, 50, 0.12)),
+    linear-gradient(180deg, rgba(13, 31, 53, 0.94), rgba(8, 17, 31, 0.88));
+  color: #7efaff;
+}
+
+.live-chat-photo-opportunity.is-yellow {
+  background: linear-gradient(180deg, #ffd75a, #d97706);
+  color: #2f2100;
+}
+
+.live-chat-photo-opportunity.is-red {
+  background: linear-gradient(180deg, #f05b5b, #b91c1c);
+  color: #ffffff;
 }
 
 .live-chat-compose-editor {
@@ -3528,6 +3614,12 @@ body[data-screen="live-chat"].live-chat-ending-in-progress .live-chat-main {
   background: rgba(7, 16, 31, 0.34);
 }
 
+.live-chat-reply-effect-image-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.58rem;
+}
+
 .live-chat-reply-effect-image {
   position: relative;
   justify-content: center;
@@ -3535,25 +3627,44 @@ body[data-screen="live-chat"].live-chat-ending-in-progress .live-chat-main {
   height: 3.35rem;
   min-height: 3.35rem;
   padding: 0;
-  border-color: rgba(0, 245, 212, 0.58);
+  --shutter-rgb: 0, 245, 212;
+  --shutter-bg-rgb: 5, 12, 24;
+  border-color: rgba(var(--shutter-rgb), 0.58);
   border-radius: 50%;
   color: #eaffff;
   background:
-    radial-gradient(circle at 50% 50%, rgba(0, 245, 212, 0.24), rgba(0, 245, 212, 0.08) 48%, rgba(5, 12, 24, 0.24) 72%),
-    rgba(0, 245, 212, 0.08);
+    radial-gradient(circle at 50% 50%, rgba(var(--shutter-rgb), 0.24), rgba(var(--shutter-rgb), 0.08) 48%, rgba(var(--shutter-bg-rgb), 0.24) 72%),
+    rgba(var(--shutter-rgb), 0.08);
   box-shadow:
-    0 0 0 0 rgba(0, 245, 212, 0.38),
-    0 0 24px rgba(0, 245, 212, 0.34),
+    0 0 0 0 rgba(var(--shutter-rgb), 0.38),
+    0 0 24px rgba(var(--shutter-rgb), 0.34),
     0 0 52px rgba(255, 122, 200, 0.18),
     inset 0 0 18px rgba(255, 255, 255, 0.08);
   animation: live-chat-shutter-chance 1.05s ease-in-out infinite;
+}
+
+.live-chat-reply-effect-image.is-yellow {
+  --shutter-rgb: 255, 215, 90;
+  --shutter-bg-rgb: 54, 34, 0;
+  color: #ffffff;
+}
+
+.live-chat-reply-effect-image.is-red {
+  --shutter-rgb: 240, 91, 91;
+  --shutter-bg-rgb: 38, 8, 13;
+}
+
+.live-chat-reply-effect-image.is-blue,
+.live-chat-reply-effect-image.is-green {
+  --shutter-rgb: 0, 245, 212;
+  --shutter-bg-rgb: 5, 12, 24;
 }
 
 .live-chat-reply-effect-image::before {
   content: "";
   position: absolute;
   inset: -0.42rem;
-  border: 1px solid rgba(0, 245, 212, 0.22);
+  border: 1px solid rgba(var(--shutter-rgb), 0.22);
   border-radius: 50%;
   opacity: 0.82;
   animation: live-chat-shutter-ring 1.55s ease-out infinite;
@@ -3561,7 +3672,7 @@ body[data-screen="live-chat"].live-chat-ending-in-progress .live-chat-main {
 
 .live-chat-reply-effect-image i {
   font-size: 1.24rem;
-  filter: drop-shadow(0 0 10px rgba(0, 245, 212, 0.8));
+  filter: drop-shadow(0 0 10px rgba(var(--shutter-rgb), 0.8));
 }
 
 .live-chat-reply-effect-image:hover,
@@ -3569,8 +3680,8 @@ body[data-screen="live-chat"].live-chat-ending-in-progress .live-chat-main {
   border-color: rgba(255, 255, 255, 0.78);
   color: #ffffff;
   background:
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.3), rgba(0, 245, 212, 0.18) 48%, rgba(5, 12, 24, 0.3) 72%),
-    rgba(0, 245, 212, 0.14);
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.3), rgba(var(--shutter-rgb), 0.18) 48%, rgba(var(--shutter-bg-rgb), 0.3) 72%),
+    rgba(var(--shutter-rgb), 0.14);
   outline: none;
 }
 
@@ -3720,16 +3831,16 @@ body[data-screen="live-chat"].live-chat-ending-in-progress .live-chat-main {
   100% {
     transform: translateY(0) scale(1);
     box-shadow:
-      0 0 0 0 rgba(0, 245, 212, 0.34),
-      0 0 24px rgba(0, 245, 212, 0.34),
+      0 0 0 0 rgba(var(--shutter-rgb), 0.34),
+      0 0 24px rgba(var(--shutter-rgb), 0.34),
       0 0 52px rgba(255, 122, 200, 0.18),
       inset 0 0 18px rgba(255, 255, 255, 0.08);
   }
   48% {
     transform: translateY(-0.08rem) scale(1.07);
     box-shadow:
-      0 0 0 0.36rem rgba(0, 245, 212, 0.08),
-      0 0 34px rgba(0, 245, 212, 0.54),
+      0 0 0 0.36rem rgba(var(--shutter-rgb), 0.08),
+      0 0 34px rgba(var(--shutter-rgb), 0.54),
       0 0 68px rgba(255, 122, 200, 0.3),
       inset 0 0 22px rgba(255, 255, 255, 0.12);
   }
@@ -5115,6 +5226,51 @@ body[data-screen="live-chat"] .live-chat-action-chip-icon {
 body[data-screen="live-chat"] .live-chat-action-chip button {
   background: rgba(0, 245, 212, 0.12);
   color: #dff6ff;
+}
+
+body[data-screen="live-chat"] .live-chat-scene-suggestion {
+  border-color: rgba(84, 177, 255, 0.2);
+  background: linear-gradient(180deg, rgba(13, 31, 53, 0.9), rgba(8, 17, 31, 0.84));
+  color: #dff6ff;
+  box-shadow: 0 0 16px rgba(0, 245, 212, 0.08);
+}
+
+body[data-screen="live-chat"] .live-chat-photo-opportunity {
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 18px rgba(0, 245, 212, 0.12);
+}
+
+body[data-screen="live-chat"] .live-chat-photo-opportunity.is-green,
+body[data-screen="live-chat"] .live-chat-photo-opportunity.is-blue {
+  background:
+    linear-gradient(135deg, rgba(0, 245, 212, 0.16), rgba(236, 111, 50, 0.12)),
+    linear-gradient(180deg, rgba(13, 31, 53, 0.94), rgba(8, 17, 31, 0.88));
+  color: #7efaff;
+}
+
+body[data-screen="live-chat"] .live-chat-photo-opportunity.is-yellow {
+  background: linear-gradient(180deg, #ffe36f, #c66a00);
+  color: #241900;
+}
+
+body[data-screen="live-chat"] .live-chat-photo-opportunity.is-red {
+  background: linear-gradient(180deg, #ff6464, #a9152a);
+  color: #fff6f6;
+}
+
+body[data-screen="live-chat"] .live-chat-scene-suggestion:hover,
+body[data-screen="live-chat"] .live-chat-scene-suggestion:focus-visible {
+  border-color: rgba(0, 245, 212, 0.45);
+  background:
+    linear-gradient(180deg, rgba(0, 245, 212, 0.14), rgba(0, 173, 206, 0.08)),
+    linear-gradient(180deg, rgba(13, 31, 53, 0.96), rgba(8, 17, 31, 0.9));
+  color: #7efaff;
+}
+
+body[data-screen="live-chat"] .live-chat-photo-opportunity:hover,
+body[data-screen="live-chat"] .live-chat-photo-opportunity:focus-visible {
+  border-color: rgba(255, 255, 255, 0.42);
+  filter: brightness(1.08);
 }
 
 body[data-screen="live-chat"] .live-chat-compose-proxy,
