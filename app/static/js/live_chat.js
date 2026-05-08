@@ -23,6 +23,7 @@
 
   const sessionId = Number(root.dataset.sessionId || 0);
   const projectId = Number(document.body?.dataset?.projectId || 0);
+  const isSuperuser = root.dataset.isSuperuser === "true";
   const stateBoard = document.getElementById("liveChatStateBoard");
   const memoryBoard = document.getElementById("liveChatMemoryBoard");
   const selectedImagePanel = document.getElementById("liveChatSelectedImagePanel");
@@ -432,6 +433,7 @@
     imageForm,
     getImageGenerationOptions: imageGenerationOptions,
     iconHtml: stageActionIcons.photoMode,
+    isSuperuser,
     getReward: (context) => activeAffinityReward(context || currentContext),
     applyContext,
     loadContext,

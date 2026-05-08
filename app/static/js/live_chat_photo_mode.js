@@ -7,6 +7,7 @@
       imageForm,
       getImageGenerationOptions,
       iconHtml,
+      isSuperuser = false,
       getReward,
       applyContext,
       loadContext,
@@ -20,6 +21,7 @@
     let busy = false;
 
     function canUse(context) {
+      if (isSuperuser) return true;
       const reward = getReward?.(context);
       return Boolean(reward?.clear_unlocked || reward?.closet_unlocked || reward?.event_claimed);
     }

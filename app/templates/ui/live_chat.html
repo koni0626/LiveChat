@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="live-chat-shell" data-session-id="{{ session_id }}">
+<section class="live-chat-shell" data-session-id="{{ session_id }}" data-is-superuser="{{ 'true' if current_user_role == 'superuser' else 'false' }}">
   <section class="panel-card live-chat-main">
     <div class="panel-head">
       <h3 id="liveChatTitle">ライブチャット</h3>

@@ -657,7 +657,7 @@ def generate_chat_photo_mode_shoot(session_id: int):
     context = live_chat_service.get_session_context(session_id)
     character_id = _active_character_id_from_context(context)
     reward = character_affinity_reward_service.get_reward(user.id, character_id) if character_id else None
-    if not reward or not reward.event_claimed_at:
+    if not authorization_service.is_superuser(user) and (not reward or not reward.event_claimed_at):
         raise ValidationError("撮影モードは好感度100クリア後に開放されます。")
     payload = user_setting_service.apply_image_generation_settings(user.id, payload)
     point_billing_service.ensure_image_generation_balance(user)
@@ -1114,5 +1114,4 @@ def set_chat_image_reference(session_id: int, image_id: int):
     if not result:
         raise NotFoundError()
     return json_response(result)
-
 
