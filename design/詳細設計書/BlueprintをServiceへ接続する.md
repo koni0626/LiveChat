@@ -8,7 +8,7 @@
 
 本ドキュメントは、以下の TODO を具体化するものである。
 
-- `design/進捗管理/todo.md`
+- `design/archive/2026-04_initial_mvp/todo.md`
   - 「## 1. 最優先TODO: BlueprintをServiceへ接続する」
 
 ---
@@ -47,7 +47,7 @@
 
 #### 参照した設計書
 - `design/API設計書.md`
-- `design/進捗管理/todo.md`
+- `design/archive/2026-04_initial_mvp/todo.md`
 
 ### 2.2 現状の問題
 

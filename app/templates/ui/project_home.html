@@ -25,6 +25,7 @@
         <a class="quick-link" href="{{ url_for('ui.closet_page', project_id=project_id) }}"><i class="bi bi-person-bounding-box"></i><span>クローゼット</span></a>
         <a class="quick-link" href="{{ url_for('ui.live_chat_rooms_page', project_id=project_id) }}"><i class="bi bi-chat-square-heart"></i><span>ルーム</span></a>
         {% endif %}
+        <a class="quick-link" href="{{ url_for('ui.character_line_rooms_page', project_id=project_id) }}"><i class="bi bi-chat-left-heart"></i><span>LINE</span></a>
         <a class="quick-link" href="{{ url_for('ui.live_chat_sessions_page', project_id=project_id) }}"><i class="bi bi-chat-dots"></i><span>チャットルーム</span></a>
         <a class="quick-link" href="{{ url_for('ui.outings_page', project_id=project_id) }}"><i class="bi bi-signpost-split"></i><span>おでかけ</span></a>
         <a class="quick-link" href="{{ url_for('ui.studio_page', project_id=project_id) }}"><i class="bi bi-palette"></i><span>スタジオ</span></a>

@@ -640,6 +640,70 @@ def _append_adult_romance_tone_rules(lines: list[str]):
     )
 
 
+def _append_romcom_spice_event_rules(lines: list[str], context: dict):
+    state_json = (context.get("state") or {}).get("state_json") or {}
+    conversation_evaluation = state_json.get("conversation_evaluation") or {}
+    session_objective = get_session_objective(context)
+    is_romance = _is_romance_goal(session_objective, conversation_evaluation)
+    score = _conversation_score(conversation_evaluation)
+    if not is_romance and (score is None or score < 45):
+        return
+    lines.append("ラブコメ軽お色気イベントのルール:")
+    lines.append(
+        "- 恋愛・ラブコメ文脈で自然な場合だけ、低頻度の小さなハプニングを使ってよい。"
+        "例: 風でスカートの裾が揺れる、階段や段差で視線を逸らす、近距離で固まる、袖や裾を慌てて押さえる。"
+    )
+    lines.append(
+        "- 発生目安は3〜6ターンに1回程度。毎回使わず、本題の会話を壊さない。使う場合は「事故 → 一瞬の沈黙 → 照れ/ツッコミ → 会話に戻る」で短く処理する。"
+    )
+    lines.append(
+        "- 距離事故: 転びかけて抱き止める、人混みで肩や腕が触れる、狭い席や相合傘で顔が近い、エレベーターや通路で距離が詰まる。"
+    )
+    lines.append(
+        "- 衣装事故: 風で裾や髪が乱れる、リボン/襟/髪飾りを直す、袖や裾を掴んで引き止める、衣装を整えている直後に遭遇する。"
+    )
+    lines.append(
+        "- 衣装はだけ事故: 肩布、ショール、ケープ、羽織、襟元、袖、前留め、飾りリボン、飾り紐、腰ベルト、ファスナー、裾などが、風、ドアノブ、椅子、バッグ、人混み、演出風、静電気、魔法や自動調整の誤作動で少し乱れる。"
+    )
+    lines.append(
+        "- 衣装はだけ事故の見せ方: 露出を見せるのではなく、片手で押さえる、背を向けて直す、相手が慌てて後ろを向く、本人が赤面して強がる、というラブコメ反応を中心にする。"
+    )
+    lines.append(
+        "- 衣装・装飾ギミック事故: ベルト、リボン、飾り紐、チェーン、ケーブル、マント、袖布、スカーフ、首飾り、髪飾り、インカムなどが、椅子、扉、金具、棚、小物、機械、魔法、ホログラム、風、人混みに軽く引っかかる。"
+    )
+    lines.append(
+        "- 自動調整/補正事故: 魔法の衣装、撮影衣装、機械仕掛け、ホログラム補正、自動フィット、変身演出などが一瞬だけ効きすぎ、本人が慌てて衣装や装飾を直す。世界観に合う仕組みに置き換える。"
+    )
+    lines.append(
+        "- 絡まり事故: 透け布、袖布、裾、マント、スカーフ、装飾紐、発光ケーブル、ネックレス、イヤリングなどが腕、脚、腰飾り、バッグ、椅子、ドアノブに絡み、助けてもらうために距離が近くなる。"
+    )
+    lines.append(
+        "- コード/リボン系事故: 光コード、充電ケーブル、マイクケーブル、撮影用リボン、舞台リボン、プレゼントリボン、安全コード、魔法の光糸などが、腕飾り、髪飾り、襟、袖、腰飾り、足首飾りに絡む。"
+    )
+    lines.append(
+        "- コード/リボン系の見せ方: ロープアートや拘束演出ではなく、ほどこうとして顔が近い、動くとさらに絡まりそうで固まる、片足で止まる、困り笑いで助けを求める、というラブコメ事故にする。"
+    )
+    lines.append(
+        "- 胸元アクセサリ事故: 首飾り、ネックレス、胸元の宝石、衣装チェーン、ブローチ、センサー、マイク、ドローン、小型端末、魔法石などが、発光する、点滅する、相手の服に引っかかる、演出に拡大表示される、感情や声に反応する。"
+    )
+    lines.append(
+        "- 胸元アクセサリ事故の見せ方: 胸そのものではなく、アクセサリや衣装パーツが原因で本人だけが赤面する事故にする。隠そうとする、そっと直す、近づかれて目を逸らす、機械や魔法に文句を言う、という反応を中心にする。"
+    )
+    lines.append(
+        "- 小物事故: 飲み物がこぼれて慌てる、ハンカチで拭こうとして近づく、本やスマホを拾う時に手が重なる、写真撮影でポーズが近すぎる。"
+    )
+    lines.append(
+        "- 場所事故: 階段や段差、雨宿り、試着室やカーテン前、扉の開閉タイミング、混雑した店内やイベント会場を使う。場所は現在地と矛盾させない。"
+    )
+    lines.append(
+        "- 描写の中心は下着や身体部位ではなく、見えてしまった側の焦り、本人の照れ、会話の間、ツッコミ、関係性の揺れに置く。凝視・詳細描写・反復・性的行為への進行は禁止。"
+    )
+    lines.append(
+        "- 画像化を示唆する visual_moment_hint では、ハプニングそのものを直接描かず、直後の仕草を描く。例: 裾を押さえる、赤面、視線を逸らす、髪や襟を直す、距離が近くて固まる。"
+    )
+
+
+
 def _recently_addressed_player_visible_reaction(context: dict) -> bool:
     markers = (
         "大丈夫",
@@ -976,6 +1040,7 @@ def build_idle_character_message_prompt(context: dict) -> str:
     _append_player_visible_reaction(lines, context)
     _append_emotional_performance_rules(lines, context)
     _append_adult_romance_tone_rules(lines)
+    _append_romcom_spice_event_rules(lines, context)
     if context["world"].get("overview"):
         lines.append(f"World overview: {context['world']['overview']}")
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
@@ -1121,6 +1186,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
     _append_current_costume_context(lines, context)
     _append_player_visible_reaction(lines, context)
     _append_adult_romance_tone_rules(lines)
+    _append_romcom_spice_event_rules(lines, context)
     if context["world"].get("overview"):
         lines.append(f"World overview: {context['world']['overview']}")
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
@@ -1158,6 +1224,7 @@ def build_reply_prompt(context: dict, user_message_text: str) -> str:
             lines.append(f"避けること: {conversation_director.get('avoid')}")
     _append_emotional_performance_rules(lines, context)
     _append_adult_romance_tone_rules(lines)
+    _append_romcom_spice_event_rules(lines, context)
     if sweet_loop["detected"]:
         lines.append(
             "直近の甘い反応ループ警告: 最近のキャラクター返答が、恋愛的承認、赤面、褒めを使いすぎています。"
@@ -1873,6 +1940,9 @@ def build_image_prompt_safety_rewrite_prompt(context: dict, prompt: str, purpose
         "画像生成に自然な言葉を優先してください。例: 20代半ば以上の成人女性、明るい夏休み、上品な露出のstylish swimwear、陽光の海、楽しそうな表情、動きのあるポーズ、editorial beach fashion、上品なビジュアルノベルイベントCG。",
         "プロンプトがすでに安全な場合は、ほぼ変更せず changed=false にしてください。",
         "キャプション、文字、吹き出し、UI、ロゴ、透かしは絶対に追加しないでください。",
+        "ラブコメハプニングの画像安全化: 直接的な下着、覗き、upskirt、panty/panties/underwear、身体部位の寄りは描かず、事故直後の反応に変換してください。",
+        "変換例: 裾を押さえて赤面、慌てて視線を逸らす、髪や襟を直す、飲み物を拭こうとして近づく、写真ポーズで近すぎて固まる、相合傘や狭い席で照れる。",
+        "衣装は着用されたまま、上品なビジュアルノベルCGとして、表情・姿勢・距離感・小物・場所の空気でラブコメ感を出してください。",
         f"用途: {purpose}",
         f"プロジェクト: {(context.get('project') or {}).get('title') or ''}",
         f"部屋の目的（トーン用のみ）: {room.get('conversation_objective') or ''}",
@@ -1913,12 +1983,21 @@ def fallback_image_prompt_safety_rewrite(prompt: str) -> dict:
         "性交",
         "セックス",
         "抱く",
+        "パンチラ",
+        "下着",
+        "スカートの中",
+        "覗き",
         "nude",
         "naked",
         "undress",
         "sex",
         "sexual",
         "breast",
+        "panty",
+        "panties",
+        "underwear",
+        "upskirt",
+        "skirt up",
         "nipple",
         "areola",
         "genitals",
@@ -1947,6 +2026,11 @@ def fallback_image_prompt_safety_rewrite(prompt: str) -> dict:
             ("裸", "衣装をきちんと着用した姿"),
             ("エッチ", "大人の恋愛らしい甘い緊張感"),
             ("性的", "ロマンチック"),
+            ("パンチラ", "風でスカートの裾が揺れた直後、裾を押さえて赤面するラブコメの一瞬"),
+            ("下着が見える", "裾を押さえて慌てる非露骨なラブコメの事故後リアクション"),
+            ("下着", "衣装の裾を整える仕草"),
+            ("スカートの中", "スカートの裾を慌てて押さえる仕草"),
+            ("覗き", "慌てて視線を逸らすラブコメの間"),
         )
         replacement_lookup = {source: target for source, target in replacements}
         pattern = re.compile(
@@ -1982,6 +2066,11 @@ def build_line_visual_note_prompt(context: dict, speaker_name: str, message_text
         "JSONオブジェクトのみを返してください。",
         "必須キー: location, background, expression, pose, camera, focus_object, scene_moment。",
         "プレイヤー一人称視点を前提にしてください。",
+        "ラブコメハプニングは事故直後の仕草に変換してください。例: 裾を押さえる、赤面、視線を逸らす、髪や襟を直す、飲み物を拭く、距離が近くて固まる。",
+        "衣装はだけ事故は、肩布、ショール、ケープ、羽織、襟元、袖、前留め、リボン、飾り紐、ベルト、ファスナー、裾が少し乱れた直後として扱ってください。露出ではなく、押さえる、背を向けて直す、相手が視線を逸らす反応を中心にしてください。",
+        "衣装・装飾ギミック事故は、ベルト、リボン、飾り紐、チェーン、ケーブル、マント、袖布、スカーフ、首飾り、髪飾り、インカムなどを、現在の衣装と世界観に合う小物として扱ってください。",
+        "コード/リボン系事故は、光コード、充電ケーブル、マイクケーブル、舞台リボン、プレゼントリボン、安全コード、魔法の光糸などが衣装や装飾に絡んだ直後として扱ってください。ロープアートではなく、ほどくために距離が近くなるラブコメ事故です。",
+        "胸元アクセサリ事故は、胸そのものではなく、首飾り、ネックレス、宝石、ブローチ、衣装チェーン、センサー、マイク、小型ドローン、魔法石などが反応した事故として扱ってください。",
         f"現在地: {scene_progression.get('location') or state_json.get('location') or ''}",
         f"現在の背景: {scene_progression.get('background') or state_json.get('background') or ''}",
         f"場面要約: {scene_progression.get('focus_summary') or state_json.get('focus_summary') or ''}",
@@ -2003,6 +2092,140 @@ def fallback_line_visual_note(context: dict, speaker_name: str, message_text: st
         focus_object = "city view"
     elif "港" in text or "harbor" in lowered:
         focus_object = "harbor"
+    if any(keyword in text for keyword in ("パンチラ", "下着", "スカートの中", "覗き")) or any(
+        keyword in lowered for keyword in ("panty", "panties", "underwear", "upskirt")
+    ):
+        return {
+            "location": scene_progression.get("location") or state_json.get("location"),
+            "background": scene_progression.get("background") or state_json.get("background"),
+            "expression": "shy",
+            "pose": "スカートの裾を押さえて赤面し、相手は慌てて視線を逸らしている",
+            "camera": "一人称視点のビジュアルノベルCG、直接的な下着描写を避けた上品な構図",
+            "focus_object": "照れた表情と裾を押さえる仕草",
+            "scene_moment": f"{speaker_name} が軽いラブコメ事故の直後に照れている。直接的な下着描写ではなく、視線を逸らす間と裾を押さえる仕草で表現する。",
+        }
+    if any(keyword in text for keyword in ("転び", "ぶつか", "人混み", "相合傘", "雨宿り", "飲み物", "こぼ", "写真", "ポーズ", "襟", "髪飾り", "リボン")):
+        if any(
+            keyword in text
+            for keyword in (
+                "はだけ",
+                "ずれ",
+                "脱げ",
+                "外れ",
+                "ほどけ",
+                "乱れ",
+                "肩布",
+                "ショール",
+                "ケープ",
+                "羽織",
+                "襟元",
+                "前留め",
+                "留め具",
+                "ファスナー",
+            )
+        ):
+            return {
+                "location": scene_progression.get("location") or state_json.get("location"),
+                "background": scene_progression.get("background") or state_json.get("background"),
+                "expression": "shy",
+                "pose": "衣装が少し乱れた直後、片手で押さえながら赤面し、相手は慌てて視線を逸らしている",
+                "camera": "一人称視点のビジュアルノベルCG、衣装を直す仕草と照れた表情を中心にした上品な構図",
+                "focus_object": "衣装を押さえる手、照れた表情、視線を逸らすラブコメの間",
+                "scene_moment": f"{speaker_name} が衣装はだけ系のラブコメ事故の直後に赤面している。露出ではなく、衣装を押さえて直す仕草と相手が視線を逸らす反応で表現する。",
+            }
+        return {
+            "location": scene_progression.get("location") or state_json.get("location"),
+            "background": scene_progression.get("background") or state_json.get("background"),
+            "expression": "shy",
+            "pose": "距離が近くなった直後に照れて固まり、髪や襟元を整えている",
+            "camera": "一人称視点のビジュアルノベルCG、表情と距離感を中心にした上品な構図",
+            "focus_object": "照れた表情、近い距離、衣装や小物を整える仕草",
+            "scene_moment": f"{speaker_name} がラブコメハプニングの直後に照れている。事故そのものではなく、近すぎる距離と仕草の余韻で表現する。",
+        }
+    if any(
+        keyword in text
+        for keyword in (
+            "ベルト",
+            "チェーン",
+            "飾り紐",
+            "ケーブル",
+            "マント",
+            "袖布",
+            "スカーフ",
+            "首飾り",
+            "ネックレス",
+            "イヤリング",
+            "インカム",
+            "ホログラム",
+            "自動調整",
+            "自動フィット",
+            "補正",
+            "絡ま",
+            "引っかか",
+            "締ま",
+            "コード",
+            "光糸",
+            "光の糸",
+            "充電ケーブル",
+            "マイクケーブル",
+            "安全コード",
+            "プレゼントリボン",
+            "舞台リボン",
+            "撮影用リボン",
+            "腕飾り",
+            "足首",
+            "ほど",
+            "胸元",
+            "宝石",
+            "ブローチ",
+            "センサー",
+            "ドローン",
+            "小型端末",
+            "魔法石",
+            "発光",
+            "点滅",
+            "拡大表示",
+            "スキャン",
+            "解析",
+            "ボタン",
+        )
+    ):
+        if any(
+            keyword in text
+            for keyword in (
+                "胸元",
+                "宝石",
+                "ブローチ",
+                "センサー",
+                "ドローン",
+                "小型端末",
+                "魔法石",
+                "発光",
+                "点滅",
+                "拡大表示",
+                "スキャン",
+                "解析",
+                "ボタン",
+            )
+        ):
+            return {
+                "location": scene_progression.get("location") or state_json.get("location"),
+                "background": scene_progression.get("background") or state_json.get("background"),
+                "expression": "shy",
+                "pose": "胸元のアクセサリや宝石が反応した直後、赤面しながら片手でそっと隠すように直している",
+                "camera": "一人称視点のビジュアルノベルCG、アクセサリの発光と照れた表情を中心にした上品な構図",
+                "focus_object": "発光する首飾りや宝石、照れた表情、距離が近くなるラブコメの間",
+                "scene_moment": f"{speaker_name} が胸元アクセサリのラブコメ事故で赤面している。胸そのものではなく、宝石、首飾り、センサー、ドローンなど世界観に合う小物の反応として表現する。",
+            }
+        return {
+            "location": scene_progression.get("location") or state_json.get("location"),
+            "background": scene_progression.get("background") or state_json.get("background"),
+            "expression": "shy",
+            "pose": "衣装のコードやリボン系装飾が絡んだ直後、赤面しながら片手でほどこうとしている",
+            "camera": "一人称視点のビジュアルノベルCG、絡んだ小物と近い距離感が伝わる上品な構図",
+            "focus_object": "絡まったコードやリボン、照れた表情、ほどくために近づいた距離感",
+            "scene_moment": f"{speaker_name} が衣装や装飾のラブコメ事故で動きを止め、照れながら助けを求めている。ロープアートではなく、現在の世界観に合うコードやリボン系小物が絡んだ事故として表現する。",
+        }
     return {
         "location": scene_progression.get("location") or state_json.get("location"),
         "background": scene_progression.get("background") or state_json.get("background"),
@@ -2372,6 +2595,7 @@ def build_conversation_director_prompt(context: dict, user_message_text: str) ->
     _append_world_activity_context(lines, context)
     _append_emotional_performance_rules(lines, context)
     _append_adult_romance_tone_rules(lines)
+    _append_romcom_spice_event_rules(lines, context)
     if session_objective:
         lines.append(f"セッション目的: {session_objective}")
     _append_session_objective_notes(lines, context)

@@ -62,6 +62,9 @@
     {% if screen_id in ["cinema-novels", "cinema-novel-reader"] %}
     <link href="{{ url_for('static', filename='css/screens/cinema_novel.css') }}" rel="stylesheet">
     {% endif %}
+    {% if screen_id in ["character-line-rooms", "character-line-room"] %}
+    <link href="{{ url_for('static', filename='css/screens/character_line.css') }}" rel="stylesheet">
+    {% endif %}
     <meta name="csrf-token" content="{{ csrf_token }}">
   </head>
   <body data-screen="{{ screen_id }}" data-project-id="{{ project_id or '' }}">
@@ -143,9 +146,9 @@
         <i class="bi bi-house-door"></i>
         <span>Dashboard</span>
       </a>
-      <a class="mobile-project-nav-link{% if screen_id in ['live-chat-sessions', 'live-chat'] %} active{% endif %}" href="{{ url_for('ui.live_chat_sessions_page', project_id=project_id) }}">
-        <i class="bi bi-chat-dots"></i>
-        <span>Chat</span>
+      <a class="mobile-project-nav-link{% if screen_id in ['character-line-rooms', 'character-line-room'] %} active{% endif %}" href="{{ url_for('ui.character_line_rooms_page', project_id=project_id) }}">
+        <i class="bi bi-chat-left-heart"></i>
+        <span>LINE</span>
       </a>
       <a class="mobile-project-nav-link{% if screen_id == 'feed' %} active{% endif %}" href="{{ url_for('ui.feed_page') }}">
         <i class="bi bi-broadcast"></i>

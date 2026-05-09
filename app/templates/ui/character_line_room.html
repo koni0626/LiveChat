@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="line-room-page" data-character-line-room="{{ room_id }}" data-project-id="{{ project_id }}">
+  <header class="line-page-head">
+    <div>
+      <div class="eyebrow">World LINE</div>
+      <h2 class="section-title mb-1" id="lineRoomTitle">LINE</h2>
+      <p class="section-copy mb-0" id="lineRoomMeta">ルームを読み込み中...</p>
+    </div>
+    <a class="btn btn-outline-light" href="{{ url_for('ui.character_line_rooms_page', project_id=project_id) }}">
+      <i class="bi bi-list-ul"></i>
+      <span>ルーム一覧</span>
+    </a>
+  </header>
+
+  <section class="line-chat-shell">
+    <aside class="line-participants panel-card">
+      <div class="panel-head">
+        <div>
+          <h3>参加キャラクター</h3>
+          <p class="section-copy mb-0">このルームで発言するメンバーです。</p>
+        </div>
+      </div>
+      <div class="line-participant-list" id="lineParticipantList"></div>
+    </aside>
+
+    <section class="line-phone" aria-live="polite">
+      <div class="line-phone-head">
+        <div>
+          <div class="line-phone-title" id="linePhoneTitle">LINE</div>
+          <div class="line-phone-status" id="linePhoneStatus">online</div>
+        </div>
+        <i class="bi bi-three-dots"></i>
+      </div>
+      <div class="line-message-list" id="lineMessageList">
+        <div class="empty-panel mb-0">メッセージを読み込み中...</div>
+      </div>
+      <div class="line-typing" id="lineTypingIndicator" hidden>
+        <div class="line-avatar line-avatar-small" id="lineTypingAvatar"></div>
+        <div class="line-typing-bubble">
+          <span id="lineTypingName">入力中</span>
+          <i></i><i></i><i></i>
+        </div>
+      </div>
+      <form class="line-composer" id="lineComposerForm" data-line-dropzone="true">
+        <div class="line-photo-preview" id="linePhotoPreview" hidden></div>
+        <div class="line-attachment-bar">
+          <label class="line-photo-button" for="linePhotoInput" title="写真を送る" aria-label="写真を送る">
+            <i class="bi bi-image"></i>
+            <span>写真</span>
+          </label>
+          <input class="d-none" id="linePhotoInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+        </div>
+        <textarea class="form-control" id="lineMessageInput" rows="2" maxlength="1000" placeholder="テーマを入力。例: ノアの露出度について"></textarea>
+        <div class="line-composer-tools">
+          <label class="line-turn-control" for="lineTurnsInput">
+            <span>最大</span>
+            <input class="form-control" id="lineTurnsInput" type="number" min="4" max="40" value="20">
+            <span>ターン</span>
+          </label>
+          <button class="btn btn-sunrise" type="submit" id="lineSendButton">
+            <i class="bi bi-send-fill"></i>
+            <span>送信</span>
+          </button>
+        </div>
+      </form>
+    </section>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/character_line_room_page.js') }}"></script>
+{% endblock %}

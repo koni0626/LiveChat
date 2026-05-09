@@ -35,6 +35,7 @@ def _project_nav(project_id: int | None, current_user: User | None = None):
         links.append({"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)})
         links.append({"label": "クローゼット", "icon": "bi-person-bounding-box", "href": url_for("ui.closet_page", project_id=project_id)})
         links.append({"label": "ルーム", "icon": "bi-chat-square-heart", "href": url_for("ui.live_chat_rooms_page", project_id=project_id)})
+    links.append({"label": "LINE", "icon": "bi-chat-left-heart", "href": url_for("ui.character_line_rooms_page", project_id=project_id)})
     links.append({"label": "チャットルーム", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)})
     links.append({"label": "おでかけ", "icon": "bi-signpost-split", "href": url_for("ui.outings_page", project_id=project_id)})
     links.append({"label": "スタジオ", "icon": "bi-palette", "href": url_for("ui.studio_page", project_id=project_id)})
@@ -286,6 +287,22 @@ def live_chat_rooms_page(project_id: int):
         screen_id="live-chat-rooms",
         project_id=project_id,
         manage_mode=True,
+    )
+
+
+@ui_bp.route("/projects/<int:project_id>/line", methods=["GET"])
+def character_line_rooms_page(project_id: int):
+    return _render("ui/character_line_rooms.html", title="LINE", screen_id="character-line-rooms", project_id=project_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/line/rooms/<int:room_id>", methods=["GET"])
+def character_line_room_page(project_id: int, room_id: int):
+    return _render(
+        "ui/character_line_room.html",
+        title="LINE",
+        screen_id="character-line-room",
+        project_id=project_id,
+        room_id=room_id,
     )
 
 

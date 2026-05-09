@@ -140,12 +140,12 @@
       const fileName = item.asset?.file_name || `live-chat-image-${item.id || "image"}.png`;
       return `
         <div class="live-chat-thumb-card ${item.is_selected ? "selected" : ""}">
-          <button class="live-chat-thumb ${item.is_selected ? "selected" : ""}" type="button" data-image-id="${item.id}" data-image-url="${NovelUI.escape(mediaUrl || "")}" title="クリックで現在の画像に変更。ダブルクリックで拡大">
+          <button class="live-chat-thumb ${item.is_selected ? "selected" : ""}" type="button" data-image-id="${item.id}" data-image-url="${NovelUI.escape(mediaUrl || "")}" aria-label="クリックで現在の画像に変更。ダブルクリックで拡大">
             ${mediaUrl ? `<img src="${mediaUrl}" alt="thumb">` : "<span>No Image</span>"}
             ${item.is_selected ? '<span class="live-chat-thumb-current"><span class="live-chat-thumb-current-dot" aria-hidden="true"></span>現在の画像</span>' : ""}
           </button>
           ${mediaUrl ? `
-            <a class="live-chat-thumb-download" href="${NovelUI.escape(mediaUrl)}" download="${NovelUI.escape(fileName)}" title="ダウンロード" aria-label="画像をダウンロード">
+            <a class="live-chat-thumb-download" href="${NovelUI.escape(mediaUrl)}" download="${NovelUI.escape(fileName)}" aria-label="画像をダウンロード">
               <i class="bi bi-download" aria-hidden="true"></i>
             </a>
           ` : ""}

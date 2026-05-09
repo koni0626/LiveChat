@@ -50,7 +50,6 @@
             <button class="live-chat-costume-preview-button" type="button" data-open-closet-picker="true">
               ${selectedMediaUrl ? `<img src="${NovelUI.escape(selectedMediaUrl)}" alt="${NovelUI.escape(selectedLabel || "costume")}">` : "<span>No Image</span>"}
               <span class="live-chat-costume-card-label">${NovelUI.escape(selectedLabel || "選択中")}</span>
-              <small>クリックして作成済み衣装から選択</small>
             </button>
           `;
         }

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="line-rooms-page" data-character-line-rooms="{{ project_id }}">
+  <header class="line-page-head">
+    <div>
+      <div class="eyebrow">World LINE</div>
+      <h2 class="section-title mb-1">LINEルーム</h2>
+      <p class="section-copy mb-0">キャラクター同士がテーマでワイワイ話すルームです。</p>
+    </div>
+    <a class="btn btn-outline-light" href="{{ url_for('ui.project_home_page', project_id=project_id) }}">
+      <i class="bi bi-arrow-left"></i>
+      <span>World</span>
+    </a>
+  </header>
+
+  <section class="line-rooms-layout">
+    <form class="line-room-create panel-card" id="lineRoomCreateForm">
+      <div class="panel-head">
+        <div>
+          <h3>ルーム作成</h3>
+          <p class="section-copy mb-0">参加キャラクターを選んでグループを作ります。</p>
+        </div>
+      </div>
+      <label class="form-label" for="lineRoomTitleInput">ルーム名</label>
+      <input class="form-control" id="lineRoomTitleInput" name="title" maxlength="255" placeholder="例: 放課後LINE">
+      <div class="line-room-create-tools">
+        <button class="btn btn-sm btn-outline-light" type="button" id="lineRoomSelectAllButton">
+          <i class="bi bi-check2-square"></i>
+          <span>全員</span>
+        </button>
+        <button class="btn btn-sm btn-outline-light" type="button" id="lineRoomClearButton">
+          <i class="bi bi-square"></i>
+          <span>解除</span>
+        </button>
+      </div>
+      <div class="line-character-checks" id="lineRoomCharacterChecks">
+        <div class="empty-panel mb-0">キャラクターを読み込み中...</div>
+      </div>
+      <button class="btn btn-sunrise w-100" type="submit" id="lineRoomCreateButton">
+        <i class="bi bi-plus-lg"></i>
+        <span>作成</span>
+      </button>
+    </form>
+
+    <section class="line-room-list panel-card">
+      <div class="panel-head">
+        <div>
+          <h3>ルーム一覧</h3>
+          <p class="section-copy mb-0">デフォルトの全員ルームは自動で用意されます。</p>
+        </div>
+      </div>
+      <div class="line-room-grid" id="lineRoomGrid">
+        <div class="empty-panel mb-0">ルームを読み込み中...</div>
+      </div>
+    </section>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/character_line_rooms_page.js') }}"></script>
+{% endblock %}

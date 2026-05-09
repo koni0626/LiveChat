@@ -30,6 +30,7 @@ from .blueprints.outings import outings_bp
 from .blueprints.world_news import world_news_bp
 from .blueprints.closet import closet_bp
 from .blueprints.cinema_novels import cinema_novels_bp
+from .blueprints.character_lines import character_lines_bp
 
 
 def _ensure_runtime_directories(app: Flask):
@@ -73,6 +74,83 @@ def _register_cli_commands(app: Flask):
         db.session.commit()
         click.echo(f"user ready: {user.email} (id={user.id}, role={user.role})")
 
+    @app.cli.command("generate-character-actions")
+    @click.option("--project-id", required=True, type=int, help="Project id to generate autonomous character actions for.")
+    @click.option("--count", default=3, show_default=True, type=int, help="Number of action logs to generate.")
+    @click.option("--target", default="feed", show_default=True, type=click.Choice(["feed", "news", "both"]), help="Where to publish generated actions.")
+    @click.option("--status", default="published", show_default=True, type=click.Choice(["published", "draft"]), help="Feed post status.")
+    @click.option("--user-id", type=int, help="Creator user id. Defaults to the project owner.")
+    @click.option("--dry-run", is_flag=True, help="Preview generated actions without saving.")
+    @click.option("--no-ai", is_flag=True, help="Use deterministic fallback generation without calling the text AI.")
+    @click.option("--with-images", is_flag=True, help="Generate romantic-comedy style Feed images for created Feed posts.")
+    @click.option("--image-size", default="1536x1024", show_default=True, help="Image size for generated Feed images.")
+    @click.option("--image-quality", default=None, help="Image quality for generated Feed images. Defaults to app setting.")
+    def generate_character_actions_command(
+        project_id: int,
+        count: int,
+        target: str,
+        status: str,
+        user_id: int | None,
+        dry_run: bool,
+        no_ai: bool,
+        with_images: bool,
+        image_size: str,
+        image_quality: str | None,
+    ):
+        from .services.autonomous_character_action_service import AutonomousCharacterActionService
+        from .utils import json_util
+
+        service = AutonomousCharacterActionService()
+        if dry_run:
+            result = service.preview_actions(project_id=project_id, count=count, use_ai=not no_ai)
+        else:
+            result = service.generate_actions(
+                project_id=project_id,
+                created_by_user_id=user_id,
+                count=count,
+                target=target,
+                status=status,
+                use_ai=not no_ai,
+                with_images=with_images,
+                image_size=image_size,
+                image_quality=image_quality,
+            )
+        click.echo(json_util.dumps(result, indent=2))
+
+    @app.cli.command("generate-character-line-thread")
+    @click.option("--project-id", required=True, type=int, help="Project id to generate a character LINE thread for.")
+    @click.option("--theme", required=True, help="Initial topic thrown in by the player.")
+    @click.option("--player-comment", default=None, help="Optional follow-up comment from the player.")
+    @click.option("--turns", default=20, show_default=True, type=int, help="Maximum number of LINE messages to generate.")
+    @click.option("--participants", default=8, show_default=True, type=int, help="Number of participating characters.")
+    @click.option("--exact-turns", is_flag=True, help="Generate exactly --turns messages instead of ending naturally.")
+    @click.option("--no-ai", is_flag=True, help="Use deterministic fallback generation without calling the text AI.")
+    @click.option("--json", "as_json", is_flag=True, help="Print raw JSON instead of LINE-style text.")
+    def generate_character_line_thread_command(
+        project_id: int,
+        theme: str,
+        player_comment: str | None,
+        turns: int,
+        participants: int,
+        exact_turns: bool,
+        no_ai: bool,
+        as_json: bool,
+    ):
+        from .services.character_line_thread_service import CharacterLineThreadService
+        from .utils import json_util
+
+        service = CharacterLineThreadService()
+        result = service.generate_thread(
+            project_id=project_id,
+            theme=theme,
+            turns=turns,
+            participant_count=participants,
+            player_comment=player_comment,
+            exact_turns=exact_turns,
+            use_ai=not no_ai,
+        )
+        click.echo(json_util.dumps(result, indent=2) if as_json else service.format_thread_text(result))
+
 
 def create_app(config_object=Config):
     app = Flask(__name__)
@@ -106,6 +184,7 @@ def create_app(config_object=Config):
     app.register_blueprint(world_news_bp, url_prefix="/api/v1")
     app.register_blueprint(closet_bp, url_prefix="/api/v1")
     app.register_blueprint(cinema_novels_bp, url_prefix="/api/v1")
+    app.register_blueprint(character_lines_bp, url_prefix="/api/v1")
 
     @app.before_request
     def enforce_csrf_protection():

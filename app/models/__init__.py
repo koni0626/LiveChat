@@ -11,6 +11,8 @@ from .character_intel_hint import CharacterIntelHint
 from .character_affinity_reward import CharacterAffinityReward
 from .character_user_memory import CharacterUserMemory
 from .character_feed_profile import CharacterFeedProfile
+from .character_line_message import CharacterLineMessage
+from .character_line_room import CharacterLineRoom
 from .character_outfit import CharacterOutfit
 from .player_profile_memory import PlayerProfileMemory
 from .cinema_novel import CinemaNovel
@@ -59,6 +61,8 @@ __all__ = [
     "CharacterAffinityReward",
     "CharacterUserMemory",
     "CharacterFeedProfile",
+    "CharacterLineMessage",
+    "CharacterLineRoom",
     "CharacterOutfit",
     "PlayerProfileMemory",
     "CinemaNovel",
