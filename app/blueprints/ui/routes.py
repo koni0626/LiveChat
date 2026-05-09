@@ -41,6 +41,8 @@ def _project_nav(project_id: int | None, current_user: User | None = None):
     links.append({"label": "スタジオ", "icon": "bi-palette", "href": url_for("ui.studio_page", project_id=project_id)})
     links.append({"label": "ワールドニュース", "icon": "bi-newspaper", "href": url_for("ui.world_news_page", project_id=project_id)})
     links.append({"label": "ノベル", "icon": "bi-film", "href": url_for("ui.cinema_novel_list_page", project_id=project_id)})
+    if can_manage_project:
+        links.append({"label": "ショート動画", "icon": "bi-camera-reels", "href": url_for("ui.short_video_page", project_id=project_id)})
     return links
 
 
@@ -59,6 +61,7 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
         "character-edit",
         "world-edit",
         "story-edit",
+        "short-videos",
         "live-chat-rooms",
         "live-chat-room-edit",
     } and not can_manage_project:
@@ -235,6 +238,11 @@ def story_session_page(project_id: int, session_id: int):
 @ui_bp.route("/projects/<int:project_id>/cinema-novels", methods=["GET"])
 def cinema_novel_list_page(project_id: int):
     return _render("ui/cinema_novels.html", title="ノベル", screen_id="cinema-novels", project_id=project_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/short-videos", methods=["GET"])
+def short_video_page(project_id: int):
+    return _render("ui/short_videos.html", title="ショート動画", screen_id="short-videos", project_id=project_id)
 
 
 @ui_bp.route("/projects/<int:project_id>/cinema-novels/<int:novel_id>", methods=["GET"])

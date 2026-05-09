@@ -763,12 +763,27 @@
   border-radius: .75rem;
   background: rgba(5, 12, 24, .76);
   color: #e7f9ff;
+  cursor: grab;
   text-align: left;
+}
+
+.cinema-comic-editor-thumb:active {
+  cursor: grabbing;
 }
 
 .cinema-comic-editor-thumb.is-active {
   border-color: rgba(103, 232, 249, .84);
   box-shadow: 0 0 0 2px rgba(103, 232, 249, .12);
+}
+
+.cinema-comic-editor-thumb.is-dragging {
+  opacity: .5;
+}
+
+.cinema-comic-editor-thumb.is-drop-target {
+  border-color: rgba(34, 211, 238, .95);
+  background: rgba(8, 47, 73, .88);
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, .18);
 }
 
 .cinema-comic-editor-thumb img,
@@ -1351,5 +1366,97 @@ body[data-screen="cinema-novel-reader"] .modal-backdrop {
     right: .75rem;
     bottom: .75rem;
     min-height: 190px;
+  }
+}
+.short-video-create-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 2fr) minmax(180px, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.short-video-workspace {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.short-video-list-panel {
+  position: sticky;
+  top: 18px;
+}
+
+.short-video-list {
+  display: grid;
+  gap: 10px;
+}
+
+.short-video-list-item {
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  background: rgba(7, 18, 35, 0.74);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  color: rgba(232, 246, 255, 0.96);
+}
+
+.short-video-list-item.is-active,
+.short-video-list-item:hover {
+  border-color: rgba(14, 165, 233, 0.65);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.22), rgba(79, 70, 229, 0.18));
+  box-shadow: 0 12px 28px rgba(14, 165, 233, 0.14);
+}
+
+.short-video-list-item span {
+  color: rgba(190, 214, 232, 0.82);
+  font-size: 0.84rem;
+}
+
+.short-video-bgm-field {
+  margin: 0 0 16px;
+}
+
+.short-video-character-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 42px;
+}
+
+.short-video-character-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(13, 25, 43, 0.86);
+  color: rgba(232, 246, 255, 0.92);
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+.short-video-character-chip.is-selected {
+  border-color: rgba(34, 211, 238, 0.78);
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.24), rgba(124, 58, 237, 0.28));
+  color: #ffffff;
+  box-shadow: 0 8px 20px rgba(34, 211, 238, 0.12);
+}
+
+.short-video-character-chip input {
+  margin: 0;
+}
+
+@media (max-width: 960px) {
+  .short-video-create-form,
+  .short-video-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .short-video-list-panel {
+    position: static;
   }
 }

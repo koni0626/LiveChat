@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="cinema-list-shell short-video-shell" data-short-video-page data-project-id="{{ project_id }}">
+  <div class="cinema-list-head">
+    <div>
+      <div class="eyebrow">Manual Short Video</div>
+      <h2>ショート動画</h2>
+      <p>短いシーン文と画像内テキストを1コマずつ作り、キャラクター参照画像つきでショート動画にします。</p>
+    </div>
+  </div>
+
+  <section class="cinema-production-panel short-video-create-panel">
+    <div>
+      <h3>新規ショート動画</h3>
+      <p>まず1本作成してから、シーンを追加しながら画像を生成します。</p>
+    </div>
+    <form class="short-video-create-form" id="shortVideoCreateForm">
+      <label class="cinema-production-field">
+        <span>タイトル</span>
+        <input class="form-control" name="title" placeholder="ラーメン回">
+      </label>
+      <label class="cinema-production-field cinema-production-field-wide">
+        <span>最初のシーン</span>
+        <textarea class="form-control" name="image_prompt" rows="2" placeholder="ノアとコリーがおいしそうにラーメンを食べる"></textarea>
+      </label>
+      <label class="cinema-production-field">
+        <span>画像内テキスト</span>
+        <input class="form-control" name="caption" placeholder="このラーメン、おいしー">
+      </label>
+      <button class="btn btn-dark" type="submit">
+        <i class="bi bi-plus-lg"></i>
+        作成
+      </button>
+    </form>
+  </section>
+
+  <section class="short-video-workspace">
+    <aside class="cinema-production-panel short-video-list-panel">
+      <div class="cinema-production-panel-head">
+        <div>
+          <h3>作品</h3>
+          <p>手動作成したショート動画。</p>
+        </div>
+      </div>
+      <div class="short-video-list" id="shortVideoList"></div>
+    </aside>
+
+    <section class="cinema-production-panel cinema-comic-editor-panel short-video-editor-panel" id="shortVideoEditorPanel" hidden>
+      <div class="cinema-production-panel-head">
+        <div>
+          <h3 id="shortVideoEditorTitle">ショート動画編集</h3>
+          <p>参照キャラクター、シーン文、画像内テキストを明示して画像を生成します。</p>
+        </div>
+        <a class="btn btn-sm btn-outline-dark" id="shortVideoExportButton" href="#" target="_blank" rel="noopener">
+          <i class="bi bi-camera-video"></i>
+          動画を書き出し
+        </a>
+      </div>
+      <fieldset class="cinema-production-bgm-field short-video-bgm-field">
+        <legend>動画BGM</legend>
+        <select class="form-select" id="shortVideoBgmSelect" aria-label="動画BGM">
+          <option value="">BGMなし</option>
+        </select>
+        <select class="form-select" id="shortVideoBgmVolumeSelect" aria-label="BGM音量">
+          <option value="0.3">音量 30%</option>
+          <option value="0.45" selected>音量 45%</option>
+          <option value="0.6">音量 60%</option>
+          <option value="0.8">音量 80%</option>
+        </select>
+        <label class="cinema-bgm-upload-button">
+          <input type="file" id="shortVideoBgmUploadInput" accept="audio/*">
+          <span><i class="bi bi-music-note-beamed"></i> BGMをアップロード</span>
+        </label>
+      </fieldset>
+      <div class="cinema-comic-editor-layout">
+        <aside class="cinema-comic-editor-sidebar">
+          <div class="cinema-comic-editor-thumbs" id="shortVideoSceneThumbs"></div>
+        </aside>
+        <section class="cinema-comic-editor-preview" id="shortVideoPreview"></section>
+        <section class="cinema-comic-editor-form">
+          <label class="form-label">参照キャラクター</label>
+          <div class="short-video-character-picker" id="shortVideoCharacterPicker"></div>
+          <label class="form-label" for="shortVideoScenePrompt">シーン文</label>
+          <textarea class="form-control" id="shortVideoScenePrompt" rows="6" placeholder="ノアとコリーがおいしそうにラーメンを食べる"></textarea>
+          <label class="form-label" for="shortVideoHeadline">画像内テキスト</label>
+          <textarea class="form-control" id="shortVideoHeadline" rows="3" placeholder="このラーメン、おいしー"></textarea>
+          <label class="form-label" for="shortVideoRevisionNote">再生成時の追加指示</label>
+          <textarea class="form-control" id="shortVideoRevisionNote" rows="3" placeholder="もっと湯気を強く、二人とも幸せそうに"></textarea>
+          <div class="cinema-comic-editor-scene-actions">
+            <button class="btn btn-sm btn-outline-dark" type="button" id="shortVideoAddScene"><i class="bi bi-plus-square"></i> 後ろに追加</button>
+            <button class="btn btn-sm btn-outline-dark" type="button" id="shortVideoCopyScene"><i class="bi bi-copy"></i> コピー</button>
+            <button class="btn btn-sm btn-outline-danger" type="button" id="shortVideoDeleteScene"><i class="bi bi-trash"></i> 削除</button>
+          </div>
+          <div class="cinema-comic-editor-history">
+            <div class="cinema-comic-editor-history-head">
+              <strong>画像履歴</strong>
+              <span>クリックでこのシーンへ戻します</span>
+            </div>
+            <div class="cinema-comic-editor-history-grid" id="shortVideoHistory"></div>
+          </div>
+          <div class="cinema-comic-editor-actions">
+            <button class="btn btn-outline-dark" type="button" id="shortVideoSaveScene"><i class="bi bi-save"></i> 保存</button>
+            <button class="btn btn-dark" type="button" id="shortVideoGenerateScene"><i class="bi bi-magic"></i> 画像生成</button>
+          </div>
+          <div class="cinema-production-result-meta" id="shortVideoStatus"></div>
+        </section>
+      </div>
+    </section>
+  </section>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/short_videos_page.js') }}?v=20260510g"></script>
+{% endblock %}

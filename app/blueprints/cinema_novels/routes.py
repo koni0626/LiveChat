@@ -81,6 +81,25 @@ def list_project_cinema_novels(project_id: int):
     return json_response([cinema_novel_service.serialize_novel(novel, user_id=user.id) for novel in novels])
 
 
+@cinema_novels_bp.route("/projects/<int:project_id>/short-videos", methods=["GET"])
+def list_project_short_videos(project_id: int):
+    project, user = _require_project(project_id)
+    include_unpublished = authorization_service.can_manage_project(user, project)
+    novels = cinema_novel_service.list_manual_short_videos(project_id, include_unpublished=include_unpublished)
+    return json_response([cinema_novel_service.serialize_novel(novel, include_chapters=True, user_id=user.id) for novel in novels])
+
+
+@cinema_novels_bp.route("/projects/<int:project_id>/short-videos", methods=["POST"])
+def create_project_short_video(project_id: int):
+    _project, user = _require_project(project_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        novel = cinema_novel_service.create_manual_short_video(project_id, user.id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    return json_response(cinema_novel_service.serialize_novel(novel, include_chapters=True, user_id=user.id), status=201)
+
+
 @cinema_novels_bp.route("/projects/<int:project_id>/cinema-novels/bgm", methods=["GET"])
 def list_cinema_novel_bgm(project_id: int):
     _project, _user = _require_project(project_id, for_manage=True)

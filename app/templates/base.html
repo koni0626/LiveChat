@@ -59,7 +59,7 @@
     {% if screen_id == "world-news" %}
     <link href="{{ url_for('static', filename='css/screens/world_news.css') }}" rel="stylesheet">
     {% endif %}
-    {% if screen_id in ["cinema-novels", "cinema-novel-reader"] %}
+    {% if screen_id in ["cinema-novels", "cinema-novel-reader", "short-videos"] %}
     <link href="{{ url_for('static', filename='css/screens/cinema_novel.css') }}" rel="stylesheet">
     {% endif %}
     {% if screen_id in ["character-line-rooms", "character-line-room"] %}

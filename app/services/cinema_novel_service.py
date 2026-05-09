@@ -64,6 +64,21 @@ class CinemaNovelService:
             query = query.filter(CinemaNovel.mobile_visible.is_(True))
         return query.order_by(CinemaNovel.sort_order.asc(), CinemaNovel.updated_at.desc(), CinemaNovel.id.desc()).all()
 
+    def list_manual_short_videos(self, project_id: int, *, include_unpublished: bool = False):
+        query = CinemaNovel.query.filter(
+            CinemaNovel.project_id == project_id,
+            CinemaNovel.deleted_at.is_(None),
+            CinemaNovel.mode == "short_comic_video",
+        )
+        if not include_unpublished:
+            query = query.filter(CinemaNovel.status == "published")
+        novels = query.order_by(CinemaNovel.updated_at.desc(), CinemaNovel.id.desc()).all()
+        return [
+            novel
+            for novel in novels
+            if self._load_json(novel.production_json, default={}).get("source_type") == "manual_short_video"
+        ]
+
     def get_novel(self, novel_id: int):
         return CinemaNovel.query.filter(CinemaNovel.id == novel_id, CinemaNovel.deleted_at.is_(None)).first()
 
@@ -88,6 +103,7 @@ class CinemaNovelService:
     def upload_bgm_asset(self, project_id: int, user_id: int, upload_file):
         if not upload_file:
             raise ValueError("file is required")
+        original_file_name = str(getattr(upload_file, "filename", "") or "").strip()
         asset = self._asset_service.create_asset(
             project_id,
             {
@@ -97,6 +113,7 @@ class CinemaNovelService:
                     {
                         "source": "cinema_novel_bgm_upload",
                         "uploaded_by_user_id": user_id,
+                        "original_file_name": original_file_name,
                     }
                 ),
             },
@@ -825,14 +842,17 @@ figcaption {
 
         from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
-        if not (novel.poster_asset_id or novel.cover_asset_id):
+        production = self._load_json(novel.production_json, default={})
+        manual_short_video = production.get("source_type") == "manual_short_video"
+
+        if not manual_short_video and not (novel.poster_asset_id or novel.cover_asset_id):
             try:
                 self.generate_short_comic_thumbnail(novel.id, {})
                 novel = self.get_novel(novel_id)
             except Exception:
                 current_app.logger.exception("failed to generate short comic thumbnail before video export")
         production = self._load_json(novel.production_json, default={})
-        if not production.get("end_card_asset_id"):
+        if not manual_short_video and not production.get("end_card_asset_id"):
             try:
                 self.generate_short_comic_end_card(novel.id, {})
                 novel = self.get_novel(novel_id)
@@ -854,7 +874,27 @@ figcaption {
             "label": self._load_video_font(ImageFont, size=32),
             "footer": self._load_video_font(ImageFont, size=24),
         }
-        title_image = self._asset_file_path(novel.poster_asset_id or novel.cover_asset_id)
+        first_scene_image_path = None
+        last_scene_image_path = None
+        if manual_short_video:
+            for chapter in chapters:
+                scenes = self._load_json(chapter.scene_json, default=[])
+                if not isinstance(scenes, list):
+                    continue
+                chapter_fallback = self._asset_file_path(chapter.cover_asset_id)
+                for scene in scenes:
+                    if not isinstance(scene, dict):
+                        continue
+                    image_path = (
+                        self._asset_file_path(scene.get("still_asset_id"))
+                        or self._asset_file_path(scene.get("background_asset_id"))
+                        or chapter_fallback
+                    )
+                    if image_path:
+                        first_scene_image_path = first_scene_image_path or image_path
+                        last_scene_image_path = image_path
+
+        title_image = first_scene_image_path if manual_short_video else self._asset_file_path(novel.poster_asset_id or novel.cover_asset_id)
         frame_paths = []
         durations = []
 
@@ -885,16 +925,18 @@ figcaption {
                 frame_paths.append(frame_path)
                 durations.append(duration)
 
-        add_panel(
-            title_image,
-            novel.title or "Untitled",
-            label=novel.subtitle or novel.description or "short comic",
-            footer="title",
-            title=True,
-            fade_in=False,
-            duration=2.8,
-        )
+        if title_image:
+            add_panel(
+                title_image,
+                novel.title or "Untitled",
+                label=novel.subtitle or novel.description or "short comic",
+                footer="title",
+                title=True,
+                fade_in=False,
+                duration=1.0 if manual_short_video else 2.8,
+            )
         previous_image_path = None
+        scene_entries = []
 
         for chapter in chapters:
             scenes = self._load_json(chapter.scene_json, default=[])
@@ -917,31 +959,41 @@ figcaption {
                 if not image_path:
                     continue
                 previous_image_path = image_path
-                add_panel(
-                    image_path,
-                    caption,
-                    label="" if scene.get("comic_page") else str(scene.get("speaker") or f"SCENE {int(chapter.chapter_no or 0):02d}-{scene_index + 1:02d}").strip(),
-                    footer=f"{int(chapter.chapter_no or 0):02d}-{scene_index + 1:02d}",
-                    duration=2.45,
+                scene_entries.append(
+                    {
+                        "image_path": image_path,
+                        "caption": caption,
+                        "label": "" if scene.get("comic_page") else str(scene.get("speaker") or f"SCENE {int(chapter.chapter_no or 0):02d}-{scene_index + 1:02d}").strip(),
+                        "footer": f"{int(chapter.chapter_no or 0):02d}-{scene_index + 1:02d}",
+                    }
                 )
 
-        end_card_image = self._asset_file_path(production.get("end_card_asset_id"))
-        if end_card_image:
+        for entry_index, entry in enumerate(scene_entries):
+            add_panel(
+                entry["image_path"],
+                entry["caption"],
+                label=entry["label"],
+                footer=entry["footer"],
+                duration=1.0 if manual_short_video and entry_index == len(scene_entries) - 1 else 2.45,
+            )
+
+        end_card_image = None if manual_short_video else self._asset_file_path(production.get("end_card_asset_id"))
+        if end_card_image and end_card_image != previous_image_path:
             add_panel(
                 end_card_image,
-                "LAPLACE CITY",
+                "END" if manual_short_video else "LAPLACE CITY",
                 label="END",
                 footer="end",
                 title=True,
                 fade_in=True,
-                duration=3.4,
+                duration=1.8,
             )
 
         if not frame_paths:
             raise ValueError("no scenes were found for comic video export")
 
         filename_base = self._safe_powerpoint_filename(novel.title or f"cinema_novel_{novel.id}")
-        filename = f"{filename_base}_comic_{novel.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.mp4"
+        filename = f"{filename_base}_comic.mp4"
         output_path = export_dir / filename
         concat_path = work_dir / "concat.txt"
         with concat_path.open("w", encoding="utf-8") as handle:
@@ -1090,21 +1142,117 @@ figcaption {
             self.generate_short_comic_end_card(novel.id, payload)
         return novel
 
+    def create_manual_short_video(self, project_id: int, user_id: int, payload: dict | None):
+        payload = dict(payload or {})
+        title = str(payload.get("title") or "ショート動画").strip() or "ショート動画"
+        raw_scenes = payload.get("scenes") if isinstance(payload.get("scenes"), list) else []
+        if not raw_scenes:
+            raw_scenes = [
+                {
+                    "caption": str(payload.get("caption") or "").strip(),
+                    "image_prompt": str(payload.get("image_prompt") or "").strip(),
+                    "character_ids": payload.get("character_ids") or [],
+                }
+            ]
+        scenes = []
+        for index, raw_scene in enumerate(raw_scenes):
+            if not isinstance(raw_scene, dict):
+                continue
+            scene = self._manual_short_video_scene(project_id, raw_scene, index=index)
+            if scene["caption"] or scene["image_prompt"]:
+                scenes.append(scene)
+        if not scenes:
+            scenes.append(self._manual_short_video_scene(project_id, {"caption": "", "image_prompt": ""}, index=0))
+        novel = CinemaNovel(
+            project_id=project_id,
+            created_by_user_id=user_id,
+            title=title[:255],
+            subtitle="手動作成ショート動画",
+            description=str(payload.get("description") or "").strip() or "Feedのような短い入力から作る手動ショート動画",
+            status=str(payload.get("status") or "draft").strip() or "draft",
+            mobile_visible=self._normalize_bool(payload.get("mobile_visible", True)),
+            mode="short_comic_video",
+            production_json=json_util.dumps(
+                {
+                    "source_type": "manual_short_video",
+                    "source_input": payload,
+                    "comic_layout": "short",
+                    "actual_panel_count": len(scenes),
+                }
+            ),
+        )
+        db.session.add(novel)
+        db.session.flush()
+        chapter = CinemaNovelChapter(
+            novel_id=novel.id,
+            chapter_no=1,
+            title="ショート動画",
+            body_markdown="\n".join(f"{index + 1}. {scene.get('caption') or scene.get('image_prompt')}" for index, scene in enumerate(scenes)),
+            scene_json=json_util.dumps(scenes),
+            sort_order=0,
+        )
+        db.session.add(chapter)
+        db.session.commit()
+        return novel
+
+    def _manual_short_video_scene(self, project_id: int, raw_scene: dict, *, index: int = 0) -> dict:
+        character_ids = self._normalize_character_ids(raw_scene.get("character_ids"))
+        characters = self._character_names_for_ids(project_id, character_ids)
+        caption = self._normalize_short_comic_caption(raw_scene.get("caption") or raw_scene.get("text") or "")
+        image_prompt = str(raw_scene.get("image_prompt") or raw_scene.get("scene_text") or "").strip()
+        return {
+            "id": str(raw_scene.get("id") or f"manual-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}-{index}"),
+            "type": "manual_short_video",
+            "speaker": "",
+            "text": caption,
+            "caption": caption,
+            "comic_layout": "short",
+            "comic_page": False,
+            "page_title": caption,
+            "page_panels": [],
+            "dialogue": [],
+            "tone": str(raw_scene.get("tone") or "manual").strip(),
+            "emotion": str(raw_scene.get("emotion") or "").strip(),
+            "shot": str(raw_scene.get("shot") or "social video still").strip(),
+            "visual_focus": image_prompt,
+            "image_prompt": image_prompt,
+            "character_ids": character_ids,
+            "characters": characters,
+            "background_asset_id": None,
+            "still_asset_id": raw_scene.get("still_asset_id"),
+            "choice_list": [],
+            "panel_index": index,
+        }
+
     def generate_short_comic_thumbnail(self, novel_id: int, payload: dict | None = None):
         payload = dict(payload or {})
         novel = self.get_novel(novel_id)
         if not novel:
             return None
         production = self._load_json(novel.production_json, default={})
+        manual_short_video = production.get("source_type") == "manual_short_video"
         storyboard = production.get("storyboard") if isinstance(production.get("storyboard"), dict) else {}
         panels = storyboard.get("pages") if isinstance(storyboard.get("pages"), list) else storyboard.get("panels")
         panels = panels if isinstance(panels, list) else []
         first_panel = panels[0] if panels and isinstance(panels[0], dict) else {}
         title = str(storyboard.get("title") or novel.title or "").strip()
         logline = str(storyboard.get("logline") or novel.subtitle or novel.description or "").strip()
+        if manual_short_video:
+            chapters = self.list_chapters(novel.id)
+            first_chapter = chapters[0] if chapters else None
+            scenes = self._load_json(first_chapter.scene_json, default=[]) if first_chapter else []
+            scenes = scenes if isinstance(scenes, list) else []
+            first_scene = next((scene for scene in scenes if isinstance(scene, dict)), {})
+            if first_scene:
+                first_panel = first_scene
+                scene_line = str(first_scene.get("image_prompt") or first_scene.get("visual_focus") or "").strip()
+                scene_caption = str(first_scene.get("caption") or first_scene.get("text") or "").strip()
+                logline = scene_line or scene_caption or logline
         headline = self._normalize_short_comic_caption(payload.get("caption") or title or logline or "ショート漫画")
         source_input = production.get("source_input") if isinstance(production.get("source_input"), dict) else payload
         main_character = self._main_character_name_from_payload(novel.project_id, source_input)
+        if manual_short_video and not main_character:
+            main_character = "、".join(str(item) for item in first_panel.get("characters") or [] if str(item).strip())
         searchable = "\n".join(
             [
                 title,
@@ -1115,16 +1263,31 @@ figcaption {
                 str(first_panel.get("image_prompt") or ""),
             ]
         )
-        references = self._matching_character_references(novel.project_id, searchable, limit=3)
-        reference_paths, reference_asset_ids = self._resolve_reference_image_paths(
-            [item.get("base_asset_id") for item in references if item.get("base_asset_id")]
-        )
+        reference_asset_ids = self._scene_character_reference_asset_ids(novel.project_id, first_panel) if manual_short_video else []
+        if reference_asset_ids:
+            reference_paths, reference_asset_ids = self._resolve_reference_image_paths(reference_asset_ids)
+        else:
+            references = self._matching_character_references(novel.project_id, searchable, limit=3)
+            reference_paths, reference_asset_ids = self._resolve_reference_image_paths(
+                [item.get("base_asset_id") for item in references if item.get("base_asset_id")]
+            )
         options = self._user_setting_service.apply_cinema_novel_image_generation_settings(payload.get("image_options") or payload)
         options["size"] = "1024x1536" if bool(getattr(novel, "mobile_visible", True)) else "1536x1024"
         options["quality"] = options.get("quality") or "medium"
         options["model"] = options.get("model") or options.get("image_ai_model") or "gpt-image-2"
         art_style = self._short_comic_art_style(source_input)
         prompt = self._short_comic_thumbnail_prompt(novel, headline, first_panel, main_character=main_character, logline=logline, art_style=art_style)
+        if manual_short_video:
+            prompt = "\n".join(
+                [
+                    prompt,
+                    "",
+                    "Manual short video opening rule:",
+                    "Base this opening thumbnail on the first manual scene's scene text, selected reference characters, image headline, visible action, props, and emotion.",
+                    "Do not invent an unrelated manga premise. The opening must feel like a strong title image for the same short video the viewer will watch next.",
+                    "Use Feed-like impact: event-first composition, readable environment, dramatic social-media incident energy, and expressive character reaction.",
+                ]
+            )
         revision_prompt = "\n".join(
             str(payload.get(key) or "").strip()
             for key in ("image_prompt", "revision_prompt")
@@ -1501,15 +1664,39 @@ figcaption {
                     " ".join(str(item) for item in scene.get("characters") or []),
                 ]
             )
-            references = self._matching_character_references(novel.project_id, searchable, limit=3)
-            reference_paths, reference_asset_ids = self._resolve_reference_image_paths(
-                [item.get("base_asset_id") for item in references if item.get("base_asset_id")]
+            use_current_image = bool(payload.get("use_current_image")) and bool(scene.get("still_asset_id"))
+            current_image_paths, current_image_asset_ids = (
+                self._resolve_reference_image_paths([scene.get("still_asset_id")])
+                if use_current_image
+                else ([], [])
             )
+            explicit_reference_ids = self._scene_character_reference_asset_ids(novel.project_id, scene)
+            if explicit_reference_ids:
+                reference_paths, reference_asset_ids = self._resolve_reference_image_paths(explicit_reference_ids)
+            else:
+                references = self._matching_character_references(novel.project_id, searchable, limit=3)
+                reference_paths, reference_asset_ids = self._resolve_reference_image_paths(
+                    [item.get("base_asset_id") for item in references if item.get("base_asset_id")]
+                )
             prompt = (
                 self._comic_page_image_prompt(novel, scene, art_style=art_style)
                 if scene.get("comic_page")
                 else self._short_comic_image_prompt(novel, scene, caption, art_style=art_style)
             )
+            if current_image_paths:
+                prompt = "\n".join(
+                    [
+                        prompt,
+                        "",
+                        "Current displayed image revision mode:",
+                        "Use the first attached image as the current displayed panel to revise, but the revision note must visibly change the result.",
+                        "Preserve useful continuity from the current image only where it does not weaken the requested change.",
+                        "If the current image is too stiff, plain, expressionless, or too close to a character sheet, make the new result more dynamic and cinematic instead of preserving that stiffness.",
+                        "Use the remaining attached reference images only for character identity, facial features, hairstyle, outfit design, and rendering consistency.",
+                    ]
+                )
+                reference_paths = [*current_image_paths, *reference_paths]
+                reference_asset_ids = [*current_image_asset_ids, *reference_asset_ids]
             image_jobs.append(
                 {
                     "scene_index": scene_index,
@@ -1527,6 +1714,7 @@ figcaption {
                         "scene_index": scene_index,
                         "caption": caption,
                         "reference_asset_ids": reference_asset_ids,
+                        "current_image_revision_asset_ids": current_image_asset_ids,
                     },
                 }
             )
@@ -1600,6 +1788,12 @@ figcaption {
                     scene[key] = value
                 else:
                     scene.pop(key, None)
+        if "character_ids" in payload:
+            character_ids = self._normalize_character_ids(payload.get("character_ids"))
+            scene["character_ids"] = character_ids
+            scene["characters"] = self._character_names_for_ids(novel.project_id, character_ids)
+        elif "characters" in payload and isinstance(payload.get("characters"), list):
+            scene["characters"] = [str(item).strip() for item in payload.get("characters") if str(item).strip()]
 
         if "selected_asset_id" in payload:
             try:
@@ -1645,10 +1839,29 @@ figcaption {
         if not isinstance(scenes, list):
             scenes = []
         operation = str(payload.get("operation") or "").strip()
-        if operation not in {"add_after", "copy_after", "delete"}:
+        if operation not in {"add_after", "copy_after", "delete", "reorder"}:
             raise ValueError("operation is required")
         if operation in {"copy_after", "delete"} and (scene_index < 0 or scene_index >= len(scenes)):
             raise ValueError("scene was not found")
+        if operation == "reorder":
+            try:
+                from_scene_index = int(payload.get("from_scene_index"))
+                to_scene_index = int(payload.get("to_scene_index"))
+            except (TypeError, ValueError):
+                raise ValueError("from_scene_index and to_scene_index are required")
+            if from_scene_index < 0 or from_scene_index >= len(scenes) or to_scene_index < 0 or to_scene_index >= len(scenes):
+                raise ValueError("scene was not found")
+            scene = scenes.pop(from_scene_index)
+            scenes.insert(to_scene_index, scene)
+            chapter.scene_json = json_util.dumps(scenes)
+            db.session.add(chapter)
+            db.session.commit()
+            return {
+                "novel": self.serialize_novel(novel, include_chapters=True),
+                "chapter": self.serialize_chapter(chapter),
+                "scene_index": to_scene_index,
+                "operation": operation,
+            }
 
         production = self._load_json(novel.production_json, default={})
         comic_layout = production.get("comic_layout") if isinstance(production, dict) else None
@@ -1662,11 +1875,15 @@ figcaption {
             scene = copy.deepcopy(current_scene)
             scene["id"] = f"manual-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
             scene.pop("still_asset_history_ids", None)
+            scene["still_asset_id"] = None
             scenes.insert(new_scene_index, scene)
         else:
             caption = str(payload.get("caption") or "新しいコマ").strip() or "新しいコマ"
             image_prompt = str(payload.get("image_prompt") or current_scene.get("image_prompt") or current_scene.get("visual_focus") or "").strip()
-            characters = current_scene.get("characters") if isinstance(current_scene.get("characters"), list) else []
+            character_ids = self._normalize_character_ids(payload.get("character_ids") or current_scene.get("character_ids") or [])
+            characters = self._character_names_for_ids(novel.project_id, character_ids)
+            if not characters:
+                characters = current_scene.get("characters") if isinstance(current_scene.get("characters"), list) else []
             scene = {
                 "id": f"manual-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}",
                 "type": "narration",
@@ -1679,6 +1896,7 @@ figcaption {
                 "tone": str(current_scene.get("tone") or "").strip(),
                 "emotion": str(current_scene.get("emotion") or "").strip(),
                 "shot": str(current_scene.get("shot") or "thumbnail composition").strip(),
+                "character_ids": character_ids,
                 "characters": characters,
                 "comic_page": bool(current_scene.get("comic_page")) or comic_layout == "page",
                 "page_panels": copy.deepcopy(current_scene.get("page_panels") or []),
@@ -2101,6 +2319,8 @@ figcaption {
         return text[:33].rstrip() + "..."
 
     def _short_comic_image_prompt(self, novel, scene: dict, caption: str, *, art_style: str = "reference_image") -> str:
+        if str(scene.get("type") or "").strip() == "manual_short_video":
+            return self._manual_short_video_image_prompt(novel, scene, caption, art_style=art_style)
         tone = str(scene.get("tone") or "").strip() or "dramatic"
         emotion = str(scene.get("emotion") or "").strip()
         shot = str(scene.get("shot") or "").strip() or "thumbnail composition"
@@ -2156,6 +2376,120 @@ figcaption {
                 "Scene prompt:",
                 base_prompt or visual_focus or caption,
             ]
+        )
+
+    def _manual_short_video_image_prompt(self, novel, scene: dict, caption: str, *, art_style: str = "reference_image") -> str:
+        is_mobile = bool(getattr(novel, "mobile_visible", True))
+        aspect_instruction = (
+            "9:16 vertical smartphone visual novel event CG / social-media incident photo"
+            if is_mobile
+            else "16:9 horizontal cinematic visual novel event CG / social-media incident photo"
+        )
+        scene_text = str(scene.get("image_prompt") or scene.get("visual_focus") or "").strip()
+        characters = ", ".join(str(item) for item in scene.get("characters") or [] if str(item).strip())
+        project = Project.query.get(novel.project_id)
+        world = World.query.filter_by(project_id=novel.project_id).first()
+        character_contexts = self._scene_character_contexts(novel.project_id, scene)
+        visual_direction = self._manual_short_video_visual_direction(scene_text, caption)
+        scene_brief = self._manual_short_video_scene_brief(scene_text, caption)
+        style_instruction = self._short_comic_art_style_instruction(art_style)
+        text_lines = (
+            [
+                "Text overlay requirement:",
+                f"Add this exact Japanese headline text inside the image, large and readable: 「{caption}」",
+                "Place the headline like a polished short-video caption in a reserved top or bottom band. The headline must be secondary to the event CG composition and must not force a thumbnail-like centered character pose.",
+                "Do not cover character faces, hands, food, props, motion, or the key action with text.",
+                "Do not add any other text, gibberish, watermark, logo, speech bubble text, UI text, or extra captions.",
+            ]
+            if caption
+            else [
+                "Text overlay requirement:",
+                "Do not add captions, subtitles, UI text, gibberish, watermark, logo, or speech bubble text.",
+            ]
+        )
+        return "\n".join(
+            [
+                "Manual short video dynamic mode:",
+                "Create a high-impact Feed-like image for a manual short video scene.",
+                "Use the attached reference images as the primary source of character identity and art style.",
+                "If multiple reference images are provided, include all selected referenced characters in the scene unless the scene text clearly says otherwise.",
+                "Keep the same face, hair, outfit design logic, coloring, rendering quality, material detail, and mood for every referenced character.",
+                "All visible characters must share one unified high-end 3D, semi-realistic, cinematic game-CG style. Do not render one character as lower-detail anime, chibi, manga, sketch, or flat illustration.",
+                style_instruction,
+                f"Target frame: {aspect_instruction}.",
+                "No speech bubbles, no UI, no logo, no watermark.",
+                "Do not make a simple standing portrait, idle pose, catalog pose, or generic promotional still.",
+                "The image must depict the user's scene text as one clear visible moment: concrete action, props, facial expression, body language, and readable environment.",
+                "Make it feel like a dramatic social-media incident photo or visual novel event CG: caught-in-the-act composition, expressive reaction, visible cause of the situation, and a clear environment.",
+                "The characters should be doing something specific: reacting, pointing, stumbling, holding an object, eating, reaching, laughing, inspecting a device, shielding themselves from chaos, or being caught mid-action.",
+                "Use dynamic camera language where appropriate: dutch angle, close foreground object, over-the-shoulder framing, shallow depth of field, motion blur, steam, dramatic lighting, cluttered evidence, or a comedic reveal in the background.",
+                "Compose like the Feed image generator: event-first, prop/action-first, expressive reaction, visible environment, not a poster pose.",
+                f"Primary visual scene brief: {scene_brief}",
+                "Treat the primary visual scene brief as the main source of truth for composition, action, props, environment, and emotion.",
+                f"Visual direction: {visual_direction}",
+                "The viewer should understand the situation from the image alone.",
+                f"Short video title: {novel.title or ''}",
+                f"Selected reference characters: {characters or 'none explicitly selected'}",
+                f"Scene text to visualize: {scene_text or caption}",
+                f"World: {getattr(project, 'title', '') or ''}. {getattr(project, 'summary', '') or ''}",
+                f"World setting: {(getattr(world, 'overview', '') or '')} {(getattr(world, 'tone', '') or '')}" if world else "World setting: ",
+                f"Selected character settings: {json_util.dumps(character_contexts)}",
+                "",
+                *text_lines,
+                "",
+                "Safety/style guardrail: keep teasing or romantic-comedy moments tasteful and non-explicit; no nudity, no exposed intimate body parts, no sexual framing.",
+            ]
+        )
+
+    def _manual_short_video_scene_brief(self, scene_text: str, caption: str = "") -> str:
+        text = str(scene_text or "").strip()
+        caption_text = str(caption or "").strip()
+        if text and caption_text and caption_text not in text:
+            return f"{text} / visible headline emotion: {caption_text}"
+        if text:
+            return text
+        if caption_text:
+            return caption_text
+        return "A clear character incident with visible action, props, readable environment, and expressive reaction."
+
+    def _manual_short_video_visual_direction(self, scene_text: str, caption: str = "") -> str:
+        text = f"{scene_text or ''}\n{caption or ''}".lower()
+        food_words = ("ラーメン", "料理", "食べ", "飯", "ごはん", "麺", "辛", "甘", "スイーツ", "カフェ", "肉", "ソース", "湯気")
+        tangle_words = ("ロープ", "ケーブル", "コード", "リボン", "絡ま", "引っか", "ひっか", "ほどけ")
+        fall_words = ("転", "こけ", "つまず", "尻もち", "倒れ", "落ち", "よろけ")
+        romance_words = ("照れ", "赤面", "ドキ", "告白", "距離", "手を", "近い", "ラブ", "恋")
+        report_words = ("発見", "目撃", "現地", "速報", "事件", "騒ぎ", "トラブル")
+        photo_words = ("写真", "撮影", "ポーズ", "自撮り", "映り", "写り")
+        if any(word in text for word in food_words):
+            return (
+                "Food reaction event CG. Put the food or ramen bowl large in the foreground, with steam/sauce/chopsticks as dynamic foreground elements. "
+                "Show the selected characters leaning into the food, eating or reacting mid-action, with expressive faces and a readable restaurant/cafe environment. "
+                "Avoid a plain seated portrait; make the food, hands, steam, and reaction drive the composition."
+            )
+        if any(word in text for word in tangle_words):
+            return (
+                "Tangled prop mishap event CG. Show the rope/cable/ribbon visibly caught on clothing, hands, chair, mic, or nearby fixture. "
+                "Use diagonal lines and awkward body language to show motion and confusion; keep it tasteful and non-explicit."
+            )
+        if any(word in text for word in fall_words):
+            return (
+                "Near-fall or recovery moment. Capture the instant of stumbling or regaining balance: tilted camera, reaching hand, flying prop, surprised expression, and environment clues."
+            )
+        if any(word in text for word in romance_words):
+            return (
+                "Small romantic-comedy accident as visual evidence. Use flustered expression, awkward distance, hands/eye contact, warm dramatic lighting, and one concrete prop that explains the moment."
+            )
+        if any(word in text for word in report_words):
+            return (
+                "Live field-report incident composition. Put one character in the foreground reacting, with the concrete incident unfolding behind or beside them. Make the cause visible."
+            )
+        if any(word in text for word in photo_words):
+            return (
+                "Failed photo / behind-the-scenes shot. The character is trying for a nice pose, but a funny background detail, prop, timing mistake, or expression ruins it."
+            )
+        return (
+            "Feed-style event CG. Choose the most imageable beat from the scene text and show one clear action, one prop or environmental clue, and one strong emotion. "
+            "Use an off-center composition, dynamic camera angle, foreground object, and expressive body language so it does not look like a character sheet."
         )
 
     def _short_comic_thumbnail_prompt(self, novel, headline: str, panel: dict, *, main_character: str = "", logline: str = "", art_style: str = "reference_image") -> str:
@@ -4566,10 +4900,13 @@ figcaption {
         asset = Asset.query.get(asset_id)
         if not asset or getattr(asset, "deleted_at", None):
             return None
+        metadata = self._load_json(asset.metadata_json, default={})
         return {
             "id": asset.id,
             "asset_type": asset.asset_type,
             "file_name": asset.file_name,
+            "display_name": metadata.get("original_file_name") or asset.file_name,
+            "metadata": metadata,
             "file_path": asset.file_path,
             "media_url": self._media_url(asset.file_path),
             "width": asset.width,
@@ -4692,6 +5029,88 @@ figcaption {
         searchable_text = "\n".join([str(chapter.title or ""), str(chapter.body_markdown or ""), scene_text])
         return [item["base_asset_id"] for item in self._matching_character_references(project_id, searchable_text)]
 
+    def _normalize_character_ids(self, values) -> list[int]:
+        if values is None:
+            return []
+        if not isinstance(values, list):
+            values = [values]
+        ids = []
+        for value in values:
+            try:
+                character_id = int(value)
+            except (TypeError, ValueError):
+                continue
+            if character_id > 0 and character_id not in ids:
+                ids.append(character_id)
+        return ids[:6]
+
+    def _character_names_for_ids(self, project_id: int, character_ids) -> list[str]:
+        ids = self._normalize_character_ids(character_ids)
+        if not ids:
+            return []
+        rows = Character.query.filter(
+            Character.project_id == project_id,
+            Character.deleted_at.is_(None),
+            Character.id.in_(ids),
+        ).all()
+        by_id = {int(row.id): row for row in rows}
+        names = []
+        for character_id in ids:
+            row = by_id.get(int(character_id))
+            if row:
+                name = str(row.name or row.nickname or "").strip()
+                if name:
+                    names.append(name)
+        return names
+
+    def _scene_character_reference_asset_ids(self, project_id: int, scene: dict) -> list[int]:
+        ids = self._normalize_character_ids((scene or {}).get("character_ids"))
+        if not ids:
+            return []
+        rows = Character.query.filter(
+            Character.project_id == project_id,
+            Character.deleted_at.is_(None),
+            Character.id.in_(ids),
+        ).all()
+        by_id = {int(row.id): row for row in rows}
+        asset_ids = []
+        for character_id in ids:
+            row = by_id.get(int(character_id))
+            asset_id = getattr(row, "base_asset_id", None) if row else None
+            if asset_id and asset_id not in asset_ids:
+                asset_ids.append(asset_id)
+        return asset_ids
+
+    def _scene_character_contexts(self, project_id: int, scene: dict) -> list[dict]:
+        ids = self._normalize_character_ids((scene or {}).get("character_ids"))
+        if not ids:
+            return []
+        rows = Character.query.filter(
+            Character.project_id == project_id,
+            Character.deleted_at.is_(None),
+            Character.id.in_(ids),
+        ).all()
+        by_id = {int(row.id): row for row in rows}
+        contexts = []
+        for character_id in ids:
+            character = by_id.get(int(character_id))
+            if not character:
+                continue
+            contexts.append(
+                {
+                    "id": character.id,
+                    "name": character.name,
+                    "nickname": character.nickname,
+                    "character_summary": getattr(character, "character_summary", None),
+                    "personality": character.personality,
+                    "speech_style": character.speech_style,
+                    "appearance": character.appearance_summary,
+                    "art_style": getattr(character, "art_style", None),
+                    "ng_rules": character.ng_rules,
+                }
+            )
+        return contexts
+
     def _matching_character_references(self, project_id: int, searchable_text: str, *, limit: int = 5) -> list[dict]:
         characters = Character.query.filter(
             Character.project_id == project_id,
@@ -4782,7 +5201,8 @@ figcaption {
 
     def _generate_cinema_image_result(self, prompt: str, image_options: dict, reference_paths: list[str]):
         final_prompt = prompt
-        if reference_paths:
+        manual_short_video_mode = "Manual short video dynamic mode:" in prompt
+        if reference_paths and not manual_short_video_mode:
             final_prompt = "\n".join(
                 [
                     prompt,
@@ -4792,14 +5212,27 @@ figcaption {
                 ]
             )
         if reference_paths:
-            final_prompt = "\n".join(
-                [
-                    prompt,
-                    "",
-                    "Prioritize the attached reference images for character design, facial features, hairstyle, clothing, and identity.",
-                    "Avoid changes that make the characters look like different people. Adapt only composition, lighting, and background to the scene unless instructed otherwise.",
-                ]
-            )
+            if manual_short_video_mode:
+                final_prompt = "\n".join(
+                    [
+                        prompt,
+                        "",
+                        "Reference image use for manual short video:",
+                        "Use attached reference images for character identity, face, hair, color palette, outfit design logic, and rendering quality.",
+                        "Do not copy the reference image pose, standing posture, plain studio framing, neutral expression, or catalog composition.",
+                        "Freely change pose, gesture, camera angle, facial expression, lighting, props, and environment to match the scene text and revision note.",
+                        "The result should feel like a new event CG moment featuring the referenced characters, not a lightly altered character sheet.",
+                    ]
+                )
+            else:
+                final_prompt = "\n".join(
+                    [
+                        prompt,
+                        "",
+                        "Prioritize the attached reference images for character design, facial features, hairstyle, clothing, and identity.",
+                        "Avoid changes that make the characters look like different people. Adapt only composition, lighting, and background to the scene unless instructed otherwise.",
+                    ]
+                )
         result = None
         last_error = None
         for attempt in range(1, 4):

@@ -273,9 +273,12 @@
   function renderBgmOptions() {
     if (!bgmSelect) return;
     const current = bgmSelect.value;
+    const bgmLabel = (asset) => {
+      return String(asset?.display_name || asset?.metadata?.original_file_name || asset?.file_name || "BGM").trim();
+    };
     bgmSelect.innerHTML = [
       `<option value="">BGMなし</option>`,
-      ...bgmAssets.map((asset) => `<option value="${asset.id}">${escape(asset.file_name || `BGM ${asset.id}`)}</option>`),
+      ...bgmAssets.map((asset) => `<option value="${asset.id}">${escape(bgmLabel(asset))}</option>`),
     ].join("");
     if ([...bgmSelect.options].some((option) => option.value === current)) {
       bgmSelect.value = current;
