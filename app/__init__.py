@@ -1,4 +1,6 @@
 import os
+import threading
+import time
 from pathlib import Path
 
 import click
@@ -117,6 +119,16 @@ def _register_cli_commands(app: Flask):
             )
         click.echo(json_util.dumps(result, indent=2))
 
+    @app.cli.command("publish-scheduled-x-posts")
+    @click.option("--limit", default=10, show_default=True, type=int, help="Maximum scheduled Feed posts to publish.")
+    def publish_scheduled_x_posts_command(limit: int):
+        from .services.feed_service import FeedService
+        from .utils import json_util
+
+        service = FeedService()
+        result = service.publish_due_x_schedules(limit=limit)
+        click.echo(json_util.dumps(result, indent=2))
+
     @app.cli.command("generate-character-line-thread")
     @click.option("--project-id", required=True, type=int, help="Project id to generate a character LINE thread for.")
     @click.option("--theme", required=True, help="Initial topic thrown in by the player.")
@@ -152,6 +164,41 @@ def _register_cli_commands(app: Flask):
         click.echo(json_util.dumps(result, indent=2) if as_json else service.format_thread_text(result))
 
 
+def _should_start_feed_x_schedule_worker(app: Flask) -> bool:
+    if not app.config.get("FEED_X_SCHEDULE_WORKER_ENABLED", True):
+        return False
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        return True
+    return not app.debug
+
+
+def _start_feed_x_schedule_worker(app: Flask):
+    if getattr(app, "_feed_x_schedule_worker_started", False):
+        return
+    if not _should_start_feed_x_schedule_worker(app):
+        return
+    app._feed_x_schedule_worker_started = True
+    interval = max(60, int(app.config.get("FEED_X_SCHEDULE_CHECK_INTERVAL_SECONDS") or 600))
+
+    def worker():
+        from .services.feed_service import FeedService
+
+        time.sleep(10)
+        while True:
+            try:
+                with app.app_context():
+                    results = FeedService().publish_due_x_schedules(limit=10)
+                    if results:
+                        app.logger.info("published scheduled X Feed posts: %s", len(results))
+            except Exception:
+                app.logger.exception("scheduled X Feed post worker failed")
+            time.sleep(interval)
+
+    thread = threading.Thread(target=worker, name="feed-x-schedule-worker", daemon=True)
+    thread.start()
+    app.logger.info("scheduled X Feed post worker started; interval=%ss", interval)
+
+
 def create_app(config_object=Config):
     app = Flask(__name__)
     app.config.from_object(config_object)
@@ -163,6 +210,7 @@ def create_app(config_object=Config):
     session.init_app(app)
     migrate.init_app(app, db)
     _register_cli_commands(app)
+    _start_feed_x_schedule_worker(app)
     authorization_service = AuthorizationService()
     project_service = ProjectService()
 

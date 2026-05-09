@@ -126,3 +126,15 @@ class Config:
         "no",
         "off",
     }
+    X_API_KEY = os.getenv("X_API_KEY", "")
+    X_API_SECRET = os.getenv("X_API_SECRET", "")
+    X_ACCESS_TOKEN = os.getenv("X_ACCESS_TOKEN", "")
+    X_ACCESS_TOKEN_SECRET = os.getenv("X_ACCESS_TOKEN_SECRET", "")
+    X_BEARER_TOKEN = os.getenv("X_BEARER_TOKEN", "")
+    FEED_X_SCHEDULE_WORKER_ENABLED = os.getenv("FEED_X_SCHEDULE_WORKER_ENABLED", "true").lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+    FEED_X_SCHEDULE_CHECK_INTERVAL_SECONDS = int(os.getenv("FEED_X_SCHEDULE_CHECK_INTERVAL_SECONDS", "600"))

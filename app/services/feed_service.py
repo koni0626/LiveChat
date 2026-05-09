@@ -11,7 +11,7 @@ import re
 import socket
 import uuid
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 from html import unescape
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
@@ -21,6 +21,8 @@ import requests
 
 from ..clients.image_ai_client import ImageAIClient
 from ..clients.text_ai_client import TextAIClient
+from ..extensions import db
+from ..models.feed_x_schedule import FeedXSchedule
 from ..repositories.feed_repository import FeedRepository
 from ..repositories.world_location_repository import WorldLocationRepository
 from ..utils import json_util
@@ -28,6 +30,7 @@ from .asset_service import AssetService
 from .character_service import CharacterService
 from .project_service import ProjectService
 from .world_service import WorldService
+from .x_publishing_service import XPublishingService
 
 
 FEED_POST_PATTERNS = [
@@ -165,6 +168,7 @@ class FeedService:
         location_repository: WorldLocationRepository | None = None,
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
+        x_publishing_service: XPublishingService | None = None,
     ):
         self._repo = repository or FeedRepository()
         self._asset_service = asset_service or AssetService()
@@ -174,6 +178,7 @@ class FeedService:
         self._locations = location_repository or WorldLocationRepository()
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
+        self._x_publishing_service = x_publishing_service or XPublishingService(asset_service=self._asset_service)
 
     def _media_url(self, file_path: str | None):
         if not file_path:
@@ -234,6 +239,35 @@ class FeedService:
         except Exception:
             return {}
 
+    def _serialize_x_schedule(self, schedule):
+        if not schedule:
+            return None
+        return {
+            "id": schedule.id,
+            "feed_post_id": schedule.feed_post_id,
+            "project_id": schedule.project_id,
+            "created_by_user_id": schedule.created_by_user_id,
+            "scheduled_for": schedule.scheduled_for.isoformat() if schedule.scheduled_for else None,
+            "status": schedule.status,
+            "x_post_id": schedule.x_post_id,
+            "error_message": schedule.error_message,
+            "metadata": self._load_json(schedule.metadata_json),
+            "posted_at": schedule.posted_at.isoformat() if schedule.posted_at else None,
+            "cancelled_at": schedule.cancelled_at.isoformat() if schedule.cancelled_at else None,
+            "created_at": schedule.created_at.isoformat() if schedule.created_at else None,
+            "updated_at": schedule.updated_at.isoformat() if schedule.updated_at else None,
+        }
+
+    def _active_x_schedule_for_post(self, post_id: int):
+        return (
+            FeedXSchedule.query.filter(
+                FeedXSchedule.feed_post_id == post_id,
+                FeedXSchedule.status == "scheduled",
+            )
+            .order_by(FeedXSchedule.scheduled_for.asc(), FeedXSchedule.id.asc())
+            .first()
+        )
+
     def serialize_post(self, post, *, liked_by_me: bool = False, can_manage: bool = False):
         character = self._character_service.get_character(post.character_id)
         project = self._project_service.get_project(post.project_id)
@@ -250,6 +284,7 @@ class FeedService:
             "like_count": post.like_count or 0,
             "liked_by_me": liked_by_me,
             "can_manage": can_manage,
+            "x_schedule": self._serialize_x_schedule(self._active_x_schedule_for_post(post.id)),
             "generation_state": self._load_json(post.generation_state_json),
             "character": self._serialize_character(character),
             "project": self._serialize_project(project),
@@ -414,6 +449,156 @@ class FeedService:
 
     def set_like(self, post_id: int, user_id: int, liked: bool):
         return self._repo.set_like(post_id, user_id, liked)
+
+    def schedule_x_post(self, post_id: int, user_id: int, scheduled_for_value: str):
+        post = self._repo.get_post(post_id)
+        if not post:
+            return None
+        scheduled_for = self._parse_schedule_datetime(scheduled_for_value)
+        if scheduled_for <= datetime.now():
+            raise ValueError("scheduled_for must be in the future")
+        scheduled_for = scheduled_for.replace(minute=0, second=0, microsecond=0)
+        existing = self._active_x_schedule_for_post(post_id)
+        if existing:
+            existing.status = "cancelled"
+            existing.cancelled_at = datetime.now()
+        schedule = FeedXSchedule(
+            feed_post_id=post.id,
+            project_id=post.project_id,
+            created_by_user_id=user_id,
+            scheduled_for=scheduled_for,
+            status="scheduled",
+            metadata_json=json_util.dumps({"source": "feed_calendar"}),
+        )
+        db.session.add(schedule)
+        db.session.commit()
+        return schedule
+
+    def cancel_x_schedule(self, post_id: int, schedule_id: int | None = None):
+        query = FeedXSchedule.query.filter(
+            FeedXSchedule.feed_post_id == post_id,
+            FeedXSchedule.status == "scheduled",
+        )
+        if schedule_id:
+            query = query.filter(FeedXSchedule.id == schedule_id)
+        schedule = query.order_by(FeedXSchedule.scheduled_for.asc(), FeedXSchedule.id.asc()).first()
+        if not schedule:
+            return None
+        schedule.status = "cancelled"
+        schedule.cancelled_at = datetime.now()
+        db.session.commit()
+        return schedule
+
+    def publish_x_post_now(self, post_id: int, user_id: int):
+        post = self._repo.get_post(post_id)
+        if not post:
+            return None
+        now = datetime.now()
+        schedule = FeedXSchedule(
+            feed_post_id=post.id,
+            project_id=post.project_id,
+            created_by_user_id=user_id,
+            scheduled_for=now,
+            status="posting",
+            metadata_json=json_util.dumps({"source": "feed_manual_publish"}),
+        )
+        db.session.add(schedule)
+        db.session.commit()
+        image_asset = self._asset_service.get_asset(post.image_asset_id) if post.image_asset_id else None
+        try:
+            published = self._x_publishing_service.publish_feed_post(post, image_asset=image_asset)
+            schedule.status = "posted"
+            schedule.posted_at = datetime.now()
+            schedule.x_post_id = published.get("x_post_id")
+            schedule.metadata_json = json_util.dumps(
+                {
+                    **self._load_json(schedule.metadata_json),
+                    "published": published,
+                }
+            )
+            schedule.error_message = None
+        except Exception as exc:
+            schedule.status = "failed"
+            schedule.error_message = str(exc)
+            db.session.commit()
+            raise
+        db.session.commit()
+        return schedule
+
+    def list_x_schedules(self, *, project_id: int | None = None, start: str | None = None, end: str | None = None):
+        start_dt = self._parse_schedule_datetime(start) if start else datetime.utcnow() - timedelta(days=1)
+        end_dt = self._parse_schedule_datetime(end) if end else start_dt + timedelta(days=14)
+        query = FeedXSchedule.query.filter(
+            FeedXSchedule.scheduled_for >= start_dt,
+            FeedXSchedule.scheduled_for < end_dt,
+            FeedXSchedule.status == "scheduled",
+        )
+        if project_id:
+            query = query.filter(FeedXSchedule.project_id == project_id)
+        schedules = query.order_by(FeedXSchedule.scheduled_for.asc(), FeedXSchedule.id.asc()).all()
+        return [self._serialize_x_schedule_item(schedule) for schedule in schedules]
+
+    def publish_due_x_schedules(self, *, now: datetime | None = None, limit: int = 10):
+        now = now or datetime.now()
+        rows = (
+            FeedXSchedule.query.filter(
+                FeedXSchedule.status == "scheduled",
+                FeedXSchedule.scheduled_for <= now,
+            )
+            .order_by(FeedXSchedule.scheduled_for.asc(), FeedXSchedule.id.asc())
+            .limit(max(1, min(int(limit or 10), 50)))
+            .all()
+        )
+        results = []
+        for schedule in rows:
+            post = self._repo.get_post(schedule.feed_post_id)
+            if not post:
+                schedule.status = "failed"
+                schedule.error_message = "Feed post not found"
+                db.session.commit()
+                results.append(self._serialize_x_schedule(schedule))
+                continue
+            image_asset = self._asset_service.get_asset(post.image_asset_id) if post.image_asset_id else None
+            try:
+                published = self._x_publishing_service.publish_feed_post(post, image_asset=image_asset)
+                schedule.status = "posted"
+                schedule.posted_at = datetime.now()
+                schedule.x_post_id = published.get("x_post_id")
+                schedule.metadata_json = json_util.dumps(
+                    {
+                        **self._load_json(schedule.metadata_json),
+                        "published": published,
+                    }
+                )
+                schedule.error_message = None
+            except Exception as exc:
+                schedule.status = "failed"
+                schedule.error_message = str(exc)
+            db.session.commit()
+            results.append(self._serialize_x_schedule(schedule))
+        return results
+
+    def _serialize_x_schedule_item(self, schedule):
+        post = self._repo.get_post(schedule.feed_post_id)
+        image_asset = self._asset_service.get_asset(post.image_asset_id) if post and post.image_asset_id else None
+        data = self._serialize_x_schedule(schedule)
+        data["post"] = self.serialize_post(post, can_manage=True) if post else None
+        data["thumbnail_url"] = self._media_url(image_asset.file_path) if image_asset else None
+        return data
+
+    def _parse_schedule_datetime(self, value):
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError("scheduled_for is required")
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError as exc:
+            raise ValueError("scheduled_for must be ISO datetime") from exc
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone().replace(tzinfo=None)
+        return parsed
 
     def import_from_url(self, project_id: int, url: str):
         normalized_url = self._normalize_import_url(url)

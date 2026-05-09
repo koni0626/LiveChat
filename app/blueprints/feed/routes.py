@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 
-from ...api import ForbiddenError, NotFoundError, UnauthorizedError, json_response
+from ...api import ForbiddenError, NotFoundError, UnauthorizedError, ValidationError, json_response
 from ...models import User
 from ...services.authorization_service import AuthorizationService
 from ...services.feed_service import FeedService
@@ -179,6 +179,52 @@ def unlike_post(post_id: int):
     post, user, can_manage = _require_post_visible(post_id)
     updated = feed_service.set_like(post.id, user.id, False)
     return json_response(feed_service.serialize_post(updated, liked_by_me=False, can_manage=can_manage))
+
+
+@feed_bp.route("/feed/x-schedules", methods=["GET"])
+def list_x_schedules():
+    _current_user()
+    project_id = request.args.get("project_id", type=int)
+    start = request.args.get("start")
+    end = request.args.get("end")
+    return json_response(
+        feed_service.list_x_schedules(project_id=project_id, start=start, end=end)
+    )
+
+
+@feed_bp.route("/feed/posts/<int:post_id>/x-schedule", methods=["POST"])
+def schedule_x_post(post_id: int):
+    post, user = _require_post_manage(post_id)
+    payload = request.get_json(silent=True) or {}
+    try:
+        schedule = feed_service.schedule_x_post(post.id, user.id, payload.get("scheduled_for"))
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    return json_response(feed_service.serialize_post(post, can_manage=True) | {"x_schedule": feed_service._serialize_x_schedule(schedule)}, status=201)
+
+
+@feed_bp.route("/feed/posts/<int:post_id>/x-schedule", methods=["DELETE"])
+def cancel_x_post_schedule(post_id: int):
+    post, _ = _require_post_manage(post_id)
+    schedule_id = request.args.get("schedule_id", type=int)
+    schedule = feed_service.cancel_x_schedule(post.id, schedule_id)
+    if not schedule:
+        raise NotFoundError()
+    return json_response({"post_id": post.id, "cancelled": True, "x_schedule": feed_service._serialize_x_schedule(schedule)})
+
+
+@feed_bp.route("/feed/posts/<int:post_id>/x-publish", methods=["POST"])
+def publish_x_post_now(post_id: int):
+    post, user = _require_post_manage(post_id)
+    try:
+        schedule = feed_service.publish_x_post_now(post.id, user.id)
+    except RuntimeError as exc:
+        return json_response({"message": str(exc)}, status=502)
+    except Exception as exc:
+        return json_response({"message": str(exc)}, status=502)
+    if not schedule:
+        raise NotFoundError()
+    return json_response({"post_id": post.id, "published": True, "x_schedule": feed_service._serialize_x_schedule(schedule)})
 
 
 @feed_bp.route("/feed/posts/<int:post_id>/image/upload", methods=["POST"])

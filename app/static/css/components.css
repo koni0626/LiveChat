@@ -110,6 +110,7 @@ body[data-screen="world-map"] .world-location-image-modal img,
 
 #worldLocationImageModal,
 #feedEditModal,
+#feedXScheduleModal,
 #letterModal {
   z-index: 1085;
 }

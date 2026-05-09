@@ -23,6 +23,7 @@ from .cinema_novel_progress import CinemaNovelProgress
 from .cinema_novel_review import CinemaNovelReview
 from .feed_like import FeedLike
 from .feed_post import FeedPost
+from .feed_x_schedule import FeedXSchedule
 from .inventory_item import InventoryItem
 from .live_chat_room import LiveChatRoom
 from .letter import Letter
@@ -73,6 +74,7 @@ __all__ = [
     "CinemaNovelReview",
     "FeedLike",
     "FeedPost",
+    "FeedXSchedule",
     "InventoryItem",
     "LiveChatRoom",
     "Letter",

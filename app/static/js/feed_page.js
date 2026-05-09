@@ -30,14 +30,27 @@
   const editBody = document.getElementById("feedEditBody");
   const editImageInput = document.getElementById("feedEditImageInput");
   const editRemoveImage = document.getElementById("feedEditRemoveImage");
+  const xScheduleModalEl = document.getElementById("feedXScheduleModal");
+  const xScheduleTarget = document.getElementById("feedXScheduleTarget");
+  const xCalendar = document.getElementById("feedXCalendar");
+  const xCalendarTitle = document.getElementById("feedXCalendarTitle");
+  const xCalendarPrev = document.getElementById("feedXCalendarPrev");
+  const xCalendarNext = document.getElementById("feedXCalendarNext");
   if (editModalEl && editModalEl.parentElement !== document.body) {
     document.body.appendChild(editModalEl);
   }
+  if (xScheduleModalEl && xScheduleModalEl.parentElement !== document.body) {
+    document.body.appendChild(xScheduleModalEl);
+  }
   const editModal = editModalEl ? new bootstrap.Modal(editModalEl) : null;
+  const xScheduleModal = xScheduleModalEl ? new bootstrap.Modal(xScheduleModalEl) : null;
   let projects = [];
   let selectedComposerImage = null;
   let selectedComposerImageUrl = null;
   let importedImageAssetId = null;
+  let scheduleTargetPost = null;
+  let scheduleWeekStart = startOfDay(new Date());
+  let xSchedules = [];
   const feedPostBodies = new Map();
   const feedPosts = new Map();
   const collapsedBodyLimit = 420;
@@ -56,6 +69,27 @@
     } catch (_) {
       return value;
     }
+  }
+
+  function startOfDay(date) {
+    const next = new Date(date);
+    next.setHours(0, 0, 0, 0);
+    return next;
+  }
+
+  function addDays(date, days) {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+  }
+
+  function toLocalIsoHour(date) {
+    const pad = (value) => String(value).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:00:00`;
+  }
+
+  function scheduleKey(value) {
+    return value ? toLocalIsoHour(new Date(value)) : "";
   }
 
   function avatar(post) {
@@ -129,8 +163,12 @@
 
   function managementActions(post) {
     if (!post.can_manage) return "";
+    const scheduled = post.x_schedule?.scheduled_for
+      ? `<span class="feed-x-scheduled-badge"><i class="bi bi-clock-history"></i>${escapeText(formatDate(post.x_schedule.scheduled_for))}</span>`
+      : "";
     return `
       <div class="feed-post-manage">
+        ${scheduled}
         <button class="btn btn-sm btn-outline-light feed-post-edit" type="button" data-post-id="${post.id}">
           <i class="bi bi-pencil-square"></i>
           <span>編集</span>
@@ -143,6 +181,14 @@
         <button class="btn btn-sm btn-outline-light feed-image-generate" type="button" data-post-id="${post.id}">
           <i class="bi bi-stars"></i>
           <span>画像生成</span>
+        </button>
+        <button class="btn btn-sm btn-outline-info feed-x-schedule" type="button" data-post-id="${post.id}">
+          <i class="bi bi-calendar-plus"></i>
+          <span>予約投稿</span>
+        </button>
+        <button class="btn btn-sm btn-outline-warning feed-x-publish" type="button" data-post-id="${post.id}">
+          <i class="bi bi-send"></i>
+          <span>Xに投稿</span>
         </button>
         <button class="btn btn-sm btn-outline-danger feed-post-delete" type="button" data-post-id="${post.id}">
           <i class="bi bi-trash"></i>
@@ -376,6 +422,107 @@
     if (projectFilter.value) params.set("project_id", projectFilter.value);
     const items = await NovelUI.api(`/api/v1/feed/ranking/characters?${params.toString()}`);
     renderRanking(items);
+  }
+
+  async function loadXSchedules() {
+    const params = new URLSearchParams({
+      start: toLocalIsoHour(scheduleWeekStart),
+      end: toLocalIsoHour(addDays(scheduleWeekStart, 7)),
+    });
+    const projectId = scheduleTargetPost?.project_id || projectFilter.value || "";
+    if (projectId) params.set("project_id", String(projectId));
+    xSchedules = await NovelUI.api(`/api/v1/feed/x-schedules?${params.toString()}`);
+    renderXCalendar();
+  }
+
+  function renderXCalendar() {
+    if (!xCalendar || !scheduleTargetPost) return;
+    xCalendarTitle.textContent = `${new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric" }).format(scheduleWeekStart)} - ${new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric" }).format(addDays(scheduleWeekStart, 6))}`;
+    xScheduleTarget.innerHTML = `
+      <div class="feed-x-target-card">
+        ${scheduleTargetPost.image_asset?.media_url ? `<img src="${escapeText(scheduleTargetPost.image_asset.media_url)}" alt="">` : `<div class="feed-x-target-noimage"><i class="bi bi-image"></i></div>`}
+        <div>
+          <strong>${escapeText(scheduleTargetPost.character?.name || "Feed")}</strong>
+          <p>${escapeText(String(scheduleTargetPost.body || "").slice(0, 140))}</p>
+        </div>
+      </div>
+    `;
+    const byHour = new Map();
+    xSchedules.forEach((item) => byHour.set(scheduleKey(item.scheduled_for), item));
+    const now = new Date();
+    const days = Array.from({ length: 7 }, (_, index) => addDays(scheduleWeekStart, index));
+    const header = days.map((day) => `<div class="feed-x-calendar-day">${new Intl.DateTimeFormat("ja-JP", { weekday: "short", month: "numeric", day: "numeric" }).format(day)}</div>`).join("");
+    const cells = [];
+    for (let hour = 0; hour < 24; hour += 1) {
+      cells.push(`<div class="feed-x-calendar-hour">${String(hour).padStart(2, "0")}:00</div>`);
+      days.forEach((day) => {
+        const slot = new Date(day);
+        slot.setHours(hour, 0, 0, 0);
+        const key = toLocalIsoHour(slot);
+        const item = byHour.get(key);
+        const isPast = slot <= now;
+        const thumb = item?.thumbnail_url || item?.post?.image_asset?.media_url || "";
+        const isTarget = Number(item?.feed_post_id || 0) === Number(scheduleTargetPost.id || 0);
+        cells.push(`
+          <button class="feed-x-calendar-slot ${item ? "has-schedule" : ""} ${isTarget ? "is-target" : ""}" type="button"
+            data-scheduled-for="${key}" data-schedule-id="${item?.id || ""}" data-post-id="${item?.feed_post_id || ""}" ${isPast && !item ? "disabled" : ""}>
+            ${thumb ? `<img src="${escapeText(thumb)}" alt="">` : ""}
+            ${item ? `<span>${escapeText(item.post?.character?.name || "予約済み")}</span>` : ""}
+          </button>
+        `);
+      });
+    }
+    xCalendar.innerHTML = `<div></div>${header}${cells.join("")}`;
+  }
+
+  async function openXSchedule(button) {
+    const post = feedPosts.get(String(button.dataset.postId));
+    if (!post || !xScheduleModal) return;
+    scheduleTargetPost = post;
+    scheduleWeekStart = startOfDay(new Date());
+    xScheduleModal.show();
+    await loadXSchedules();
+  }
+
+  async function scheduleXAt(scheduledFor) {
+    if (!scheduleTargetPost) return;
+    await NovelUI.api(`/api/v1/feed/posts/${scheduleTargetPost.id}/x-schedule`, {
+      method: "POST",
+      body: { scheduled_for: scheduledFor },
+    });
+    NovelUI.toast("X予約投稿を設定しました。");
+    await loadXSchedules();
+    await loadFeed();
+  }
+
+  async function cancelXSchedule(scheduleId, postId) {
+    if (!confirm("予約投稿を解除しますか？")) return;
+    const suffix = scheduleId ? `?schedule_id=${encodeURIComponent(scheduleId)}` : "";
+    await NovelUI.api(`/api/v1/feed/posts/${postId}/x-schedule${suffix}`, { method: "DELETE" });
+    NovelUI.toast("X予約投稿を解除しました。");
+    await loadXSchedules();
+    await loadFeed();
+  }
+
+  async function publishXNow(button) {
+    const postId = Number(button.dataset.postId || 0);
+    if (!postId) return;
+    if (!confirm("このFeed投稿を今すぐXに投稿しますか？")) return;
+    const originalHtml = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span><span>投稿中...</span>`;
+    try {
+      const result = await NovelUI.api(`/api/v1/feed/posts/${postId}/x-publish`, {
+        method: "POST",
+        body: {},
+      });
+      const xPostId = result?.x_schedule?.x_post_id;
+      NovelUI.toast(xPostId ? `Xに投稿しました: ${xPostId}` : "Xに投稿しました。");
+      await loadFeed();
+    } finally {
+      button.disabled = false;
+      button.innerHTML = originalHtml;
+    }
   }
 
   async function createPost(event) {
@@ -655,6 +802,16 @@
       openEditPost(editButton).catch((error) => NovelUI.toast(error.message || "編集画面を開けませんでした。", "danger"));
       return;
     }
+    const scheduleButton = event.target.closest(".feed-x-schedule");
+    if (scheduleButton) {
+      openXSchedule(scheduleButton).catch((error) => NovelUI.toast(error.message || "X予約カレンダーを開けませんでした。", "danger"));
+      return;
+    }
+    const publishButton = event.target.closest(".feed-x-publish");
+    if (publishButton) {
+      publishXNow(publishButton).catch((error) => NovelUI.toast(error.message || "X投稿に失敗しました。", "danger"));
+      return;
+    }
     const expandButton = event.target.closest("[data-feed-expand]");
     if (expandButton) {
       const body = expandButton.previousElementSibling;
@@ -677,6 +834,23 @@
     if (event.key === "Escape") {
       document.querySelector(".feed-image-lightbox")?.classList.remove("is-open");
     }
+  });
+  xCalendar?.addEventListener("click", (event) => {
+    const slot = event.target.closest(".feed-x-calendar-slot");
+    if (!slot || slot.disabled) return;
+    if (slot.dataset.scheduleId && slot.dataset.postId) {
+      cancelXSchedule(slot.dataset.scheduleId, slot.dataset.postId).catch((error) => NovelUI.toast(error.message || "X予約投稿を解除できませんでした。", "danger"));
+      return;
+    }
+    scheduleXAt(slot.dataset.scheduledFor).catch((error) => NovelUI.toast(error.message || "X予約投稿を設定できませんでした。", "danger"));
+  });
+  xCalendarPrev?.addEventListener("click", () => {
+    scheduleWeekStart = addDays(scheduleWeekStart, -7);
+    loadXSchedules().catch((error) => NovelUI.toast(error.message || "X予約カレンダーを読み込めませんでした。", "danger"));
+  });
+  xCalendarNext?.addEventListener("click", () => {
+    scheduleWeekStart = addDays(scheduleWeekStart, 7);
+    loadXSchedules().catch((error) => NovelUI.toast(error.message || "X予約カレンダーを読み込めませんでした。", "danger"));
   });
   stream.addEventListener("change", (event) => {
     const input = event.target.closest(".feed-image-upload");

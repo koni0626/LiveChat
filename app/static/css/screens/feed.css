@@ -681,6 +681,20 @@ body[data-screen="feed"] .feed-post-manage > label.btn {
   white-space: nowrap;
 }
 
+body[data-screen="feed"] .feed-x-scheduled-badge {
+  min-height: 2.15rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.34rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(71, 220, 255, 0.38);
+  background: rgba(71, 220, 255, 0.12);
+  color: #dffaff;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
 body[data-screen="feed"] .feed-edit-modal {
   color: #dff6ff;
   border: 1px solid rgba(84, 177, 255, 0.24);
@@ -699,6 +713,129 @@ body[data-screen="feed"] .feed-edit-modal .modal-footer {
 body[data-screen="feed"] .feed-edit-modal .modal-title {
   color: #f4fbff;
   font-weight: 900;
+}
+
+body[data-screen="feed"] .feed-x-schedule-modal .modal-body {
+  display: grid;
+  gap: 1rem;
+}
+
+body[data-screen="feed"] .feed-x-target-card {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: center;
+  padding: 0.85rem;
+  border: 1px solid rgba(84, 177, 255, 0.18);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body[data-screen="feed"] .feed-x-target-card img,
+body[data-screen="feed"] .feed-x-target-noimage {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 0.55rem;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body[data-screen="feed"] .feed-x-target-noimage {
+  display: grid;
+  place-items: center;
+  color: rgba(223, 246, 255, 0.58);
+}
+
+body[data-screen="feed"] .feed-x-target-card p {
+  margin: 0.2rem 0 0;
+  color: rgba(223, 246, 255, 0.76);
+}
+
+body[data-screen="feed"] .feed-x-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+}
+
+body[data-screen="feed"] .feed-x-calendar {
+  display: grid;
+  grid-template-columns: 4rem repeat(7, minmax(5.25rem, 1fr));
+  max-height: 62vh;
+  overflow: auto;
+  border: 1px solid rgba(84, 177, 255, 0.16);
+  border-radius: 0.75rem;
+}
+
+body[data-screen="feed"] .feed-x-calendar-day,
+body[data-screen="feed"] .feed-x-calendar-hour {
+  position: sticky;
+  z-index: 1;
+  background: rgba(8, 17, 31, 0.98);
+  color: #dff6ff;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+body[data-screen="feed"] .feed-x-calendar-day {
+  top: 0;
+  padding: 0.5rem;
+  text-align: center;
+  border-bottom: 1px solid rgba(84, 177, 255, 0.16);
+}
+
+body[data-screen="feed"] .feed-x-calendar-hour {
+  left: 0;
+  display: grid;
+  place-items: center;
+  min-height: 3.75rem;
+  border-right: 1px solid rgba(84, 177, 255, 0.16);
+  border-top: 1px solid rgba(84, 177, 255, 0.1);
+}
+
+body[data-screen="feed"] .feed-x-calendar-slot {
+  min-height: 3.75rem;
+  border: 0;
+  border-top: 1px solid rgba(84, 177, 255, 0.1);
+  border-left: 1px solid rgba(84, 177, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  color: #e8fbff;
+  display: grid;
+  place-items: center;
+  padding: 0.25rem;
+}
+
+body[data-screen="feed"] .feed-x-calendar-slot:not(:disabled):hover {
+  background: rgba(0, 245, 212, 0.12);
+}
+
+body[data-screen="feed"] .feed-x-calendar-slot:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+body[data-screen="feed"] .feed-x-calendar-slot.has-schedule {
+  background: rgba(71, 220, 255, 0.12);
+}
+
+body[data-screen="feed"] .feed-x-calendar-slot.is-target {
+  outline: 2px solid rgba(255, 105, 180, 0.72);
+  outline-offset: -2px;
+}
+
+body[data-screen="feed"] .feed-x-calendar-slot img {
+  width: 3.2rem;
+  height: 2.4rem;
+  object-fit: cover;
+  border-radius: 0.35rem;
+}
+
+body[data-screen="feed"] .feed-x-calendar-slot span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
 }
 
 @media (max-width: 768px) {
