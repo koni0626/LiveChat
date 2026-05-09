@@ -923,7 +923,7 @@ Create {count} public Feed posts for a Japanese character world app.
 Each item is a short X-like character/world post, not a polite diary, not a news article, and not a chat reply.
 
 Required shape:
-{{"items":[{{"character_id": 1, "body": "...", "post_pattern": "..."}}]}}
+{{"items":[{{"character_id": 1, "scene_brief": "...", "body": "...", "post_pattern": "..."}}]}}
 
 Rules:
 - Japanese only.
@@ -940,6 +940,10 @@ Rules:
 - For duo posts, make the relationship readable in one simple exchange or incident.
 - Follow each post plan's scene_anchor, feed_tone, comedy_style, romcom_intensity, and romcom_device.
 - Use scene_anchor as the DB location source, but write like a casual Feed post, not an article.
+- First create scene_brief: 1-2 plain Japanese sentences describing the exact visual incident for image generation.
+- scene_brief must include who, where/visible place clue, what object/action/mishap happens, and the target character's visible emotion or reaction.
+- Then write body as a casual X-like Feed post derived from that same scene_brief.
+- Do not let body introduce a different location, character, object, or incident from scene_brief.
 - The post only needs one imageable beat: one character, one action or mishap, one emotion or punchline.
 - You may omit the facility name if the prop/action makes the place clear.
 - Avoid reusing recent scene anchors, but do not over-explain the setting.
@@ -972,7 +976,7 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
             prompt,
             response_format={"type": "json_object"},
             temperature=0.85,
-            max_tokens=1200,
+            max_tokens=1600,
         )
         parsed = self._text_ai_client._try_parse_json(result.get("text")) or {}
         items = parsed.get("items") if isinstance(parsed, dict) else []
@@ -1239,6 +1243,12 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
             candidate = dict(item)
             candidate["character_id"] = character_id
             candidate["body"] = body
+            candidate["scene_brief"] = self._normalize_feed_scene_brief(
+                candidate.get("scene_brief"),
+                body,
+                target_by_id.get(character_id),
+                plan,
+            )
             if plan:
                 candidate["post_pattern"] = plan.get("post_pattern")
                 candidate["pattern_instruction"] = plan.get("pattern_instruction")
@@ -1309,6 +1319,23 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
         )
         return any(fragment in body for fragment in unclear_fragments)
 
+    def _normalize_feed_scene_brief(self, value, body: str, character=None, plan=None) -> str:
+        brief = re.sub(r"\s+", " ", str(value or "").strip())
+        if len(brief) > 220:
+            brief = brief[:220].rstrip()
+        if brief and len(brief) >= 20:
+            return brief
+        plan = plan or {}
+        character_name = getattr(character, "name", "") or plan.get("character_name") or "target character"
+        scene_anchor = plan.get("scene_anchor") if isinstance(plan.get("scene_anchor"), dict) else {}
+        place = scene_anchor.get("place") or scene_anchor.get("location_name") or "the selected world location"
+        co_character = plan.get("co_character_name")
+        partner = f" with {co_character}" if co_character else ""
+        return (
+            f"{character_name}{partner} at {place}: depict the concrete incident from this Feed body as one visible moment. "
+            f"Feed body: {body[:160]}"
+        )
+
     def _fallback_feed_candidates(self, characters, count: int, *, post_plans=None):
         plans_by_character_id = {
             int(plan.get("character_id")): plan
@@ -1329,6 +1356,7 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
             items.append(
                 {
                     "character_id": character.id,
+                    "scene_brief": self._normalize_feed_scene_brief(None, body, character, plan),
                     "post_pattern": pattern_name,
                     "pattern_instruction": plan.get("pattern_instruction"),
                     "scene_anchor": plan.get("scene_anchor"),
@@ -1375,6 +1403,7 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
         comedy_style = str(candidate.get("comedy_style") or "").strip()
         romcom_intensity = str(candidate.get("romcom_intensity") or "").strip()
         romcom_device = str(candidate.get("romcom_device") or "").strip()
+        scene_brief = str(candidate.get("scene_brief") or "").strip()
         co_character = candidate.get("co_character") if isinstance(candidate.get("co_character"), dict) else {}
         co_character_name = str(candidate.get("co_character_name") or co_character.get("name") or "").strip()
         lines = [
@@ -1391,8 +1420,11 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
             "The character should be doing something specific: reacting, pointing, stumbling, holding an object, inspecting a broken device, confronting a sign, reaching toward food, shielding themselves from chaos, or being caught mid-action.",
             "Use dynamic camera language where appropriate: dutch angle, close foreground object, motion blur, over-the-shoulder framing, dramatic lighting, cluttered evidence, or a comedic reveal in the background.",
             "The viewer should understand the post's situation from the image alone, even without reading the text.",
-            f"Feed post body: {post.body}",
         ]
+        if scene_brief:
+            lines.append(f"Primary visual scene brief: {scene_brief}")
+            lines.append("Treat the primary visual scene brief as the main source of truth for composition, action, props, and emotion.")
+        lines.append(f"Feed post body: {post.body}")
         if post_pattern:
             lines.append(f"Feed post pattern: {post_pattern}")
         if pattern_instruction:
