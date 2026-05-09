@@ -22,6 +22,7 @@ import requests
 from ..clients.image_ai_client import ImageAIClient
 from ..clients.text_ai_client import TextAIClient
 from ..repositories.feed_repository import FeedRepository
+from ..repositories.world_location_repository import WorldLocationRepository
 from ..utils import json_util
 from .asset_service import AssetService
 from .character_service import CharacterService
@@ -161,6 +162,7 @@ class FeedService:
         character_service: CharacterService | None = None,
         project_service: ProjectService | None = None,
         world_service: WorldService | None = None,
+        location_repository: WorldLocationRepository | None = None,
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
     ):
@@ -169,6 +171,7 @@ class FeedService:
         self._character_service = character_service or CharacterService()
         self._project_service = project_service or ProjectService()
         self._world_service = world_service or WorldService()
+        self._locations = location_repository or WorldLocationRepository()
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
 
@@ -715,12 +718,20 @@ class FeedService:
         project = self._project_service.get_project(project_id)
         world = self._world_service.get_world(project_id)
         all_characters = self._character_service.list_characters(project_id)
+        locations = self._locations.list_by_project(project_id)
         recent_posts = self._repo.list_posts(project_id=project_id, statuses=["published"], limit=80)
         characters = self._select_feed_characters(all_characters, recent_posts, count=count)
         if not characters:
             raise ValueError("character is required to generate Feed posts")
         selected_ids = [character.id for character in characters]
-        post_plans = self._build_feed_post_plans(characters, all_characters, interaction_mode=interaction_mode)
+        recent_scene_anchors = self._recent_feed_scene_anchors(recent_posts)
+        post_plans = self._build_feed_post_plans(
+            characters,
+            all_characters,
+            interaction_mode=interaction_mode,
+            recent_scene_anchors=recent_scene_anchors,
+            locations=locations,
+        )
         prompt = f"""
 Return only JSON.
 Create {count} public Feed posts for a Japanese character world app.
@@ -734,27 +745,33 @@ Rules:
 - Use only provided character IDs.
 - Create exactly one item for each target character ID: {json_util.dumps(selected_ids)}.
 - Do not use any character ID outside target character IDs.
-- Keep each body 80-220 Japanese characters.
+- Keep each body 35-130 Japanese characters.
 - Match the selected character's personality and speech style.
 - Follow the assigned post_pattern for each target character.
 - The assigned target character must be the speaker or main subject of the post.
 - If a post plan has co_character, include that co_character as the interaction partner.
 - If another character appears, the target character must still appear and remain the main subject, and the co_character should be the only major partner.
-- For duo posts, make the relationship readable: who did what, who reacts, and why the interaction is funny.
-- Make the post feel like X: punchy, reactive, slightly exaggerated, easy to reply to, and with a clear hook.
-- Include at least one of: incident, sighting, quote, poll, strange notice, small scandal, romantic mishap, food accident, facility trouble, or punchline.
-- Prefer concrete nouns, named places, visible actions, and a final twist.
-- Keep one clear story spine: what happened, where it happened, why it is weird, and why the punchline follows.
-- Do not combine unrelated motifs unless the text explicitly connects them.
-- If you mention a strange sound, rumor, sign, object, or metaphor, explain what it probably is before the final joke.
-- Do not turn personality traits or moods into unexplained physical objects. For example, do not write odd phrases like "余裕ある待機席"; use normal concrete objects such as chair, sign, vending machine, microphone, door, light, or screen.
-- Avoid coined labels, poetic object names, and unclear compound nouns unless the post immediately explains what they mean.
-- Prefer plain concrete wording over clever abstractions. The funny part should come from the situation, not from a confusing invented noun.
-- The reader should understand the joke without knowing hidden lore.
-- Avoid quiet diary posts, calm mood reports, generic official announcements, and beautiful-but-empty worldbuilding.
+- If a post plan has no co_character, do not mention any other named character. Use staff, customer, witness, or passerby instead.
+- For duo posts, make the relationship readable in one simple exchange or incident.
+- Follow each post plan's scene_anchor, feed_tone, comedy_style, romcom_intensity, and romcom_device.
+- Use scene_anchor as the DB location source, but write like a casual Feed post, not an article.
+- The post only needs one imageable beat: one character, one action or mishap, one emotion or punchline.
+- You may omit the facility name if the prop/action makes the place clear.
+- Avoid reusing recent scene anchors, but do not over-explain the setting.
+- Do not make every post romantic. If romcom_intensity is none or low, keep romance absent or only a tiny hint.
+- If romcom_intensity is medium or high, use a safe, concrete love-comedy or embarrassment beat that can become a strong image.
+- Teasing or fanservice-like mishaps must stay tasteful and non-explicit: no nudity, no exposed intimate body parts, no sexual description, no coercion.
+- Make the post feel like X: casual, punchy, reactive, and easy to reply to.
+- Prefer direct speech, first-person reactions, quick confessions, sightings, or one-line incident reports.
+- The funny part should be easy to picture without hidden lore.
 - Do not mention that AI generated the post.
 - Avoid duplicating recent posts.
-- Avoid overusing "今日は", "少しだけ", "落ち着く", "気がする", "また話せたら", unless they are immediately undercut by a joke.
+- Avoid abstract poetic summaries and unclear invented nouns.
+
+Style examples:
+- もー！何よ、これ。みんなに誕生日お祝いでクラッカー鳴らしてもらったんだけど、全部私の身体に絡まっちゃって……
+- 技術屋はダンスが苦手？はっはっは！それは偏見だ。わたしはブレイクダンスが趣味なんだ
+- ミウがライブのリハーサルで歌おうと思ったら、マイクのケーブルが脚に絡まって尻もち着いちゃった。見てないよね？
 
 Project: {getattr(project, "title", "") or ""}
 Project summary: {getattr(project, "summary", "") or ""}
@@ -764,6 +781,7 @@ Characters: {json_util.dumps([self._feed_character_context(character) for charac
 Available co-characters: {json_util.dumps([self._feed_character_context(character) for character in all_characters[:30]])}
 Post plans: {json_util.dumps(post_plans)}
 Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post.body} for post in recent_posts[:12]])}
+Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
 """.strip()
         result = self._text_ai_client.generate_text(
             prompt,
@@ -774,7 +792,7 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
         parsed = self._text_ai_client._try_parse_json(result.get("text")) or {}
         items = parsed.get("items") if isinstance(parsed, dict) else []
         if isinstance(items, list) and items:
-            return self._normalize_feed_candidate_characters(items, characters, post_plans)
+            return self._normalize_feed_candidate_characters(items, characters, post_plans, all_characters=all_characters)
         return self._fallback_feed_candidates(characters, count, post_plans=post_plans)
 
     def _normalize_feed_interaction_mode(self, value):
@@ -785,7 +803,100 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
             return "duo"
         return "auto"
 
-    def _build_feed_post_plans(self, characters, all_characters=None, interaction_mode: str = "auto"):
+    def _feed_tone_instruction(self, tone: str) -> str:
+        return {
+            "incident_report": "Make it a quick public incident report with a clear cause, reaction, and punchline.",
+            "deadpan_notice": "Write like a dry notice or official-sounding post where the absurdity is in the calm wording.",
+            "chaotic_live_report": "Make it feel like someone is reporting from the scene while things are still going wrong.",
+            "character_confession": "Make the speaker accidentally reveal a feeling or weakness while trying to sound normal.",
+            "facility_trouble": "Center the post on a facility, device, sign, menu, cable, rope, door, light, or rule causing trouble.",
+            "food_or_prop_comedy": "Make a concrete food item or prop drive the joke.",
+            "romcom_mishap": "Use a safe love-comedy physical mishap with embarrassment, timing, and witnesses.",
+        }.get(tone, "Make it a punchy Feed post with one clear situation and punchline.")
+
+    def _feed_comedy_style_instruction(self, style: str) -> str:
+        return {
+            "deadpan": "Keep the wording calm and let the situation be absurd.",
+            "overreaction": "Make bystanders or the speaker overreact to a small event.",
+            "misunderstanding": "Build the joke around a harmless misunderstanding.",
+            "witness_report": "Use a witness/sighting format with one vivid detail.",
+            "self_own": "Let the target character accidentally embarrass themselves.",
+            "bureaucratic_absurdity": "Use rules, rankings, warnings, forms, or official wording as the joke.",
+            "physical_comedy": "Use motion, stumbling, tangled objects, dropped props, or bad timing as the joke.",
+        }.get(style, "Use a light comedic angle.")
+
+    def _feed_romcom_intensity_instruction(self, intensity: str) -> str:
+        return {
+            "none": "No romantic beat is required. Keep it as comedy, incident, facility, or character behavior.",
+            "low": "Use only a tiny romantic hint if it fits; do not force it.",
+            "medium": "If it fits, make romantic tension readable through one concrete reaction invented from the facility and character context.",
+            "high": "Make the love-comedy energy obvious, but invent the mechanism from the facility and keep it safe and non-explicit.",
+        }.get(intensity, "Use romantic tension only if it fits the plan.")
+
+    def _feed_romcom_device_instruction(self, device: str) -> str:
+        return {
+            "none": "No special romantic-comedy device.",
+            "near_fall": "Use a near fall or stumble. The joke can be the recovery, the failed excuse, or a prop getting kicked away; close distance is optional, not required.",
+            "rope_or_cable_tangle": "Use a rope, ribbon, cable, strap, or lanyard catching on clothing or props and causing awkward timing. Focus on the tangle and frantic fixing, not faces getting close.",
+            "wardrobe_mishap": "Use a tasteful wardrobe trouble moment: snagged hem, slipping jacket, twisted ribbon, loose accessory, or hurried cover-up gesture. No nudity or explicit exposure.",
+            "flustered_coverup": "Use a rushed cover-up, badly timed denial, or over-formal explanation after a harmless mishap.",
+            "jealous_object": "Use jealousy displaced onto an object, menu, score, seat, gift, or device rather than a crowd reaction.",
+            "secret_kindness": "Use a small helpful act that the character tries to hide, such as fixing something, saving a seat, or quietly returning an item.",
+            "failed_cool_pose": "Use the character trying to look composed or cool, then being undercut by a prop, sign, device, or timing.",
+            "overheard_line": "Use one overheard line that sounds romantic out of context, then reveal a silly literal cause.",
+        }.get(device, "Use a safe, concrete love-comedy device only if the plan calls for it.")
+
+    def _feed_scene_anchor(self, romcom_device: str, feed_tone: str, locations: list | None = None) -> dict:
+        location = random.choice(locations) if locations else None
+        return {
+            "place": getattr(location, "name", None) or "プロジェクト内のどこかの施設",
+            "location_id": getattr(location, "id", None),
+            "location_name": getattr(location, "name", None),
+            "location_type": getattr(location, "location_type", None),
+            "region": getattr(location, "region", None),
+            "tags": self._load_json(getattr(location, "tags_json", None)) if location else [],
+            "description": self._shorten(getattr(location, "description", None), 180),
+            "scene_task": "Use this DB location as the source. Choose a concrete prop, service, fixture, menu item, machine, seat, sign, decoration, staff action, or event that naturally belongs to this location. Do not use a fixed generic template if it does not fit the location.",
+            "event_task": "Create a specific small incident from the location's name, type, tags, and description. The post must explain the concrete object and action in plain words.",
+            "romcom_device": romcom_device,
+            "feed_tone": feed_tone,
+        }
+
+    def _recent_feed_scene_anchors(self, recent_posts) -> list[dict]:
+        anchors = []
+        for post in recent_posts[:24]:
+            state = self._load_json(getattr(post, "generation_state_json", None))
+            candidate = state.get("candidate") if isinstance(state.get("candidate"), dict) else {}
+            anchor = candidate.get("scene_anchor") if isinstance(candidate.get("scene_anchor"), dict) else {}
+            if anchor:
+                anchors.append(
+                    {
+                        "place": anchor.get("place"),
+                        "object": anchor.get("object"),
+                        "action": anchor.get("action"),
+                        "problem": anchor.get("problem"),
+                    }
+                )
+        return anchors
+
+    def _feed_scene_anchor_key(self, anchor: dict | None) -> str:
+        anchor = anchor or {}
+        return f"{anchor.get('place') or ''}|{anchor.get('object') or ''}".strip("|")
+
+    def _shorten(self, value, limit: int) -> str:
+        text = str(value or "").strip().replace("\r\n", "\n")
+        if len(text) <= limit:
+            return text
+        return text[:limit].rstrip() + "..."
+
+    def _build_feed_post_plans(
+        self,
+        characters,
+        all_characters=None,
+        interaction_mode: str = "auto",
+        recent_scene_anchors: list[dict] | None = None,
+        locations: list | None = None,
+    ):
         mode = self._normalize_feed_interaction_mode(interaction_mode)
         solo_patterns = FEED_POST_PATTERNS
         if mode == "solo":
@@ -795,6 +906,12 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
         if len(patterns) < len(characters):
             patterns.extend(random.choice(solo_patterns) for _ in range(len(characters) - len(patterns)))
         all_characters = [character for character in (all_characters or characters) if getattr(character, "id", None)]
+        recent_scene_keys = {
+            self._feed_scene_anchor_key(anchor)
+            for anchor in (recent_scene_anchors or [])
+            if self._feed_scene_anchor_key(anchor)
+        }
+        used_scene_keys = set()
         plans = []
         for character, pattern in zip(characters, patterns):
             use_duo = mode == "duo" or (mode == "auto" and len(all_characters) >= 2 and random.random() < 0.45)
@@ -804,12 +921,70 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
                 partners = [candidate for candidate in all_characters if int(candidate.id) != int(character.id)]
                 co_character = random.choice(partners) if partners else None
                 pattern = random.choice(FEED_DUO_POST_PATTERNS)
+            feed_tone = random.choice(
+                [
+                    "incident_report",
+                    "deadpan_notice",
+                    "chaotic_live_report",
+                    "character_confession",
+                    "facility_trouble",
+                    "food_or_prop_comedy",
+                    "romcom_mishap",
+                ]
+            )
+            comedy_style = random.choice(
+                [
+                    "deadpan",
+                    "overreaction",
+                    "misunderstanding",
+                    "witness_report",
+                    "self_own",
+                    "bureaucratic_absurdity",
+                    "physical_comedy",
+                ]
+            )
+            romcom_intensity = random.choice(["none", "none", "low", "medium", "high"])
+            if feed_tone == "romcom_mishap" or use_duo:
+                romcom_intensity = random.choice(["low", "medium", "medium", "high"])
+            romcom_device = "none"
+            if romcom_intensity in {"medium", "high"}:
+                romcom_device = random.choice(
+                    [
+                        "near_fall",
+                        "rope_or_cable_tangle",
+                        "wardrobe_mishap",
+                        "flustered_coverup",
+                        "jealous_object",
+                        "secret_kindness",
+                        "failed_cool_pose",
+                        "overheard_line",
+                    ]
+                )
+            scene_anchor = {}
+            for _attempt in range(80):
+                candidate_anchor = self._feed_scene_anchor(romcom_device, feed_tone, locations=locations)
+                candidate_key = self._feed_scene_anchor_key(candidate_anchor)
+                scene_anchor = candidate_anchor
+                if candidate_key and candidate_key not in recent_scene_keys and candidate_key not in used_scene_keys:
+                    break
+            scene_key = self._feed_scene_anchor_key(scene_anchor)
+            if scene_key:
+                used_scene_keys.add(scene_key)
             plans.append(
                 {
                     "character_id": character.id,
                     "character_name": getattr(character, "name", "") or "",
                     "post_pattern": pattern["name"],
                     "pattern_instruction": pattern["instruction"],
+                    "scene_anchor": scene_anchor,
+                    "feed_tone": feed_tone,
+                    "feed_tone_instruction": self._feed_tone_instruction(feed_tone),
+                    "comedy_style": comedy_style,
+                    "comedy_style_instruction": self._feed_comedy_style_instruction(comedy_style),
+                    "romcom_intensity": romcom_intensity,
+                    "romcom_intensity_instruction": self._feed_romcom_intensity_instruction(romcom_intensity),
+                    "romcom_device": romcom_device,
+                    "romcom_device_instruction": self._feed_romcom_device_instruction(romcom_device),
                     "co_character_id": getattr(co_character, "id", None) if co_character else None,
                     "co_character_name": getattr(co_character, "name", None) if co_character else None,
                     "co_character": self._feed_character_context(co_character) if co_character else None,
@@ -840,7 +1015,7 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
         )
         return ranked[: max(1, min(int(count or 1), len(ranked)))]
 
-    def _normalize_feed_candidate_characters(self, items, target_characters, post_plans=None):
+    def _normalize_feed_candidate_characters(self, items, target_characters, post_plans=None, all_characters=None):
         target_ids = [int(character.id) for character in target_characters]
         target_id_set = set(target_ids)
         target_by_id = {int(character.id): character for character in target_characters}
@@ -867,7 +1042,12 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
             if not body:
                 continue
             plan = plans_by_character_id.get(character_id)
-            if self._body_uses_wrong_primary_character(body, target_by_id.get(character_id), target_characters, plan):
+            if self._body_uses_wrong_primary_character(
+                body,
+                target_by_id.get(character_id),
+                all_characters or target_characters,
+                plan,
+            ):
                 continue
             if self._body_has_unclear_feed_phrase(body):
                 continue
@@ -877,9 +1057,18 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
             if plan:
                 candidate["post_pattern"] = plan.get("post_pattern")
                 candidate["pattern_instruction"] = plan.get("pattern_instruction")
+                candidate["scene_anchor"] = plan.get("scene_anchor")
                 candidate["co_character_id"] = plan.get("co_character_id")
                 candidate["co_character_name"] = plan.get("co_character_name")
                 candidate["co_character"] = plan.get("co_character")
+                candidate["feed_tone"] = plan.get("feed_tone")
+                candidate["feed_tone_instruction"] = plan.get("feed_tone_instruction")
+                candidate["comedy_style"] = plan.get("comedy_style")
+                candidate["comedy_style_instruction"] = plan.get("comedy_style_instruction")
+                candidate["romcom_intensity"] = plan.get("romcom_intensity")
+                candidate["romcom_intensity_instruction"] = plan.get("romcom_intensity_instruction")
+                candidate["romcom_device"] = plan.get("romcom_device")
+                candidate["romcom_device_instruction"] = plan.get("romcom_device_instruction")
             normalized.append(candidate)
             used_ids.add(character_id)
         if len(normalized) < len(target_ids):
@@ -901,7 +1090,7 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
         target_name = str(getattr(target_character, "name", "") or "").strip()
         target_nickname = str(getattr(target_character, "nickname", "") or "").strip()
         target_tokens = [token for token in (target_name, target_nickname) if token]
-        allowed_partner_tokens = set()
+        allowed_partner_tokens = set(target_tokens)
         plan = plan or {}
         if plan.get("co_character_name"):
             allowed_partner_tokens.add(str(plan.get("co_character_name")).strip())
@@ -919,12 +1108,10 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
                     str(getattr(character, "name", "") or "").strip(),
                     str(getattr(character, "nickname", "") or "").strip(),
                 )
-                if token
+                if token and len(token) >= 2
             )
         other_tokens = [token for token in other_tokens if token not in allowed_partner_tokens]
-        mentions_target = any(token in body for token in target_tokens)
-        mentions_other = any(token in body for token in other_tokens)
-        return mentions_other and not mentions_target
+        return any(token in body for token in other_tokens)
 
     def _body_has_unclear_feed_phrase(self, body: str) -> bool:
         unclear_fragments = (
@@ -959,9 +1146,18 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
                     "character_id": character.id,
                     "post_pattern": pattern_name,
                     "pattern_instruction": plan.get("pattern_instruction"),
+                    "scene_anchor": plan.get("scene_anchor"),
                     "co_character_id": plan.get("co_character_id"),
                     "co_character_name": co_character_name or None,
                     "co_character": plan.get("co_character"),
+                    "feed_tone": plan.get("feed_tone"),
+                    "feed_tone_instruction": plan.get("feed_tone_instruction"),
+                    "comedy_style": plan.get("comedy_style"),
+                    "comedy_style_instruction": plan.get("comedy_style_instruction"),
+                    "romcom_intensity": plan.get("romcom_intensity"),
+                    "romcom_intensity_instruction": plan.get("romcom_intensity_instruction"),
+                    "romcom_device": plan.get("romcom_device"),
+                    "romcom_device_instruction": plan.get("romcom_device_instruction"),
                     "body": body,
                 }
             )
@@ -989,6 +1185,11 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
         candidate = generation_state.get("candidate") if isinstance(generation_state.get("candidate"), dict) else {}
         post_pattern = str(candidate.get("post_pattern") or generation_state.get("post_pattern") or "").strip()
         pattern_instruction = str(candidate.get("pattern_instruction") or "").strip()
+        scene_anchor = candidate.get("scene_anchor") if isinstance(candidate.get("scene_anchor"), dict) else {}
+        feed_tone = str(candidate.get("feed_tone") or "").strip()
+        comedy_style = str(candidate.get("comedy_style") or "").strip()
+        romcom_intensity = str(candidate.get("romcom_intensity") or "").strip()
+        romcom_device = str(candidate.get("romcom_device") or "").strip()
         co_character = candidate.get("co_character") if isinstance(candidate.get("co_character"), dict) else {}
         co_character_name = str(candidate.get("co_character_name") or co_character.get("name") or "").strip()
         lines = [
@@ -1011,6 +1212,22 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
             lines.append(f"Feed post pattern: {post_pattern}")
         if pattern_instruction:
             lines.append(f"Pattern instruction: {pattern_instruction}")
+        if scene_anchor:
+            lines.append(f"Scene anchor: {json_util.dumps(scene_anchor)}")
+            lines.append("Depict this DB location clearly. Derive the visible prop/action from the location name, type, tags, and description; do not use a generic repeated prop/action template if it does not fit this location.")
+        if feed_tone:
+            lines.append(f"Feed tone: {feed_tone}")
+            lines.append(f"Feed tone instruction: {candidate.get('feed_tone_instruction') or ''}")
+        if comedy_style:
+            lines.append(f"Comedy style: {comedy_style}")
+            lines.append(f"Comedy style instruction: {candidate.get('comedy_style_instruction') or ''}")
+        if romcom_intensity:
+            lines.append(f"Romcom intensity: {romcom_intensity}")
+            lines.append(f"Romcom intensity instruction: {candidate.get('romcom_intensity_instruction') or ''}")
+        if romcom_device and romcom_device != "none":
+            lines.append(f"Romcom device: {romcom_device}")
+            lines.append(f"Romcom device instruction: {candidate.get('romcom_device_instruction') or ''}")
+            lines.append("If the Feed text depicts a teasing or fanservice-like mishap, keep it tasteful and non-explicit: no nudity, no exposed intimate body parts, no sexual framing. Focus on the concrete prop/action and the character's reaction.")
         if co_character_name:
             lines.append(f"Co-character: {co_character_name}")
             lines.append("This is a duo/interactions post: include the co-character if possible, and make their interaction readable through posture, distance, eye contact, gesture, or shared trouble.")
@@ -1022,7 +1239,7 @@ Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post
                 lines.append(f"Co-character art style: {co_character.get('art_style')}")
             lines.append("The co-character must match the target character's rendering fidelity, lighting model, anatomy detail, and high-end 3D semi-realistic finish.")
         else:
-            lines.append("If other characters appear, keep them secondary and do not let them replace the target character.")
+            lines.append("This is a solo post. Do not depict any other named character from the project, even if a name appears in the Feed text by mistake. Use only anonymous staff, customers, witnesses, or silhouettes as secondary figures.")
         visual_direction = self._feed_visual_direction_for_pattern(post_pattern)
         if visual_direction:
             lines.append(f"Visual direction: {visual_direction}")

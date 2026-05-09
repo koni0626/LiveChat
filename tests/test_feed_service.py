@@ -29,7 +29,7 @@ def test_generate_posts_creates_published_post_and_generates_image(monkeypatch):
     monkeypatch.setattr(
         service,
         "_generate_feed_candidates",
-        lambda project_id, count: [{"character_id": character.id, "body": "今日は少しだけ特別な空気でした。"}],
+        lambda project_id, count, **_kwargs: [{"character_id": character.id, "body": "今日は少しだけ特別な空気でした。"}],
     )
     monkeypatch.setattr(service, "refresh_character_feed_profile", lambda _character_id: None)
     generated = {"called": False}
@@ -48,3 +48,19 @@ def test_generate_posts_creates_published_post_and_generates_image(monkeypatch):
     assert repo.created[0].status == "published"
     assert repo.created[0].image_asset_id == 42
     assert generated["called"] is True
+
+
+def test_solo_feed_candidate_rejects_other_project_character_name():
+    target = SimpleNamespace(id=1, name="ノア", nickname=None)
+    other = SimpleNamespace(id=2, name="レイナ", nickname=None)
+    service = FeedService()
+
+    result = service._normalize_feed_candidate_characters(
+        [{"character_id": 1, "body": "ゲーム筐体の前でレイナがスコア表示を見て固まった。"}],
+        [target],
+        post_plans=[{"character_id": 1, "post_pattern": "test"}],
+        all_characters=[target, other],
+    )
+
+    assert result[0]["character_id"] == 1
+    assert "レイナ" not in result[0]["body"]

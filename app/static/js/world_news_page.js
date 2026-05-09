@@ -97,7 +97,7 @@
     generateButton.disabled = true;
     renderLoading("キャラクター、施設、最近の出来事から画像付きの噂を作っています。");
     try {
-      await NovelUI.api(`/api/v1/projects/${projectId}/world-news/generate`, { method: "POST", body: { count: 3 } });
+      await NovelUI.api(`/api/v1/projects/${projectId}/world-news/generate`, { method: "POST", body: { count: 1 } });
       await loadNews();
       NovelUI.toast("噂を生成しました。");
     } catch (error) {

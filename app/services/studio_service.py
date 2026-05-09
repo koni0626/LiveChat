@@ -11,6 +11,7 @@ from ..clients.image_ai_client import ImageAIClient
 from ..extensions import db
 from ..models.asset import Asset
 from ..models.chat_session import ChatSession
+from ..models.feed_post import FeedPost
 from ..models.session_image import SessionImage
 from ..models.story_image import StoryImage
 from ..models.story_session import StorySession
@@ -34,6 +35,7 @@ class StudioService:
         images.extend(self._list_chat_images(project_id, owner_user_id, only_costumes=True))
         images.extend(self._list_story_images(project_id, owner_user_id))
         images.extend(self._list_outing_images(project_id, owner_user_id))
+        images.extend(self._list_feed_images(project_id, owner_user_id))
         images.extend(self._list_studio_images(project_id, owner_user_id))
         return sorted(images, key=lambda item: item.get("created_at") or "", reverse=True)
 
@@ -42,6 +44,7 @@ class StudioService:
         "costume": "衣装",
         "story": "ストーリー",
         "outing": "おでかけ",
+        "feed": "Feed",
         "studio": "編集画像",
     }
 
@@ -70,6 +73,8 @@ class StudioService:
             images.extend(self._list_story_images(project_id, owner_user_id, limit=limit))
         if "outing" in sources:
             images.extend(self._list_outing_images(project_id, owner_user_id, limit=limit))
+        if "feed" in sources:
+            images.extend(self._list_feed_images(project_id, owner_user_id, limit=limit))
         if "studio" in sources:
             images.extend(self._list_studio_images(project_id, owner_user_id, limit=limit))
         if query_text:
@@ -182,6 +187,20 @@ class StudioService:
                     return_url=f"/projects/{project_id}/outings",
                     metadata=metadata,
                 )
+        if asset.asset_type == "feed_image":
+            feed_post_id = int(metadata.get("feed_post_id") or 0)
+            feed_post = (
+                FeedPost.query.filter(
+                    FeedPost.id == feed_post_id,
+                    FeedPost.project_id == project_id,
+                    FeedPost.image_asset_id == asset.id,
+                    FeedPost.deleted_at.is_(None),
+                ).first()
+                if feed_post_id
+                else None
+            )
+            if feed_post:
+                return self._serialize_feed_image(asset, feed_post, metadata=metadata)
         return None
 
     def generate_variant(self, project_id: int, owner_user_id: int, payload: dict | None = None):
@@ -375,6 +394,21 @@ class StudioService:
             )
         return items
 
+    def _list_feed_images(self, project_id: int, owner_user_id: int, limit: int | None = None):
+        query = (
+            db.session.query(FeedPost, Asset)
+            .join(Asset, Asset.id == FeedPost.image_asset_id)
+            .filter(
+                FeedPost.project_id == project_id,
+                FeedPost.deleted_at.is_(None),
+                Asset.asset_type == "feed_image",
+                Asset.deleted_at.is_(None),
+            )
+            .order_by(FeedPost.published_at.desc(), FeedPost.created_at.desc(), FeedPost.id.desc())
+        )
+        rows = query.limit(limit).all() if limit else query.all()
+        return [self._serialize_feed_image(asset, post) for post, asset in rows]
+
     def _count_images(self, project_id: int, owner_user_id: int, sources: set[str] | None = None):
         sources = sources or set(self.SOURCE_LABELS)
         costume_types = {"costume_initial", "costume_reference"}
@@ -419,6 +453,8 @@ class StudioService:
             )
         if "outing" in sources:
             total += len(self._list_outing_images(project_id, owner_user_id))
+        if "feed" in sources:
+            total += len(self._list_feed_images(project_id, owner_user_id))
         if "studio" in sources:
             total += len(self._list_studio_images(project_id, owner_user_id))
         return total
@@ -442,9 +478,29 @@ class StudioService:
                 metadata.get("prompt"),
                 metadata.get("revised_prompt"),
                 metadata.get("instruction"),
+                metadata.get("feed_body"),
             )
         ).lower()
         return query_text in haystack
+
+    def _serialize_feed_image(self, asset, post, metadata: dict | None = None):
+        metadata = metadata or self._load_json(asset.metadata_json) or {}
+        enriched_metadata = dict(metadata)
+        enriched_metadata.setdefault("feed_post_id", post.id)
+        enriched_metadata.setdefault("feed_body", post.body)
+        return self._serialize_image(
+            asset,
+            source="feed",
+            source_label="Feed",
+            source_image_id=post.id,
+            prompt_text=metadata.get("prompt") or post.body,
+            image_type="feed_image",
+            quality=metadata.get("quality"),
+            size=metadata.get("size"),
+            created_at=asset.created_at or post.published_at or post.created_at,
+            return_url=f"/feed?project_id={post.project_id}",
+            metadata=enriched_metadata,
+        )
 
     def _serialize_studio_asset(self, asset):
         metadata = self._load_json(asset.metadata_json) or {}

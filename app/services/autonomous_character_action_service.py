@@ -296,6 +296,11 @@ JSONのみを返してください。
 - 抽象的な造語ではなく、看板、自販機、椅子、マイク、扉、照明、メニュー、端末など具体物で笑わせる。
 - image_mood は表情を、visual_hook は写真に写る具体的な構図や小道具を指定する。
 
+Romcom density for feed/news:
+- Push each generated action toward a stronger love-comedy beat than a normal daily log.
+- Prefer visible tells: blushing, defensive denial, awkward silence, accidental eye contact, jealousy, protectiveness, almost-confessions, misunderstood date-like timing, or witnesses teasing them.
+- feed_body should feel immediate and character/post-like; news_title/news_body should feel like public rumor coverage of the same incident.
+- Keep it playful and non-explicit. Convert suggestive material into safe romantic tension, boundaries, fashion mishaps, crowd reactions, or awkward timing.
 プロジェクト: {project.title or ""}
 プロジェクト概要: {project.summary or ""}
 世界観概要: {getattr(world, "overview", "") if world else ""}
