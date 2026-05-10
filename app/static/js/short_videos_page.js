@@ -15,6 +15,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const sceneThumbs = document.getElementById("shortVideoSceneThumbs");
   const preview = document.getElementById("shortVideoPreview");
   const characterPicker = document.getElementById("shortVideoCharacterPicker");
+  const characterToggle = document.getElementById("shortVideoCharacterToggle");
+  const characterSummary = document.getElementById("shortVideoCharacterSummary");
   const scenePrompt = document.getElementById("shortVideoScenePrompt");
   const headline = document.getElementById("shortVideoHeadline");
   const revisionNote = document.getElementById("shortVideoRevisionNote");
@@ -29,11 +31,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let videos = [];
   let characters = [];
+  let outfits = [];
   let bgmAssets = [];
   let activeVideo = null;
   let activeSceneIndex = 0;
   let draggingSceneIndex = null;
   let suppressSceneClick = false;
+  let outfitPickerCharacterId = null;
 
   function scenes() {
     return activeVideo?.chapters?.[0]?.scene_json || [];
@@ -55,6 +59,28 @@ document.addEventListener("DOMContentLoaded", () => {
     return Array.from(characterPicker.querySelectorAll("input[type='checkbox']:checked"))
       .map((input) => Number(input.value))
       .filter(Boolean);
+  }
+
+  function updateCharacterSummary() {
+    if (!characterSummary) return;
+    const ids = new Set(selectedCharacterIds());
+    const names = characters
+      .filter((character) => ids.has(Number(character.id)))
+      .map((character) => character.name || character.nickname || "Character");
+    characterSummary.textContent = names.length ? `${names.length}人: ${names.slice(0, 4).join("、")}${names.length > 4 ? "..." : ""}` : "未選択";
+  }
+
+  function selectedOutfitIds() {
+    const selected = new Set(selectedCharacterIds());
+    return Array.from(characterPicker.querySelectorAll("[data-short-video-selected-outfit-id]"))
+      .reduce((result, input) => {
+        const characterId = Number(input.dataset.shortVideoSelectedOutfitId || 0);
+        const outfitId = Number(input.value || 0);
+        if (characterId && outfitId && selected.has(characterId)) {
+          result[String(characterId)] = outfitId;
+        }
+        return result;
+      }, {});
   }
 
   function setStatus(message, type = "") {
@@ -166,12 +192,107 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderCharacters(scene) {
     const selected = new Set((scene?.character_ids || []).map(Number));
-    characterPicker.innerHTML = characters.length ? characters.map((character) => `
-      <label class="short-video-character-chip ${selected.has(Number(character.id)) ? "is-selected" : ""}">
-        <input type="checkbox" value="${character.id}" ${selected.has(Number(character.id)) ? "checked" : ""}>
-        <span>${escape(character.name || character.nickname || "Character")}</span>
-      </label>
-    `).join("") : `<div class="cinema-comic-editor-empty">参照できるキャラクターがありません。</div>`;
+    const selectedOutfits = scene?.outfit_ids || {};
+    characterPicker.innerHTML = characters.length ? characters.map((character) => {
+      const characterId = Number(character.id);
+      const characterOutfits = outfits.filter((outfit) => Number(outfit.character_id) === characterId);
+      const selectedOutfitId = Number(selectedOutfits[String(characterId)] || selectedOutfits[characterId] || 0);
+      const selectedOutfit = characterOutfits.find((outfit) => Number(outfit.id) === selectedOutfitId) || null;
+      const selectedMediaUrl = selectedOutfit?.thumbnail_asset?.media_url || selectedOutfit?.asset?.media_url || "";
+      const checked = selected.has(characterId);
+      return `
+      <div class="short-video-character-option ${checked ? "is-selected" : ""}">
+        <label class="short-video-character-chip ${checked ? "is-selected" : ""}">
+          <input type="checkbox" value="${character.id}" ${checked ? "checked" : ""}>
+          <span>${escape(character.name || character.nickname || "Character")}</span>
+        </label>
+        <div class="short-video-current-outfit ${checked ? "" : "is-disabled"}" data-short-video-current-outfit="${escape(character.id)}">
+          <input type="hidden" data-short-video-selected-outfit-id="${escape(character.id)}" value="${selectedOutfitId ? escape(selectedOutfitId) : ""}">
+          <div class="short-video-current-outfit-card">
+            <span class="short-video-outfit-thumb">${selectedMediaUrl ? `<img src="${escape(selectedMediaUrl)}" alt="">` : `<i class="bi bi-slash-circle"></i>`}</span>
+            <span class="short-video-outfit-name">${escape(selectedOutfit ? (selectedOutfit.source_type === "character_base" ? "基準画像" : selectedOutfit.name || "衣装") : "衣装指定なし")}</span>
+          </div>
+          <button class="btn btn-sm btn-outline-dark short-video-open-outfit-picker" type="button" data-open-short-video-outfit-picker="${escape(character.id)}" ${checked ? "" : "disabled"}>
+            <i class="bi bi-person-bounding-box"></i> 衣装を選択
+          </button>
+        </div>
+      </div>
+    `;
+    }).join("") : `<div class="cinema-comic-editor-empty">参照できるキャラクターがありません。</div>`;
+    updateCharacterSummary();
+  }
+
+  function renderOutfitPicker(characterId) {
+    const picker = document.getElementById("shortVideoOutfitPicker");
+    const title = document.getElementById("shortVideoOutfitPickerTitle");
+    if (!picker) return;
+    const character = characters.find((item) => Number(item.id) === Number(characterId));
+    if (title) title.textContent = `${character?.name || character?.nickname || "キャラクター"}の衣装`;
+    const currentInput = characterPicker.querySelector(`[data-short-video-selected-outfit-id="${CSS.escape(String(characterId))}"]`);
+    const selectedOutfitId = Number(currentInput?.value || 0);
+    const characterOutfits = outfits.filter((outfit) => Number(outfit.character_id) === Number(characterId));
+    const cards = [
+      {
+        id: "",
+        name: "衣装指定なし",
+        usage_scene: "none",
+        description: "キャラクターの基準画像をそのまま使います。",
+        media_url: "",
+      },
+      ...characterOutfits.map((outfit) => ({
+        id: String(outfit.id),
+        name: outfit.source_type === "character_base" ? "基準画像" : (outfit.name || "衣装"),
+        usage_scene: outfit.usage_scene || "outfit",
+        description: outfit.description || "説明はありません。",
+        media_url: outfit.thumbnail_asset?.media_url || outfit.asset?.media_url || "",
+      })),
+    ];
+    picker.innerHTML = cards.map((outfit) => {
+      const isSelected = String(selectedOutfitId || "") === String(outfit.id || "");
+      const tags = [];
+      return `
+        <article class="short-video-outfit-picker-card ${isSelected ? "selected" : ""}" role="button" tabindex="0" data-picker-outfit-id="${escape(outfit.id)}" aria-label="${escape(outfit.name)}">
+          <div class="short-video-outfit-picker-image">
+            ${outfit.media_url ? `<img src="${escape(outfit.media_url)}" alt="">` : `<i class="bi bi-slash-circle"></i>`}
+            ${isSelected ? `<span class="short-video-outfit-selected">選択中</span>` : ""}
+          </div>
+          <div class="short-video-outfit-picker-body">
+            <div class="short-video-outfit-picker-meta"><span>${escape(outfit.usage_scene)}</span></div>
+            <h4>${escape(outfit.name)}</h4>
+            <details>
+              <summary>説明</summary>
+              <p>${escape(outfit.description)}</p>
+            </details>
+            <div class="short-video-outfit-picker-tags">${tags.map((tag) => `<span>${escape(tag)}</span>`).join("")}</div>
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  function openOutfitPicker(characterId) {
+    outfitPickerCharacterId = Number(characterId || 0);
+    renderOutfitPicker(outfitPickerCharacterId);
+    document.getElementById("shortVideoOutfitPickerModal")?.classList.add("is-open");
+  }
+
+  function closeOutfitPicker() {
+    outfitPickerCharacterId = null;
+    document.getElementById("shortVideoOutfitPickerModal")?.classList.remove("is-open");
+  }
+
+  function chooseOutfit(outfitId) {
+    if (!outfitPickerCharacterId) return;
+    const input = characterPicker.querySelector(`[data-short-video-selected-outfit-id="${CSS.escape(String(outfitPickerCharacterId))}"]`);
+    if (input) input.value = outfitId || "";
+    const scene = activeScene();
+    if (scene) {
+      scene.outfit_ids = scene.outfit_ids || {};
+      if (outfitId) scene.outfit_ids[String(outfitPickerCharacterId)] = Number(outfitId);
+      else delete scene.outfit_ids[String(outfitPickerCharacterId)];
+    }
+    renderCharacters(scene);
+    closeOutfitPicker();
   }
 
   function renderEditor() {
@@ -214,12 +335,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function loadAll() {
-    const [videoPayload, characterPayload] = await Promise.all([
+    const [videoPayload, characterPayload, outfitPayload] = await Promise.all([
       NovelUI.api(`/api/v1/projects/${projectId}/short-videos`),
       NovelUI.api(`/api/v1/projects/${projectId}/characters`),
+      NovelUI.api(`/api/v1/projects/${projectId}/outfits`),
     ]);
     videos = Array.isArray(videoPayload) ? videoPayload : [];
     characters = Array.isArray(characterPayload) ? characterPayload : [];
+    outfits = Array.isArray(outfitPayload?.outfits) ? outfitPayload.outfits : [];
     if (bgmSelect) {
       bgmAssets = await NovelUI.api(`/api/v1/projects/${projectId}/cinema-novels/bgm`);
       renderBgmOptions();
@@ -243,6 +366,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function createVideo(event) {
     event.preventDefault();
     const body = Object.fromEntries(new FormData(createForm).entries());
+    body.mobile_visible = body.orientation !== "landscape";
     const created = await NovelUI.api(`/api/v1/projects/${projectId}/short-videos`, {
       method: "POST",
       body,
@@ -268,6 +392,7 @@ document.addEventListener("DOMContentLoaded", () => {
         image_prompt: scenePrompt.value,
         visual_focus: scenePrompt.value,
         character_ids: selectedCharacterIds(),
+        outfit_ids: selectedOutfitIds(),
       },
     });
     activeVideo = result.novel || activeVideo;
@@ -298,6 +423,7 @@ document.addEventListener("DOMContentLoaded", () => {
           image_prompt: imagePrompt,
           visual_focus: scenePromptValue,
           character_ids: characterIds,
+          outfit_ids: selectedOutfitIds(),
           revision_prompt: revisionValue,
           use_current_image: false,
         },
@@ -327,6 +453,7 @@ document.addEventListener("DOMContentLoaded", () => {
         caption: headline.value || "新しいシーン",
         image_prompt: scenePrompt.value,
         character_ids: selectedCharacterIds(),
+        outfit_ids: selectedOutfitIds(),
       },
     });
     activeVideo = result.novel || activeVideo;
@@ -432,9 +559,27 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 0);
   });
   characterPicker?.addEventListener("change", () => {
-    characterPicker.querySelectorAll(".short-video-character-chip").forEach((label) => {
-      label.classList.toggle("is-selected", Boolean(label.querySelector("input")?.checked));
+    characterPicker.querySelectorAll(".short-video-character-option").forEach((option) => {
+      const checked = Boolean(option.querySelector("input[type='checkbox']")?.checked);
+      option.classList.toggle("is-selected", checked);
+      option.querySelector(".short-video-character-chip")?.classList.toggle("is-selected", checked);
+      option.querySelector(".short-video-current-outfit")?.classList.toggle("is-disabled", !checked);
+      const pickerButton = option.querySelector("[data-open-short-video-outfit-picker]");
+      if (pickerButton) pickerButton.disabled = !checked;
     });
+    updateCharacterSummary();
+  });
+  characterPicker?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-open-short-video-outfit-picker]");
+    if (!button || button.disabled) return;
+    openOutfitPicker(button.dataset.openShortVideoOutfitPicker);
+  });
+  document.getElementById("shortVideoOutfitPickerClose")?.addEventListener("click", closeOutfitPicker);
+  document.getElementById("shortVideoOutfitPickerBackdrop")?.addEventListener("click", closeOutfitPicker);
+  document.getElementById("shortVideoOutfitPicker")?.addEventListener("click", (event) => {
+    const card = event.target.closest("[data-picker-outfit-id]");
+    if (!card) return;
+    chooseOutfit(card.dataset.pickerOutfitId || "");
   });
   saveButton?.addEventListener("click", () => saveScene().catch((error) => NovelUI.toast(error.message || "保存に失敗しました。", "danger")));
   generateButton?.addEventListener("click", () => generateScene().catch((error) => {
@@ -458,6 +603,12 @@ document.addEventListener("DOMContentLoaded", () => {
   historyGrid?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-history-asset-id]");
     if (button) selectHistory(button.dataset.historyAssetId).catch((error) => NovelUI.toast(error.message || "履歴画像の反映に失敗しました。", "danger"));
+  });
+  characterToggle?.addEventListener("click", () => {
+    const nextExpanded = characterPicker.hidden;
+    characterPicker.hidden = !nextExpanded;
+    characterToggle.setAttribute("aria-expanded", String(nextExpanded));
+    characterToggle.classList.toggle("is-open", nextExpanded);
   });
 
   loadAll().catch((error) => NovelUI.toast(error.message || "ショート動画の読み込みに失敗しました。", "danger"));

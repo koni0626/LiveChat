@@ -143,11 +143,19 @@
   }
 
   function renderCharacterSelects() {
+    const currentFilterCharacter = filterCharacter.value || "";
+    const currentDetailCharacter = detailCharacterSelect.value || "";
     const options = state.characters
       .map((character) => `<option value="${character.id}">${NovelUI.escape(character.name || "Character")}</option>`)
       .join("");
     detailCharacterSelect.innerHTML = options || '<option value="">キャラクターがありません</option>';
     filterCharacter.innerHTML = '<option value="">すべてのキャラクター</option>' + options;
+    if ([...filterCharacter.options].some((option) => option.value === currentFilterCharacter)) {
+      filterCharacter.value = currentFilterCharacter;
+    }
+    if ([...detailCharacterSelect.options].some((option) => option.value === currentDetailCharacter)) {
+      detailCharacterSelect.value = currentDetailCharacter;
+    }
   }
 
   function openDetailFormForDraft(draft) {
@@ -405,8 +413,18 @@
         });
       } else if (button.dataset.action === "delete") {
         if (!window.confirm("この衣装を削除しますか？")) return;
+        const previousFilterCharacter = filterCharacter.value || "";
+        const previousScrollY = window.scrollY;
         await NovelUI.api(`/api/v1/outfits/${outfitId}`, { method: "DELETE" });
+        if (previousFilterCharacter) filterCharacter.value = previousFilterCharacter;
         NovelUI.toast("衣装を削除しました。");
+        await loadCloset();
+        if (previousFilterCharacter && [...filterCharacter.options].some((option) => option.value === previousFilterCharacter)) {
+          filterCharacter.value = previousFilterCharacter;
+          renderOutfits();
+        }
+        window.scrollTo({ top: previousScrollY, left: 0, behavior: "instant" });
+        return;
       }
       await loadCloset();
     } catch (error) {

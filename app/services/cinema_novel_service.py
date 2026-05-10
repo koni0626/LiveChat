@@ -22,6 +22,7 @@ from ..models import (
     Asset,
     ChatSession,
     Character,
+    CharacterOutfit,
     CharacterMemoryNote,
     CinemaNovel,
     CinemaNovelChapter,
@@ -913,6 +914,7 @@ figcaption {
                 ImageFilter=ImageFilter,
                 ImageOps=ImageOps,
                 fonts=fonts,
+                mobile_visible=bool(getattr(novel, "mobile_visible", True)),
             )
             if fade_in:
                 fade_paths = self._short_video_frame_fade_in_paths(frame_path, Image, frame_count=9)
@@ -1170,7 +1172,7 @@ figcaption {
             subtitle="手動作成ショート動画",
             description=str(payload.get("description") or "").strip() or "Feedのような短い入力から作る手動ショート動画",
             status=str(payload.get("status") or "draft").strip() or "draft",
-            mobile_visible=self._normalize_bool(payload.get("mobile_visible", True)),
+            mobile_visible=self._normalize_bool(payload.get("mobile_visible", False)),
             mode="short_comic_video",
             production_json=json_util.dumps(
                 {
@@ -1198,6 +1200,7 @@ figcaption {
     def _manual_short_video_scene(self, project_id: int, raw_scene: dict, *, index: int = 0) -> dict:
         character_ids = self._normalize_character_ids(raw_scene.get("character_ids"))
         characters = self._character_names_for_ids(project_id, character_ids)
+        outfit_ids = self._normalize_scene_outfit_ids(project_id, character_ids, raw_scene.get("outfit_ids"))
         caption = self._normalize_short_comic_caption(raw_scene.get("caption") or raw_scene.get("text") or "")
         image_prompt = str(raw_scene.get("image_prompt") or raw_scene.get("scene_text") or "").strip()
         return {
@@ -1217,6 +1220,7 @@ figcaption {
             "visual_focus": image_prompt,
             "image_prompt": image_prompt,
             "character_ids": character_ids,
+            "outfit_ids": outfit_ids,
             "characters": characters,
             "background_asset_id": None,
             "still_asset_id": raw_scene.get("still_asset_id"),
@@ -1794,6 +1798,9 @@ figcaption {
             scene["characters"] = self._character_names_for_ids(novel.project_id, character_ids)
         elif "characters" in payload and isinstance(payload.get("characters"), list):
             scene["characters"] = [str(item).strip() for item in payload.get("characters") if str(item).strip()]
+        if "outfit_ids" in payload:
+            character_ids = self._normalize_character_ids(scene.get("character_ids"))
+            scene["outfit_ids"] = self._normalize_scene_outfit_ids(novel.project_id, character_ids, payload.get("outfit_ids"))
 
         if "selected_asset_id" in payload:
             try:
@@ -1882,6 +1889,7 @@ figcaption {
             image_prompt = str(payload.get("image_prompt") or current_scene.get("image_prompt") or current_scene.get("visual_focus") or "").strip()
             character_ids = self._normalize_character_ids(payload.get("character_ids") or current_scene.get("character_ids") or [])
             characters = self._character_names_for_ids(novel.project_id, character_ids)
+            outfit_ids = self._normalize_scene_outfit_ids(novel.project_id, character_ids, payload.get("outfit_ids") or current_scene.get("outfit_ids"))
             if not characters:
                 characters = current_scene.get("characters") if isinstance(current_scene.get("characters"), list) else []
             scene = {
@@ -1897,6 +1905,7 @@ figcaption {
                 "emotion": str(current_scene.get("emotion") or "").strip(),
                 "shot": str(current_scene.get("shot") or "thumbnail composition").strip(),
                 "character_ids": character_ids,
+                "outfit_ids": outfit_ids,
                 "characters": characters,
                 "comic_page": bool(current_scene.get("comic_page")) or comic_layout == "page",
                 "page_panels": copy.deepcopy(current_scene.get("page_panels") or []),
@@ -2172,8 +2181,9 @@ figcaption {
         ImageFilter,
         ImageOps,
         fonts,
+        mobile_visible=True,
     ):
-        target_size = (1080, 1920)
+        target_size = (1080, 1920) if mobile_visible else (1920, 1080)
         try:
             source = ImageOps.exif_transpose(Image.open(image_path)).convert("RGB") if image_path else None
         except Exception:
@@ -2412,6 +2422,9 @@ figcaption {
                 "Manual short video dynamic mode:",
                 "Create a high-impact Feed-like image for a manual short video scene.",
                 "Use the attached reference images as the primary source of character identity and art style.",
+                "When a selected outfit reference is attached for a character, treat that outfit as the highest-priority clothing reference for that character.",
+                "Preserve selected outfit design, silhouette, fabric impression, color palette, accessories, fixed parts, and NG rules unless the scene text explicitly requests a compatible change.",
+                "If a character has both an outfit reference and a base identity reference, those references describe the same character; do not create duplicate people from them.",
                 "If multiple reference images are provided, include all selected referenced characters in the scene unless the scene text clearly says otherwise.",
                 "Keep the same face, hair, outfit design logic, coloring, rendering quality, material detail, and mood for every referenced character.",
                 "All visible characters must share one unified high-end 3D, semi-realistic, cinematic game-CG style. Do not render one character as lower-detail anime, chibi, manga, sketch, or flat illustration.",
@@ -5063,10 +5076,44 @@ figcaption {
                     names.append(name)
         return names
 
+    def _normalize_scene_outfit_ids(self, project_id: int, character_ids, values) -> dict:
+        ids = self._normalize_character_ids(character_ids)
+        if not ids or not isinstance(values, dict):
+            return {}
+        normalized = {}
+        for character_id in ids:
+            raw_value = values.get(str(character_id))
+            if raw_value is None:
+                raw_value = values.get(character_id)
+            try:
+                outfit_id = int(raw_value or 0)
+            except (TypeError, ValueError):
+                outfit_id = 0
+            if outfit_id <= 0:
+                continue
+            outfit = CharacterOutfit.query.filter(
+                CharacterOutfit.id == outfit_id,
+                CharacterOutfit.project_id == project_id,
+                CharacterOutfit.character_id == character_id,
+                CharacterOutfit.deleted_at.is_(None),
+            ).first()
+            if outfit and str(outfit.status or "active") == "active":
+                normalized[str(character_id)] = outfit.id
+        return normalized
+
     def _scene_character_reference_asset_ids(self, project_id: int, scene: dict) -> list[int]:
         ids = self._normalize_character_ids((scene or {}).get("character_ids"))
         if not ids:
             return []
+        outfit_ids = self._normalize_scene_outfit_ids(project_id, ids, (scene or {}).get("outfit_ids"))
+        outfits = []
+        if outfit_ids:
+            outfits = CharacterOutfit.query.filter(
+                CharacterOutfit.project_id == project_id,
+                CharacterOutfit.deleted_at.is_(None),
+                CharacterOutfit.id.in_([int(value) for value in outfit_ids.values()]),
+            ).all()
+        outfit_by_character_id = {int(row.character_id): row for row in outfits}
         rows = Character.query.filter(
             Character.project_id == project_id,
             Character.deleted_at.is_(None),
@@ -5076,6 +5123,10 @@ figcaption {
         asset_ids = []
         for character_id in ids:
             row = by_id.get(int(character_id))
+            outfit = outfit_by_character_id.get(int(character_id))
+            outfit_asset_id = getattr(outfit, "asset_id", None) if outfit else None
+            if outfit_asset_id and outfit_asset_id not in asset_ids:
+                asset_ids.append(outfit_asset_id)
             asset_id = getattr(row, "base_asset_id", None) if row else None
             if asset_id and asset_id not in asset_ids:
                 asset_ids.append(asset_id)
@@ -5085,6 +5136,15 @@ figcaption {
         ids = self._normalize_character_ids((scene or {}).get("character_ids"))
         if not ids:
             return []
+        outfit_ids = self._normalize_scene_outfit_ids(project_id, ids, (scene or {}).get("outfit_ids"))
+        outfits = []
+        if outfit_ids:
+            outfits = CharacterOutfit.query.filter(
+                CharacterOutfit.project_id == project_id,
+                CharacterOutfit.deleted_at.is_(None),
+                CharacterOutfit.id.in_([int(value) for value in outfit_ids.values()]),
+            ).all()
+        outfit_by_character_id = {int(row.character_id): row for row in outfits}
         rows = Character.query.filter(
             Character.project_id == project_id,
             Character.deleted_at.is_(None),
@@ -5096,6 +5156,7 @@ figcaption {
             character = by_id.get(int(character_id))
             if not character:
                 continue
+            outfit = outfit_by_character_id.get(int(character_id))
             contexts.append(
                 {
                     "id": character.id,
@@ -5107,6 +5168,23 @@ figcaption {
                     "appearance": character.appearance_summary,
                     "art_style": getattr(character, "art_style", None),
                     "ng_rules": character.ng_rules,
+                    "selected_outfit": (
+                        {
+                            "id": outfit.id,
+                            "name": outfit.name,
+                            "description": outfit.description,
+                            "usage_scene": outfit.usage_scene,
+                            "season": outfit.season,
+                            "mood": outfit.mood,
+                            "color_notes": outfit.color_notes,
+                            "fixed_parts": outfit.fixed_parts,
+                            "allowed_changes": outfit.allowed_changes,
+                            "ng_rules": outfit.ng_rules,
+                            "prompt_notes": outfit.prompt_notes,
+                        }
+                        if outfit
+                        else None
+                    ),
                 }
             )
         return contexts

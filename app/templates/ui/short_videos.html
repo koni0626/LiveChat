@@ -27,6 +27,17 @@
         <span>画像内テキスト</span>
         <input class="form-control" name="caption" placeholder="このラーメン、おいしー">
       </label>
+      <fieldset class="short-video-orientation-field">
+        <legend>向き</legend>
+        <label>
+          <input class="form-check-input" type="radio" name="orientation" value="landscape" checked>
+          <span>横</span>
+        </label>
+        <label>
+          <input class="form-check-input" type="radio" name="orientation" value="portrait">
+          <span>縦</span>
+        </label>
+      </fieldset>
       <button class="btn btn-dark" type="submit">
         <i class="bi bi-plus-lg"></i>
         作成
@@ -78,8 +89,16 @@
         </aside>
         <section class="cinema-comic-editor-preview" id="shortVideoPreview"></section>
         <section class="cinema-comic-editor-form">
-          <label class="form-label">参照キャラクター</label>
-          <div class="short-video-character-picker" id="shortVideoCharacterPicker"></div>
+          <section class="short-video-character-collapsible">
+            <button class="short-video-character-toggle" type="button" id="shortVideoCharacterToggle" aria-expanded="false" aria-controls="shortVideoCharacterPicker">
+              <span>
+                <strong>参照キャラクター</strong>
+                <small id="shortVideoCharacterSummary">未選択</small>
+              </span>
+              <i class="bi bi-chevron-down"></i>
+            </button>
+            <div class="short-video-character-picker" id="shortVideoCharacterPicker" hidden></div>
+          </section>
           <label class="form-label" for="shortVideoScenePrompt">シーン文</label>
           <textarea class="form-control" id="shortVideoScenePrompt" rows="6" placeholder="ノアとコリーがおいしそうにラーメンを食べる"></textarea>
           <label class="form-label" for="shortVideoHeadline">画像内テキスト</label>
@@ -108,8 +127,23 @@
     </section>
   </section>
 </section>
+<div class="short-video-outfit-modal" id="shortVideoOutfitPickerModal" aria-hidden="true">
+  <div class="short-video-outfit-modal-backdrop" id="shortVideoOutfitPickerBackdrop"></div>
+  <section class="short-video-outfit-modal-panel" role="dialog" aria-modal="true" aria-labelledby="shortVideoOutfitPickerTitle">
+    <div class="short-video-outfit-modal-head">
+      <div>
+        <h3 id="shortVideoOutfitPickerTitle">衣装を選択</h3>
+        <p>クローゼットの衣装をシーン用に選びます。</p>
+      </div>
+      <button class="btn btn-sm btn-outline-dark" type="button" id="shortVideoOutfitPickerClose">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div class="short-video-outfit-picker" id="shortVideoOutfitPicker"></div>
+  </section>
+</div>
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/short_videos_page.js') }}?v=20260510g"></script>
+<script src="{{ url_for('static', filename='js/short_videos_page.js') }}?v=20260510l"></script>
 {% endblock %}
