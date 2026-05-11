@@ -10,6 +10,9 @@ from .live_chat_room_service import LiveChatRoomService
 from .letter_service import LetterService
 from .live_chat_conversation_service import LiveChatConversationService
 from .live_chat_context_service import LiveChatContextService
+from .learning_live_chat_context_service import LearningLiveChatContextService
+from .learning_live_chat_conversation_service import LearningLiveChatConversationService
+from .live_chat_genre_router import LiveChatGenreRouter
 from .live_chat_gift_service import LiveChatGiftService
 from .live_chat_media_service import LiveChatMediaService
 from .live_chat_serializer import LiveChatSerializer
@@ -113,6 +116,44 @@ class LiveChatService:
             character_user_memory_service=self._character_user_memory_service,
             character_memory_note_service=self._character_memory_note_service,
             session_objective_note_service=self._session_objective_note_service,
+        )
+        self._learning_context_service = LearningLiveChatContextService(
+            chat_session_service=self._chat_session_service,
+            chat_message_service=self._chat_message_service,
+            session_state_service=self._session_state_service,
+            session_image_service=self._session_image_service,
+            session_gift_event_service=self._session_gift_event_service,
+            project_service=self._project_service,
+            live_chat_room_service=self._live_chat_room_service,
+            world_service=self._world_service,
+            world_map_service=self._world_map_service,
+            serializer=self._serializer,
+            media_service=self._media_service,
+            gift_event_serializer=self._serialize_gift_event,
+            select_characters=self._select_characters,
+            text_ai_client=self._text_ai_client,
+            character_user_memory_service=self._character_user_memory_service,
+            character_memory_note_service=self._character_memory_note_service,
+            session_objective_note_service=self._session_objective_note_service,
+        )
+        self._learning_conversation_service = LearningLiveChatConversationService(
+            chat_session_service=self._chat_session_service,
+            chat_message_service=self._chat_message_service,
+            session_state_service=self._session_state_service,
+            text_ai_client=self._text_ai_client,
+            media_service=self._media_service,
+            context_provider=self.get_session_context,
+            serialize_message=self._serialize_message,
+            serialize_state=self._serialize_state,
+        )
+        self._genre_router = LiveChatGenreRouter(
+            chat_session_service=self._chat_session_service,
+            live_chat_room_service=self._live_chat_room_service,
+            serializer=self._serializer,
+            romance_context_service=self._context_service,
+            romance_conversation_service=self._conversation_service,
+            learning_context_service=self._learning_context_service,
+            learning_conversation_service=self._learning_conversation_service,
         )
         self._session_workflow_service = LiveChatSessionWorkflowService(
             chat_session_service=self._chat_session_service,
@@ -226,7 +267,7 @@ class LiveChatService:
         return self._session_workflow_service.delete_message(session_id, message_id)
 
     def get_session_context(self, session_id: int):
-        return self._context_service.get_session_context(session_id)
+        return self._genre_router.get_session_context(session_id)
 
     def _update_session_memory(self, session_id: int, context: dict):
         return self._conversation_service.update_session_memory(session_id, context)
@@ -243,13 +284,13 @@ class LiveChatService:
         return self._conversation_service.finalize_session_memory(session_id, character_id, trigger_type)
 
     def post_message(self, session_id: int, payload: dict | None = None):
-        return self._conversation_service.post_message(session_id, payload)
+        return self._genre_router.post_message(session_id, payload)
 
     def generate_player_proxy_message(self, session_id: int, payload: dict | None = None):
-        return self._conversation_service.generate_player_proxy_message(session_id, payload)
+        return self._genre_router.generate_player_proxy_message(session_id, payload)
 
     def post_idle_character_message(self, session_id: int):
-        return self._conversation_service.post_idle_character_message(session_id)
+        return self._genre_router.post_idle_character_message(session_id)
 
     def extract_state(self, session_id: int):
         return self._session_workflow_service.extract_state(session_id)
@@ -261,7 +302,7 @@ class LiveChatService:
         return self._media_service.register_uploaded_image(session_id, asset_id, payload)
 
     def execute_scene_choice(self, session_id: int, choice_id: str, payload: dict | None = None):
-        return self._conversation_service.execute_scene_choice(session_id, choice_id, payload)
+        return self._genre_router.execute_scene_choice(session_id, choice_id, payload)
 
     def move_to_location(self, session_id: int, location_id: int, payload: dict | None = None):
         return self._conversation_service.move_to_location(session_id, location_id, payload)

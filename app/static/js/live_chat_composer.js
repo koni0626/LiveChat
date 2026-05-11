@@ -66,7 +66,9 @@
     }
 
     function hasActiveSceneChoices(context = currentContext()) {
-      const choices = context?.state?.state_json?.scene_choices?.choices;
+      const choiceState = context?.state?.state_json?.scene_choices || {};
+      if (choiceState.allow_free_text || String(choiceState.source || "").startsWith("learning_live_chat")) return false;
+      const choices = choiceState.choices;
       return Array.isArray(choices) && choices.length > 0;
     }
 

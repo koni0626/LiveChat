@@ -151,13 +151,14 @@
 
   function hasActiveSceneChoices() {
     const choiceState = currentContext?.state?.state_json?.scene_choices || {};
+    if (choiceState.allow_free_text || String(choiceState.source || "").startsWith("learning_live_chat")) return false;
     return Array.isArray(choiceState.choices) && choiceState.choices.length > 0;
   }
 
   function currentSceneSuggestions(context = currentContext) {
     const stateJson = context?.state?.state_json || {};
     const choiceState = stateJson.scene_choices || {};
-    if (Array.isArray(choiceState.choices) && choiceState.choices.length > 0) {
+    if (!choiceState.allow_free_text && !String(choiceState.source || "").startsWith("learning_live_chat") && Array.isArray(choiceState.choices) && choiceState.choices.length > 0) {
       return [];
     }
     const suggestionState = stateJson.scene_suggestions || {};
@@ -169,7 +170,7 @@
   function currentPhotoOpportunities(context = currentContext) {
     const stateJson = context?.state?.state_json || {};
     const choiceState = stateJson.scene_choices || {};
-    if (Array.isArray(choiceState.choices) && choiceState.choices.length > 0) {
+    if (!choiceState.allow_free_text && !String(choiceState.source || "").startsWith("learning_live_chat") && Array.isArray(choiceState.choices) && choiceState.choices.length > 0) {
       return [];
     }
     const opportunityState = stateJson.photo_opportunities || {};
@@ -529,6 +530,14 @@
     currentContext = context;
     const title = context.session.title || "\u30e9\u30a4\u30d6\u30c1\u30e3\u30c3\u30c8";
     document.getElementById("liveChatTitle").textContent = title;
+    const roomGenre = context?.room?.genre
+      || context?.session?.room_snapshot_json?.genre
+      || context?.session?.settings_json?.live_chat_genre
+      || context?.state?.state_json?.live_chat_genre
+      || "romance";
+    const isLearningMode = roomGenre === "learning";
+    root.classList.toggle("is-learning-mode", isLearningMode);
+    document.body.classList.toggle("live-chat-learning-mode", isLearningMode);
 
     if (stateBoard) {
       stateBoard.textContent = LiveChatView.formatJson(context.state.state_json || {});

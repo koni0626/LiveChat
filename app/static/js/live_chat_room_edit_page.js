@@ -5,6 +5,7 @@
   const roomForm = document.getElementById("liveChatRoomForm");
   if (!roomForm) return;
   const characterSelect = document.getElementById("liveChatRoomCharacterSelect");
+  const genreSelect = document.getElementById("liveChatRoomGenreSelect");
   const outfitInput = document.getElementById("liveChatRoomOutfitInput");
   const outfitPicker = document.getElementById("liveChatRoomOutfitPicker");
   const outfitPickerController = window.OutfitPicker.create({
@@ -143,6 +144,7 @@
         method: "POST",
         body: {
           character_id: characterId,
+          genre: genreSelect?.value || "romance",
           title: roomForm.title.value,
           description: roomForm.description.value,
           conversation_objective: roomForm.conversation_objective.value,
@@ -168,7 +170,7 @@
     try {
       const draft = await NovelUI.api(`/api/v1/projects/${projectId}/chat/rooms/objective-draft`, {
         method: "POST",
-        body: { character_id: characterId },
+        body: { character_id: characterId, genre: genreSelect?.value || "romance" },
       });
       if (!roomForm.title.value.trim()) {
         roomForm.title.value = draft.title || "";
@@ -196,6 +198,7 @@
 
   function fillRoom(room) {
     roomForm.title.value = room.title || "";
+    if (genreSelect) genreSelect.value = room.genre || "romance";
     roomForm.character_id.value = room.character_id || "";
     outfitInput.value = room.default_outfit_id || "";
     roomForm.status.value = room.status || "draft";
@@ -232,6 +235,7 @@
     event.preventDefault();
     const body = {
       title: roomForm.title.value.trim(),
+      genre: genreSelect?.value || "romance",
       character_id: Number(roomForm.character_id.value || 0),
       default_outfit_id: outfitInput.value ? Number(outfitInput.value) : null,
       status: roomForm.status.value,

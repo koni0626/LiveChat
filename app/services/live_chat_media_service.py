@@ -366,6 +366,82 @@ class LiveChatMediaService:
             )
         return message[:500] or "画像生成に失敗しました。プロンプトを少し変えて再試行してください。"
 
+    def _learning_aid_prompt(self, context: dict, state_json: dict, aid_type: str) -> str:
+        learning_state = state_json.get("learning_director") or {}
+        aid_prompt = str(learning_state.get("teaching_aid_prompt") or "").strip()
+        board_items = [
+            str(item).strip()
+            for item in (learning_state.get("board_items") or [])
+            if str(item).strip()
+        ][:8]
+        lesson_points = [
+            str(item).strip()
+            for item in (learning_state.get("lesson_points") or [])
+            if str(item).strip()
+        ][:10]
+        room = context.get("room") or {}
+        objective = str(room.get("conversation_objective") or "").strip()
+        type_labels = {
+            "map": "地図",
+            "timeline": "年表",
+            "diagram": "図解",
+            "experiment": "実験イメージ",
+            "photo": "写真資料",
+        }
+        lines = [
+            f"学習用の{type_labels.get(aid_type, '教材画像')}を生成してください。",
+            "人物、キャラクター、先生、生徒、ポートレート、人型シルエットは描かないでください。",
+            "架空の女性や知らない人物を追加しないでください。",
+            "キャラクター写真ではなく、教材そのものを画面いっぱいに表示してください。",
+            "吹き出し、字幕、UI、ロゴ、透かしは禁止です。",
+            "教材内の自然な文字、ラベル、地名、年号、短い注釈は読みやすく表示して構いません。",
+        ]
+        if aid_type == "map":
+            lines.extend(
+                [
+                    "地図として、国や地域の位置関係が一目でわかる構図にしてください。",
+                    "海、湾、周辺国、主要地域を簡潔にラベル表示してください。",
+                ]
+            )
+        elif aid_type == "timeline":
+            lines.extend(
+                [
+                    "横長の年表として、時代の順序と主要な出来事を読みやすく並べてください。",
+                    "年号、王朝名、転換点を短くラベル表示してください。",
+                ]
+            )
+        elif aid_type == "diagram":
+            lines.extend(
+                [
+                    "概念図として、枠、矢印、短いラベルで関係性を整理してください。",
+                    "背景に人物や都市風景を置かず、図解の読みやすさを最優先してください。",
+                ]
+            )
+        elif aid_type == "experiment":
+            lines.extend(
+                [
+                    "理科教材の実験図として、実験器具、操作、観察される現象を安全で教育的に描いてください。",
+                    "危険行為や事故ではなく、学校教材の模式図として見せてください。",
+                ]
+            )
+        elif aid_type == "photo":
+            lines.extend(
+                [
+                    "実景写真風の教材資料として、現地の地形、風景、自然環境、空気感が伝わるように描いてください。",
+                    "地図、黒板、図解、UI、人物、架空キャラクターは入れないでください。",
+                    "旅行写真・地理資料写真のように、広角で場所の特徴がわかる構図にしてください。",
+                    "必要なら山地、高原、乾いた大地、遠景の山並み、集落、道路など、学習対象を理解しやすい要素を入れてください。",
+                ]
+            )
+        if aid_prompt:
+            lines.append(f"教材内容: {aid_prompt}")
+        labels = "、".join(board_items or lesson_points)
+        if labels:
+            lines.append(f"表示したい要点: {labels}")
+        if objective:
+            lines.append(f"授業テーマ: {objective[:500]}")
+        return "\n".join(lines)
+
     def generate_image(self, session_id: int, payload: dict | None = None):
         payload = dict(payload or {})
         session = self._chat_session_service.get_session(session_id)
@@ -378,12 +454,29 @@ class LiveChatMediaService:
         skip_character_references = str(payload.get("skip_character_references") or "").strip().lower() in {"1", "true", "yes", "on"}
         skip_outfit_prompt = str(payload.get("skip_outfit_prompt") or "").strip().lower() in {"1", "true", "yes", "on"}
         conversation_prompt = {}
+        learning_state = state_json.get("learning_director") or {}
+        aid_type = str(learning_state.get("teaching_aid_type") or "").strip().lower()
+        force_learning_aid_prompt = (
+            str(payload.get("image_type") or "").startswith("learning_")
+            and aid_type in {"map", "timeline", "diagram", "experiment", "photo"}
+        )
         if reuse_existing_prompt:
             prompt = str(payload.get("prompt_text") or "")
             if not prompt.strip():
                 raise ValueError("prompt_text is required")
             state_json["manual_prompt_passthrough"] = True
             state_json.pop("image_prompt_safety_rewrite", None)
+        elif force_learning_aid_prompt:
+            prompt = self._learning_aid_prompt(context, state_json, aid_type)
+            conversation_prompt = {
+                "prompt_ja": prompt,
+                "scene_summary": f"learning {aid_type}",
+                "focus_subjects": [],
+            }
+            state_json["conversation_image_prompt"] = conversation_prompt
+            state_json["learning_aid_prompt_direct"] = True
+            skip_character_references = True
+            skip_outfit_prompt = True
         else:
             conversation_prompt = image_support.generate_japanese_conversation_image_prompt(self._text_ai_client, context, state)
             state_json["conversation_image_prompt"] = conversation_prompt

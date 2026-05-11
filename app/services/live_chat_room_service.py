@@ -19,6 +19,8 @@ from ..clients.text_ai_client import TextAIClient
 
 class LiveChatRoomService:
     VALID_STATUSES = {"draft", "published", "archived"}
+    VALID_GENRES = {"romance", "learning"}
+    DEFAULT_GENRE = "romance"
 
     def __init__(
         self,
@@ -71,6 +73,7 @@ class LiveChatRoomService:
             "default_outfit": default_outfit,
             "title": room.title,
             "description": room.description,
+            "genre": self.normalize_genre(getattr(room, "genre", None)),
             "conversation_objective": room.conversation_objective,
             "proxy_player_objective": getattr(room, "proxy_player_objective", None),
             "proxy_player_gender": getattr(room, "proxy_player_gender", None),
@@ -157,6 +160,8 @@ class LiveChatRoomService:
         character = self._character_service.get_character(character_id)
         if not character or character.project_id != project_id:
             raise ValueError("character_id is invalid")
+        if self.normalize_genre(payload.get("genre")) == "learning":
+            return self._build_learning_objective_draft(character)
         base_payload = self._character_service.build_default_live_chat_room_payload(character)
         return self._build_event_objective_draft(project_id, character, base_payload)
 
@@ -171,6 +176,9 @@ class LiveChatRoomService:
         character = self._character_service.get_character(character_id)
         if not character or character.project_id != project_id:
             raise ValueError("character_id is invalid")
+        if self.normalize_genre(payload.get("genre")) == "learning":
+            name = str(getattr(character, "name", None) or "先生").strip()
+            return {"description": f"{name}が先生役として、黒板や図解を使いながらプレイヤーの疑問を一緒に整理する学習ルームです。"}
         prompt = self._build_description_draft_prompt(character, payload)
         result = self._text_ai_client.generate_text(
             prompt,
@@ -214,6 +222,7 @@ class LiveChatRoomService:
     def _build_room_settings(self, room) -> dict:
         return {
             "selected_character_ids": [room.character_id],
+            "live_chat_genre": self.normalize_genre(getattr(room, "genre", None)),
             "conversation_objective": room.conversation_objective,
             "proxy_player_objective": getattr(room, "proxy_player_objective", None),
             "proxy_player_gender": getattr(room, "proxy_player_gender", None),
@@ -243,6 +252,7 @@ class LiveChatRoomService:
             state_json = self._load_json_dict(getattr(state_row, "state_json", None))
             state_json["active_character_ids"] = [room.character_id]
             state_json["room_id"] = room.id
+            state_json["live_chat_genre"] = self.normalize_genre(getattr(room, "genre", None))
             self._session_state_service.upsert_state(session.id, {"state_json": state_json})
             synced_ids.append(session.id)
         return {
@@ -278,6 +288,39 @@ class LiveChatRoomService:
             if text:
                 lines.append(f"{label}: {text}")
         return "\n".join(lines)
+
+    def _build_learning_objective_draft(self, character) -> dict:
+        name = str(getattr(character, "name", None) or "先生").strip()
+        title = f"{name}の学習ルーム"
+        return {
+            "title": title,
+            "description": f"{name}が先生役になり、黒板や図解を使ってテーマをわかりやすく説明する学習ルームです。",
+            "conversation_objective": "\n".join(
+                [
+                    f"# {name}の学習ルーム",
+                    "",
+                    "## 目的",
+                    "- プレイヤーが入力したテーマを授業として説明する。",
+                    "- 黒板、板書、図解、例題を使って理解しやすくする。",
+                    "- わからない点を確認しながら、短い確認問題で理解度を見る。",
+                    "",
+                    "## 進行方針",
+                    "- 最初にテーマを要点へ分解する。",
+                    "- 必要に応じて黒板に書くべき項目を明示する。",
+                    "- 難しい概念は例え話と具体例で説明する。",
+                    "- 恋愛イベント、施設デート、ラブコメ的ハプニングを主軸にしない。",
+                    "- 画像生成時は、先生役のキャラクターと黒板・教材・図解を中心にする。",
+                ]
+            ),
+            "proxy_player_objective": "\n".join(
+                [
+                    "学びたいテーマ、疑問点、確認したい箇所を素直に入力する。",
+                    "説明が難しい場合は、もっと簡単に、例で、図解で、など希望を伝える。",
+                ]
+            ),
+            "proxy_player_gender": "",
+            "proxy_player_speech_style": "学習者として自然に質問する。わからないところは遠慮せず聞き返す。",
+        }
 
     def _build_event_objective_draft(self, project_id: int, character, base_payload: dict) -> dict:
         location = self._select_character_location(project_id, character.id)
@@ -544,6 +587,10 @@ class LiveChatRoomService:
     def delete_room(self, room_id: int):
         return self._repo.delete(room_id)
 
+    def normalize_genre(self, value) -> str:
+        genre = str(value or self.DEFAULT_GENRE).strip().lower()
+        return genre if genre in self.VALID_GENRES else self.DEFAULT_GENRE
+
     def build_room_snapshot(self, room):
         character = self._character_service.get_character(room.character_id)
         default_outfit = self._closet_service.serialize_outfit(
@@ -552,6 +599,7 @@ class LiveChatRoomService:
         return {
             "room_id": room.id,
             "room_title": room.title,
+            "genre": self.normalize_genre(getattr(room, "genre", None)),
             "conversation_objective": room.conversation_objective,
             "proxy_player_objective": getattr(room, "proxy_player_objective", None),
             "proxy_player_gender": getattr(room, "proxy_player_gender", None),
@@ -592,6 +640,8 @@ class LiveChatRoomService:
             normalized["proxy_player_speech_style"] = str(payload.get("proxy_player_speech_style") or "").strip() or None
         if "description" in payload:
             normalized["description"] = str(payload.get("description") or "").strip() or None
+        if "genre" in payload or require_all:
+            normalized["genre"] = self.normalize_genre(payload.get("genre"))
         if require_all or "character_id" in payload:
             try:
                 character_id = int(payload.get("character_id") or 0)

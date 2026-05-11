@@ -665,6 +665,53 @@ class WorldMapService:
         text = str(value or "").strip().replace("\r\n", "\n")
         return text if len(text) <= limit else text[:limit].rstrip() + "..."
 
+    def _clean_map_prompt_text(self, value, limit: int = 500) -> str:
+        text = str(value or "").replace("\r\n", "\n")
+        cleaned_lines = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("|") or re.match(r"^\|?\s*:?-{3,}:?\s*(\||$)", line):
+                continue
+            line = re.sub(r"[#*_`>]+", " ", line)
+            line = re.sub(r"\[(.*?)\]\(.*?\)", r"\1", line)
+            line = re.sub(r"<[^>]+>", " ", line)
+            line = line.replace("|", " ")
+            line = re.sub(r"\s+", " ", line).strip(" -:：")
+            if line:
+                cleaned_lines.append(line)
+        return self._shorten(" ".join(cleaned_lines), limit)
+
+    def _map_region_summaries(self, locations, *, max_regions: int = 10, max_examples_per_region: int = 2) -> list[str]:
+        region_map: dict[str, dict] = {}
+        for location in locations:
+            region = str(getattr(location, "region", None) or "未分類エリア").strip() or "未分類エリア"
+            entry = region_map.setdefault(region, {"count": 0, "types": {}, "examples": []})
+            entry["count"] += 1
+            location_type = str(getattr(location, "location_type", None) or "施設").strip() or "施設"
+            entry["types"][location_type] = entry["types"].get(location_type, 0) + 1
+            if len(entry["examples"]) < max_examples_per_region:
+                name = str(getattr(location, "name", None) or "").strip()
+                tags = self._tags_from_json(getattr(location, "tags_json", None))[:3]
+                description = self._clean_map_prompt_text(getattr(location, "description", None), 48)
+                bits = [name, location_type]
+                if tags:
+                    bits.append("tags: " + ", ".join(tags))
+                if description:
+                    bits.append("visual cue: " + description)
+                entry["examples"].append(" / ".join(bit for bit in bits if bit))
+
+        summaries = []
+        ranked_regions = sorted(region_map.items(), key=lambda item: (-item[1]["count"], item[0]))[:max_regions]
+        for region, data in ranked_regions:
+            type_names = sorted(data["types"], key=lambda key: (-data["types"][key], key))[:4]
+            examples = "; ".join(data["examples"])
+            summaries.append(
+                f"- {region}: {data['count']} facilities. Main types: {', '.join(type_names)}. Representative landmarks: {examples}"
+            )
+        return summaries
+
     def _build_location_draft_prompt(self, project_id: int, current_location: dict | None = None) -> str:
         current_location = current_location if isinstance(current_location, dict) else {}
         project = self._project_service.get_project(project_id)
@@ -1172,44 +1219,44 @@ class WorldMapService:
         project = self._project_service.get_project(project_id)
         world = self._world_service.get_world(project_id)
         locations = self._locations.list_by_project(project_id)
+        region_summaries = self._map_region_summaries(locations)
         lines = [
-            "Create a 1536x1024 landscape overview image of a fictional world map / area map.",
-            "The image should communicate the whole setting at a glance, like a beautiful game world map, city guide map, campus map, village map, or theme park guide depending on the world.",
-            "This is not a precise GIS map. Do not draw coordinate grids. Make a readable atmospheric overview that helps users understand what kind of world this is.",
-            "Show the relationships between major facilities with clear visual landmarks, roads, districts, paths, rivers, rails, plazas, or spatial groupings where appropriate.",
-            "Do not include readable text, labels, letters, captions, UI, logos, or watermarks. Use icons, silhouettes, shapes, architecture, and landmarks instead of text labels.",
-            "Use polished commercial key visual quality, strong composition, appealing colors, and enough detail to make the user want to explore.",
+            "Create a 1536x1024 landscape, top-down three-quarter overview illustration of the fictional city/world map.",
+            "The result must look like a single cohesive explorable game world map, not a poster, not an educational infographic, not a flowchart, not a brochure, not a card grid, and not a scientific diagram.",
+            "Do not draw readable text, labels, letters, captions, UI panels, numbered steps, arrows, logos, legends, or watermarks.",
+            "Use facility names as semantic cues only. Do not spell facility names inside the image.",
+            "Use visual landmarks only: districts, roads, rails, plazas, waterways, parks, towers, neon signs without readable text, domes, ports, alleys, entertainment blocks, observation decks, and distinctive silhouettes.",
+            "Show broad geography and district relationships first. Keep individual facilities as small recognizable landmarks within their districts.",
+            "Use polished commercial key visual quality, rich atmospheric lighting, strong composition, and appealing colors.",
             f"World/project name: {getattr(project, 'title', '') or ''}",
-            f"World/project summary: {getattr(project, 'summary', '') or ''}",
+            f"World/project summary: {self._clean_map_prompt_text(getattr(project, 'summary', ''), 260)}",
         ]
         if world:
             lines.extend(
                 [
-                    f"World tone: {world.tone or ''}",
-                    f"Era: {world.era_description or ''}",
-                    f"World overview: {world.overview or ''}",
-                    f"Technology level: {world.technology_level or ''}",
-                    f"Social structure: {world.social_structure or ''}",
-                    f"Important facilities/rules: {world.rules_json or ''}",
-                    f"Forbidden settings to avoid: {world.forbidden_json or ''}",
+                    f"World tone: {self._clean_map_prompt_text(world.tone, 160)}",
+                    f"Era: {self._clean_map_prompt_text(world.era_description, 220)}",
+                    f"World overview: {self._clean_map_prompt_text(world.overview, 320)}",
+                    f"Technology level: {self._clean_map_prompt_text(world.technology_level, 220)}",
+                    f"Social structure: {self._clean_map_prompt_text(world.social_structure, 220)}",
+                    f"World constraints and important rules: {self._clean_map_prompt_text(world.rules_json, 260)}",
+                    f"Forbidden settings to avoid: {self._clean_map_prompt_text(world.forbidden_json, 180)}",
                 ]
             )
-        if locations:
-            lines.append("Registered facilities to reflect as landmarks:")
-            for location in locations[:40]:
-                owner = self._characters.get(location.owner_character_id) if location.owner_character_id else None
-                parts = [
-                    f"name: {location.name or ''}",
-                    f"region: {getattr(location, 'region', '') or ''}",
-                    f"type: {location.location_type or ''}",
-                    f"tags: {', '.join(self._tags_from_json(getattr(location, 'tags_json', None)))}",
-                    f"description: {self._shorten(location.description, 260)}",
-                ]
-                if owner:
-                    parts.append(f"owner: {owner.name or ''}")
-                lines.append("- " + " / ".join(parts))
+        if region_summaries:
+            lines.append(f"District plan derived from all {len(locations)} registered facilities:")
+            lines.extend(region_summaries)
         else:
             lines.append("No registered facilities yet. Create a flexible overview with room for future landmarks.")
+        lines.extend(
+            [
+                "Composition requirements:",
+                "- one unified city/world seen from above at an oblique angle",
+                "- clear central landmark or civic core, with districts arranged around it",
+                "- no isolated information cards or white-background diagrams",
+                "- no botanical, nuclear, educational, safety-warning, or process-cycle poster style",
+            ]
+        )
         return "\n".join(lines)
 
     def _store_generated_location_image(self, *, project_id: int, location_id: int, image_base64: str):

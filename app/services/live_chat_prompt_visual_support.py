@@ -110,15 +110,60 @@ def build_world_visual_rule(context: dict) -> str:
     if world_has_cyber_direction(context):
         rule += (
             "\nサイバー/近未来の強調: 場面に合う場合、背景を明確にサイバーパンクにしてください。重層的なネオン、"
-            "ホログラム光、発光パネル、密度のある未来都市のディテール、ガラス/金属の表面、読める文字のないデータ表示風の空気感、"
+            "ホログラム光、発光パネル、密度のある未来都市のディテール、ガラス/金属の表面、場面に自然なデータ表示風の空気感、"
             "高コントラストの映画的な夜の照明を入れてください。明示されない限り、ベージュ、汎用的な現代風、田舎風、無個性な背景は避けてください。"
         )
     return rule
 
+def _lesson_board_requested(context: dict, state_json: dict | None = None) -> bool:
+    state_json = state_json if isinstance(state_json, dict) else (context.get("state", {}).get("state_json") or {})
+    room_snapshot = (context.get("session") or {}).get("room_snapshot_json") or {}
+    room = context.get("room") or {}
+    session_settings = (context.get("session") or {}).get("settings_json") or {}
+    messages = context.get("messages") or []
+    text_parts = [
+        room_snapshot.get("title") if isinstance(room_snapshot, dict) else "",
+        room_snapshot.get("conversation_objective") if isinstance(room_snapshot, dict) else "",
+        room.get("title") if isinstance(room, dict) else "",
+        room.get("conversation_objective") if isinstance(room, dict) else "",
+        session_settings.get("conversation_objective") if isinstance(session_settings, dict) else "",
+        state_json.get("location") if isinstance(state_json, dict) else "",
+        state_json.get("background") if isinstance(state_json, dict) else "",
+        (state_json.get("line_visual_note") or {}).get("background") if isinstance(state_json.get("line_visual_note"), dict) else "",
+        (state_json.get("scene_progression") or {}).get("background") if isinstance(state_json.get("scene_progression"), dict) else "",
+    ]
+    for message in messages[-8:]:
+        text_parts.append(message.get("message_text") or "")
+    joined = "\n".join(str(part or "") for part in text_parts)
+    markers = ("黒板", "板書", "教室", "授業", "講義", "講座", "先生", "歴史教室", "英語教室", "要点", "chalkboard", "blackboard")
+    return any(marker in joined for marker in markers)
+
+
+def build_lesson_board_rule(context: dict, state_json: dict | None = None) -> str:
+    if not _lesson_board_requested(context, state_json):
+        return ""
+    recent_topic = ""
+    for message in reversed(context.get("messages") or []):
+        text = str(message.get("message_text") or "").strip()
+        if text:
+            recent_topic = text[:180]
+            break
+    return (
+        "講義・教室シーンの板書ルール:\n"
+        "現在の会話が授業、講義、教室、黒板、板書、要点確認に関係する場合、黒板を背景の飾りにせず、画面内の重要な被写体として大きく入れてください。"
+        "キャラクターの横または背後に、読みやすい黒板を配置し、現在の話題に直接関係する短い要点を3〜5個だけ板書してください。"
+        "年号、人物名、短いキーワード、矢印、簡単な図解は使ってよいです。長文は避け、文字は大きく読みやすくしてください。"
+        "板書はキャラクターのセリフではなく、授業用の資料です。吹き出し、字幕、UIオーバーレイにはしないでください。"
+        f"直近の板書テーマの手がかり: {recent_topic}"
+    )
+
+
 def apply_visual_style(prompt: str, context: dict) -> str:
     value = str(prompt or "").strip()
+    state_json = (context.get("state") or {}).get("state_json") or {}
     style = collect_visual_style(context)
     world_rule = build_world_visual_rule(context)
+    lesson_board_rule = build_lesson_board_rule(context, state_json)
     reference_rule = (
         "参照画像がある場合は、キャラクターデザインと画風の一貫性を保ってください。"
         "線の太さ、色使い、質感、顔の描き方、髪の描き方、ポーズの読みやすさ、キャラクターデザインの正確さを維持してください。"
@@ -128,6 +173,8 @@ def apply_visual_style(prompt: str, context: dict) -> str:
     blocks = [value]
     if world_rule:
         blocks.append(world_rule)
+    if lesson_board_rule:
+        blocks.append(lesson_board_rule)
     if style:
         blocks.append(f"画風指示: {style}")
     blocks.append(reference_rule)
@@ -136,13 +183,13 @@ def apply_visual_style(prompt: str, context: dict) -> str:
 def forbid_text_in_image(prompt: str) -> str:
     value = str(prompt or "").strip()
     rule = (
-        "画像内には文字を一切入れない。セリフ、字幕、吹き出し、UI、ロゴ、透かし、"
-        "日本語・英語・記号・擬音文字を描かない。セリフは画像外のテキストボックスで表示するため、"
-        "絵の中には文章や文字情報を絶対に描写しない。no text, no words, no letters, no subtitles, "
-        "no captions, no speech bubbles, no UI overlay, no watermark, no logo."
+        "セリフ吹き出し、漫画風の吹き出し、字幕、UIオーバーレイ、ロゴ、透かしは描かない。"
+        "会話文は画像外のテキストボックスで表示するため、キャラクターの発話を画像内テキストにしない。"
+        "ただし、黒板の板書、ノート、教科書、看板、端末画面、資料スライドなど、場面内に自然に存在する文字は必要最小限なら描いてよい。"
+        "no speech bubbles, no dialogue text, no subtitles, no UI overlay, no watermark, no logo."
     )
     lowered = value.lower()
-    if "no speech bubbles" in lowered and "画像内には文字を一切入れない" in value:
+    if "no speech bubbles" in lowered and "セリフ吹き出し" in value:
         return value
     return f"{value}\n\n{rule}"
 
@@ -235,6 +282,29 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
         f"画風・スタイル指定: {visual_style}",
         "登場キャラクター:",
     ]
+    learning_state = state_json.get("learning_director") or {}
+    if context.get("live_chat_genre") == "learning" or learning_state:
+        board_items = learning_state.get("board_items") or []
+        aid_type = str(learning_state.get("teaching_aid_type") or "").strip().lower()
+        aid_prompt = str(learning_state.get("teaching_aid_prompt") or "").strip()
+        lines.extend(
+            [
+                "",
+                "学習モード画像要件:",
+                "- 黒板、ホワイトボード、地図、年表、教材、図解、実験イメージのいずれかを画面内の主役にしてください。",
+                "- map/timeline/diagram/experiment の教材ではキャラクターを無理に入れず、教材の読みやすさを最優先してください。",
+                "- board の教材ではキャラクターを先生役として、板書や図解の横に配置して構いません。",
+                "- 吹き出し、字幕、UIオーバーレイ、ロゴ、透かしは禁止です。",
+                "- 黒板、ノート、教材、図解、地図、年表、実験ラベルに自然に存在する文字は許可します。",
+                "- 恋愛イベントCG、施設デート、身体的ハプニングの演出に寄せないでください。",
+            ]
+        )
+        if aid_type:
+            lines.append(f"教材タイプ: {aid_type}")
+        if aid_prompt:
+            lines.append(f"教材画像の目的: {aid_prompt}")
+        if board_items:
+            lines.extend(["黒板に入れたい要点:", *[f"- {item}" for item in board_items[:8]]])
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
     if world_map_context:
         lines.extend(["ワールドマップ登録施設:", world_map_context])
@@ -243,7 +313,7 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
             [
                 "サイバーパンク視覚要件:",
                 "- 場面に合う場合、背景を明確にサイバーパンクにしてください。ネオン、ホログラム光、発光パネル、ガラス/金属、密度のある近未来都市ディテールを入れてください。",
-                "- 読める文字は描かないでください。抽象的で読めない看板、またはUI風の光だけを使ってください。",
+                "- セリフ吹き出し、字幕、UIオーバーレイ、ロゴ、透かしは描かないでください。黒板、資料、端末、看板など場面内に自然な文字は必要最小限なら使って構いません。",
                 "- 明示されない限り、汎用的な部屋、普通の現代的な通り、ベージュの室内、田舎風景、無個性なスタジオ背景は避けてください。",
             ]
         )
@@ -283,6 +353,28 @@ def fallback_japanese_conversation_image_prompt(context: dict, state: dict) -> d
         f"雰囲気は{mood}です。",
         f"構図は{camera}にしてください。",
     ]
+    learning_state = state_json.get("learning_director") or {}
+    if context.get("live_chat_genre") == "learning" or learning_state:
+        board_items = learning_state.get("board_items") or []
+        aid_type = str(learning_state.get("teaching_aid_type") or "").strip().lower()
+        aid_prompt = str(learning_state.get("teaching_aid_prompt") or "").strip()
+        prompt_parts = [
+            "学習モードの授業画像を生成してください。",
+            "黒板、ホワイトボード、地図、年表、教材、図解、実験イメージ、写真資料のいずれかを画面内の主役にしてください。",
+            "吹き出し、字幕、UIオーバーレイ、ロゴ、透かしは禁止です。",
+            "黒板、ノート、教材、図解、地図、年表、実験ラベルに自然に存在する文字は許可します。",
+            f"授業の瞬間は「{scene_summary}」です。",
+        ]
+        if aid_type in {"map", "timeline", "diagram", "experiment", "photo"}:
+            prompt_parts.append("キャラクター写真ではなく、読みやすい学習教材画像として作ってください。")
+        else:
+            prompt_parts.append(f"登場キャラクターは{character_names}です。先生役として板書や図解の横に配置してください。")
+        if aid_type:
+            prompt_parts.append(f"教材タイプ: {aid_type}")
+        if aid_prompt:
+            prompt_parts.append(f"教材画像の目的: {aid_prompt}")
+        if board_items:
+            prompt_parts.append("黒板に入れたい要点: " + "、".join(str(item) for item in board_items[:8]))
     if location:
         prompt_parts.append(f"会話内容に合う背景として「{location}」が自然に分かるように描いてください。")
     if world_rule:

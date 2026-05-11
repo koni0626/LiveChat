@@ -162,6 +162,7 @@ class LiveChatSessionWorkflowService:
             "player_name": str(payload.get("player_name") or "").strip() or None,
             "settings_json": {
                 "selected_character_ids": [room.character_id],
+                "live_chat_genre": snapshot.get("genre") or "romance",
                 "conversation_objective": room.conversation_objective,
                 "proxy_player_objective": getattr(room, "proxy_player_objective", None),
                 "proxy_player_gender": getattr(room, "proxy_player_gender", None),
@@ -178,6 +179,7 @@ class LiveChatSessionWorkflowService:
                 "state_json": {
                     "active_character_ids": [room.character_id],
                     "room_id": room.id,
+                    "live_chat_genre": snapshot.get("genre") or "romance",
                 }
             },
         )

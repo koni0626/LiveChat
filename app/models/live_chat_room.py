@@ -12,6 +12,7 @@ class LiveChatRoom(db.Model, TimestampMixin, SoftDeleteMixin):
     default_outfit_id = db.Column(db.Integer, db.ForeignKey("character_outfit.id"), index=True)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
+    genre = db.Column(db.String(50), nullable=False, default="romance", index=True)
     conversation_objective = db.Column(db.Text, nullable=False)
     proxy_player_objective = db.Column(db.Text)
     proxy_player_gender = db.Column(db.String(100))

@@ -8,6 +8,7 @@ class LiveChatRoomRepository:
     MUTABLE_FIELDS = (
         "title",
         "description",
+        "genre",
         "conversation_objective",
         "proxy_player_objective",
         "proxy_player_gender",
@@ -55,6 +56,7 @@ class LiveChatRoomRepository:
             default_outfit_id=payload.get("default_outfit_id"),
             title=payload["title"],
             description=payload.get("description"),
+            genre=payload.get("genre") or "romance",
             conversation_objective=payload["conversation_objective"],
             proxy_player_objective=payload.get("proxy_player_objective"),
             proxy_player_gender=payload.get("proxy_player_gender"),
