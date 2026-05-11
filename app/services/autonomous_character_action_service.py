@@ -358,12 +358,12 @@ Romcom density for feed/news:
         all_candidates = [character for character in (all_characters or characters) if getattr(character, "id", None)]
         location_order = self._cycled_shuffle(locations, len(characters)) if locations else [None] * len(characters)
         plans = []
-        for index, (character, pattern) in enumerate(zip(characters, patterns)):
+        for index, (base_character, pattern) in enumerate(zip(characters, patterns)):
+            character = base_character
             use_duo = len(all_candidates) >= 2 and random.random() < 0.45
             co_character = None
             if use_duo:
-                partners = [candidate for candidate in all_candidates if int(candidate.id) != int(character.id)]
-                co_character = random.choice(partners) if partners else None
+                character, co_character = random.sample(all_candidates, 2)
                 pattern = random.choice(FEED_DUO_POST_PATTERNS)
             location = location_order[index]
             plans.append(

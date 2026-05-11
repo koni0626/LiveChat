@@ -386,6 +386,7 @@ class FeedService:
             body = str(candidate.get("body") or "").strip()
             if not body:
                 continue
+            body = self._format_auto_feed_body(body, character)
             post = self._repo.create_post(
                 {
                     "project_id": project_id,
@@ -408,6 +409,11 @@ class FeedService:
         if not created:
             raise RuntimeError("feed auto generation did not create any posts")
         return created
+
+    def _format_auto_feed_body(self, body: str, character) -> str:
+        name = str(getattr(character, "name", "") or getattr(character, "nickname", "") or "").strip()
+        signature = f"\n\nー{name}" if name else ""
+        return f"{body.rstrip()}{signature}\n\n#AIキャラ #ラプラスシティ"
 
     def update_post(self, post_id: int, payload: dict):
         normalized = {}
@@ -954,6 +960,7 @@ Rules:
 - Prefer direct speech, first-person reactions, quick confessions, sightings, or one-line incident reports.
 - The funny part should be easy to picture without hidden lore.
 - Do not mention that AI generated the post.
+- Do not include a signature line, character name footer, hashtags, or social tags. The app will append them.
 - Avoid duplicating recent posts.
 - Avoid abstract poetic summaries and unclear invented nouns.
 
@@ -982,7 +989,7 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
         items = parsed.get("items") if isinstance(parsed, dict) else []
         if isinstance(items, list) and items:
             return self._normalize_feed_candidate_characters(items, characters, post_plans, all_characters=all_characters)
-        return self._fallback_feed_candidates(characters, count, post_plans=post_plans)
+        raise RuntimeError("Feed自動生成に失敗しました。固定フォールバックは使わず、再生成してください。")
 
     def _normalize_feed_interaction_mode(self, value):
         mode = str(value or "auto").strip().lower()
@@ -1267,16 +1274,11 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
             normalized.append(candidate)
             used_ids.add(character_id)
         if len(normalized) < len(target_ids):
-            existing_bodies = {int(item["character_id"]): item.get("body") for item in normalized}
-            for character in target_characters:
-                if int(character.id) in existing_bodies:
-                    continue
-                fallback = self._fallback_feed_candidates(
-                    [character],
-                    1,
-                    post_plans=[plans_by_character_id.get(int(character.id), {})],
-                )[0]
-                normalized.append(fallback)
+            missing_ids = [target_id for target_id in target_ids if target_id not in used_ids]
+            raise RuntimeError(
+                "Feed自動生成に失敗しました。"
+                f"AI候補の一部が検証で除外されました: missing_character_ids={missing_ids}"
+            )
         return normalized
 
     def _body_uses_wrong_primary_character(self, body: str, target_character, target_characters, plan=None) -> bool:
@@ -1337,6 +1339,7 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
         )
 
     def _fallback_feed_candidates(self, characters, count: int, *, post_plans=None):
+        raise RuntimeError("Feed自動生成の固定フォールバックは無効です。再生成してください。")
         plans_by_character_id = {
             int(plan.get("character_id")): plan
             for plan in (post_plans or [])
