@@ -21,6 +21,7 @@ from ..extensions import db
 from ..models import (
     Asset,
     ChatSession,
+    ChatMessage,
     Character,
     CharacterOutfit,
     CharacterMemoryNote,
@@ -32,6 +33,7 @@ from ..models import (
     CinemaNovelReview,
     FeedPost,
     Project,
+    SessionImage,
     World,
     WorldNewsItem,
 )
@@ -93,6 +95,26 @@ class CinemaNovelService:
             raise ValueError("status must be draft or published")
         novel.status = next_status
         novel.mobile_visible = bool(payload.get("mobile_visible", getattr(novel, "mobile_visible", True)))
+        db.session.add(novel)
+        db.session.commit()
+        return novel
+
+    def update_novel_metadata(self, novel_id: int, payload: dict | None):
+        novel = self.get_novel(novel_id)
+        if not novel:
+            return None
+        payload = dict(payload or {})
+        if "title" in payload:
+            title = str(payload.get("title") or "").strip()
+            if not title:
+                raise ValueError("title is required")
+            novel.title = title[:255]
+        if "subtitle" in payload:
+            subtitle = str(payload.get("subtitle") or "").strip()
+            novel.subtitle = subtitle[:255] or None
+        if "description" in payload:
+            description = str(payload.get("description") or "").strip()
+            novel.description = description or None
         db.session.add(novel)
         db.session.commit()
         return novel
@@ -733,10 +755,12 @@ figcaption {
         font_title = self._load_video_font(ImageFont, size=54)
         font_footer = self._load_video_font(ImageFont, size=22)
         title_image = self._asset_file_path(novel.poster_asset_id or novel.cover_asset_id)
+        orientation = str(payload.get("orientation") or "portrait").strip().lower()
+        landscape = orientation in {"landscape", "horizontal", "wide", "pc"}
         frame_paths = []
         durations = []
 
-        def add_frame(image_path, text, *, speaker="", footer="", title=False, duration=3.0):
+        def add_frame(image_path, text, *, speaker="", footer="", title=False, duration=5.0):
             index = len(frame_paths) + 1
             frame_path = frames_dir / f"frame_{index:04d}.png"
             self._render_short_video_frame(
@@ -755,6 +779,7 @@ figcaption {
                 font_small=font_small,
                 font_title=font_title,
                 font_footer=font_footer,
+                landscape=landscape,
             )
             frame_paths.append(frame_path)
             durations.append(duration)
@@ -764,7 +789,7 @@ figcaption {
             "\n".join([part for part in [novel.title or "Untitled", novel.subtitle or novel.description or ""] if part]),
             footer="title",
             title=True,
-            duration=3.2,
+            duration=5.2,
         )
         previous_scene_image_path = None
 
@@ -786,7 +811,7 @@ figcaption {
                 image_path = direct_image_path or previous_scene_image_path or chapter_fallback
                 if direct_image_path:
                     previous_scene_image_path = direct_image_path
-                duration = 3.0 if len(scene_text) < 50 else 3.8
+                duration = 5.0 if len(scene_text) < 50 else 5.8
                 add_frame(
                     image_path,
                     scene_text,
@@ -799,7 +824,8 @@ figcaption {
             raise ValueError("no scenes were found for video export")
 
         filename_base = self._safe_powerpoint_filename(novel.title or f"cinema_novel_{novel.id}")
-        filename = f"{filename_base}_{novel.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.mp4"
+        suffix = "landscape" if landscape else "portrait"
+        filename = f"{filename_base}_{novel.id}_{suffix}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.mp4"
         output_path = export_dir / filename
         concat_path = work_dir / "concat.txt"
         with concat_path.open("w", encoding="utf-8") as handle:
@@ -1034,6 +1060,9 @@ figcaption {
     def create_short_comic_novel(self, project_id: int, user_id: int, payload: dict | None):
         payload = dict(payload or {})
         comic_layout = self._short_comic_layout(payload)
+        source_novel_id = self._source_novel_id_from_payload(project_id, payload)
+        inherited_character_ids = self._source_novel_character_ids_from_payload(project_id, payload)
+        inherited_character_names = self._character_names_for_ids(project_id, inherited_character_ids)
         storyboard = (
             self.generate_comic_page_storyboard(project_id, payload)
             if comic_layout == "page"
@@ -1062,6 +1091,8 @@ figcaption {
                     "comic_layout": comic_layout,
                     "target_panel_count": storyboard.get("target_panel_count"),
                     "actual_panel_count": len(panels),
+                    "source_novel_id": source_novel_id,
+                    "inherited_character_ids": inherited_character_ids,
                 }
             ),
         )
@@ -1079,6 +1110,13 @@ figcaption {
             )
             if not caption:
                 continue
+            panel_character_ids = self._normalize_character_ids(panel.get("character_ids"))
+            scene_character_ids = panel_character_ids or inherited_character_ids
+            panel_characters = panel.get("characters") if isinstance(panel.get("characters"), list) else []
+            characters = [str(item).strip() for item in panel_characters if str(item).strip()]
+            for name in inherited_character_names:
+                if name and name not in characters:
+                    characters.append(name)
             page_panels = panel.get("panels") if isinstance(panel.get("panels"), list) else []
             dialogue_lines = []
             for item in page_panels:
@@ -1103,7 +1141,8 @@ figcaption {
                     "shot": str(panel.get("shot") or "").strip(),
                     "visual_focus": str(panel.get("visual_focus") or "").strip(),
                     "image_prompt": str(panel.get("image_prompt") or "").strip(),
-                    "characters": panel.get("characters") if isinstance(panel.get("characters"), list) else [],
+                    "characters": characters,
+                    "character_ids": scene_character_ids,
                     "background_asset_id": None,
                     "still_asset_id": None,
                     "choice_list": [],
@@ -1197,6 +1236,334 @@ figcaption {
         db.session.commit()
         return novel
 
+    def create_chat_session_novel(self, session_id: int, user_id: int, payload: dict | None = None):
+        payload = dict(payload or {})
+        chat_session = ChatSession.query.filter(
+            ChatSession.id == session_id,
+            ChatSession.deleted_at.is_(None),
+        ).first()
+        if not chat_session:
+            return None
+        messages = ChatMessage.query.filter_by(session_id=session_id).order_by(ChatMessage.order_no.asc(), ChatMessage.id.asc()).all()
+        exportable_messages = [
+            message for message in messages
+            if str(message.message_text or "").strip()
+            and str(message.sender_type or "").strip().lower() not in {"system", "debug"}
+        ]
+        if not exportable_messages:
+            raise ValueError("ノベル化できるチャット本文がありません。")
+        session_images = SessionImage.query.filter_by(session_id=session_id).order_by(SessionImage.created_at.asc(), SessionImage.id.asc()).all()
+        scene_images = [
+            image for image in session_images
+            if image.asset_id and str(image.image_type or "").lower() not in {"costume", "costume_initial", "costume_reference", "closet_costume"}
+        ]
+        settings = self._user_setting_service.apply_cinema_novel_text_generation_settings(payload.get("text_options") or {})
+        student_speaker_name = self._chat_session_learning_student_name(chat_session)
+        learning_role_character_ids = self._chat_session_learning_role_character_ids(chat_session)
+        source_payload = self._chat_session_novel_source_payload(
+            chat_session,
+            exportable_messages,
+            scene_images,
+            student_speaker_name=student_speaker_name,
+        )
+        draft = self._generate_chat_session_novel_draft(source_payload, settings)
+        title = str(draft.get("title") or payload.get("title") or chat_session.title or "チャットノベル").strip()[:255] or "チャットノベル"
+        subtitle = str(draft.get("subtitle") or "チャットセッションから作成").strip()[:255] or None
+        scenes = self._normalize_chat_session_novel_scenes(
+            draft.get("scenes"),
+            exportable_messages,
+            scene_images,
+            project_id=chat_session.project_id,
+            player_speaker_name=chat_session.player_name,
+            student_speaker_name=student_speaker_name,
+            learning_character_ids=learning_role_character_ids,
+        )
+        if not scenes:
+            raise ValueError("ノベルシーンを作成できませんでした。")
+        first_asset_id = self._first_scene_asset_id(scenes)
+        novel = CinemaNovel(
+            project_id=chat_session.project_id,
+            created_by_user_id=user_id,
+            title=title,
+            subtitle=subtitle,
+            description=str(draft.get("description") or f"チャットセッション「{chat_session.title or chat_session.id}」をノベル化しました。").strip(),
+            status="draft",
+            mobile_visible=True,
+            mode="cinema_novel",
+            cover_asset_id=first_asset_id,
+            poster_asset_id=first_asset_id,
+            production_json=json_util.dumps(
+                {
+                    "source_type": "live_chat_session_novel",
+                    "source_session_id": chat_session.id,
+                    "source_room_id": chat_session.room_id,
+                    "source_message_ids": [message.id for message in exportable_messages],
+                    "source_image_ids": [image.id for image in scene_images],
+                    "usage": draft.get("usage"),
+                    "model": draft.get("model"),
+                }
+            ),
+        )
+        db.session.add(novel)
+        db.session.flush()
+        chapter = CinemaNovelChapter(
+            novel_id=novel.id,
+            chapter_no=1,
+            title=str(draft.get("chapter_title") or "セッション回想").strip()[:255] or "セッション回想",
+            body_markdown=self._chat_session_novel_body_markdown(title, scenes),
+            scene_json=json_util.dumps(scenes),
+            cover_asset_id=first_asset_id,
+            sort_order=1,
+        )
+        db.session.add(chapter)
+        db.session.commit()
+        return novel
+
+    def _chat_session_learning_student_name(self, chat_session) -> str | None:
+        room_snapshot = self._load_json(getattr(chat_session, "room_snapshot_json", None), default={})
+        settings = self._load_json(getattr(chat_session, "settings_json", None), default={})
+        room_snapshot = room_snapshot if isinstance(room_snapshot, dict) else {}
+        settings = settings if isinstance(settings, dict) else {}
+        genre = (
+            room_snapshot.get("genre")
+            or room_snapshot.get("live_chat_genre")
+            or settings.get("live_chat_genre")
+            or settings.get("genre")
+        )
+        if str(genre or "").strip().lower() != "learning":
+            return None
+        name = str(room_snapshot.get("student_character_name") or "").strip()
+        if name:
+            return name
+        try:
+            character_id = int(room_snapshot.get("student_character_id") or settings.get("learning_student_character_id") or 0)
+        except (TypeError, ValueError):
+            character_id = 0
+        if character_id:
+            character = Character.query.filter_by(id=character_id, project_id=chat_session.project_id).first()
+            if character:
+                return str(character.name or "").strip() or None
+        return None
+
+    def _chat_session_learning_role_character_ids(self, chat_session) -> list[int]:
+        room_snapshot = self._load_json(getattr(chat_session, "room_snapshot_json", None), default={})
+        settings = self._load_json(getattr(chat_session, "settings_json", None), default={})
+        room_snapshot = room_snapshot if isinstance(room_snapshot, dict) else {}
+        settings = settings if isinstance(settings, dict) else {}
+        genre = (
+            room_snapshot.get("genre")
+            or room_snapshot.get("live_chat_genre")
+            or settings.get("live_chat_genre")
+            or settings.get("genre")
+        )
+        if str(genre or "").strip().lower() != "learning":
+            return []
+        return self._normalize_character_ids(
+            [
+                room_snapshot.get("teacher_character_id") or room_snapshot.get("character_id"),
+                room_snapshot.get("student_character_id") or settings.get("learning_student_character_id"),
+            ]
+        )
+
+    def _chat_session_novel_source_payload(self, chat_session, messages, images, *, student_speaker_name: str | None = None):
+        room_snapshot = self._load_json(getattr(chat_session, "room_snapshot_json", None), default={})
+        settings = self._load_json(getattr(chat_session, "settings_json", None), default={})
+        room_snapshot = room_snapshot if isinstance(room_snapshot, dict) else {}
+        settings = settings if isinstance(settings, dict) else {}
+        message_items = []
+        for message in messages[-80:]:
+            sender_type = str(message.sender_type or "").strip().lower()
+            speaker_name = message.speaker_name or ("プレイヤー" if sender_type == "user" else "")
+            if student_speaker_name and sender_type == "user":
+                speaker_name = student_speaker_name
+            message_items.append(
+                {
+                    "id": message.id,
+                    "order_no": message.order_no,
+                    "sender_type": message.sender_type,
+                    "speaker_name": speaker_name,
+                    "text": str(message.message_text or "").strip()[:900],
+                    "created_at": message.created_at.isoformat() if getattr(message, "created_at", None) else None,
+                }
+            )
+        image_items = []
+        for index, image in enumerate(images[-40:], start=1):
+            state_json = self._load_json(getattr(image, "state_json", None), default={})
+            state_json = state_json if isinstance(state_json, dict) else {}
+            displayed = state_json.get("displayed_image_observation") if isinstance(state_json.get("displayed_image_observation"), dict) else {}
+            summary = displayed.get("short_summary") or state_json.get("focus_summary") or state_json.get("conversation_image_prompt") or ""
+            image_items.append(
+                {
+                    "index": index,
+                    "session_image_id": image.id,
+                    "asset_id": image.asset_id,
+                    "image_type": image.image_type,
+                    "prompt_text": str(image.prompt_text or "").strip()[:700],
+                    "summary": str(summary or "").strip()[:700],
+                    "created_at": image.created_at.isoformat() if getattr(image, "created_at", None) else None,
+                }
+            )
+        return {
+            "session": {
+                "id": chat_session.id,
+                "title": chat_session.title,
+                "player_name": chat_session.player_name,
+                "student_speaker_name": student_speaker_name,
+                "room_id": chat_session.room_id,
+                "room_title": room_snapshot.get("room_title") or room_snapshot.get("title"),
+                "genre": room_snapshot.get("genre") or settings.get("live_chat_genre") or settings.get("genre"),
+            },
+            "messages": message_items,
+            "images": image_items,
+        }
+
+    def _generate_chat_session_novel_draft(self, source_payload: dict, settings: dict):
+        prompt = "\n".join(
+            [
+                "次のライブチャット履歴を、ビジュアルノベルとして読みやすい1章に編集してください。",
+                "目的は動画ではなく、既存のノベル画面で読むためのシーン化です。",
+                "会話ログをそのまま全件コピーせず、流れがわかるように整理し、テロップ/地の文とセリフを混ぜてください。",
+                "学習ルームの場合は説明の要点を自然な講義ノベルにし、恋愛ルームの場合は空気感と掛け合いを残してください。",
+                "画像がある場合は、合いそうな scene に image_index を指定してください。画像を無理に全シーンへ割り当てないでください。",
+                "必ずJSONだけで返してください。",
+                "形式: {\"title\":\"...\",\"subtitle\":\"...\",\"description\":\"...\",\"chapter_title\":\"...\",\"scenes\":[{\"type\":\"narration|dialogue\",\"speaker\":\"\",\"text\":\"...\",\"source_message_ids\":[1,2],\"image_index\":1}]}",
+                "scenes は 8〜24件。text は1シーンあたり日本語で40〜180字程度。speaker は地の文なら空文字。",
+                "",
+                json_util.dumps(source_payload),
+            ]
+        )
+        result = self._text_ai_client.extract_state_json(prompt, model=settings.get("model"))
+        parsed = result.get("parsed_json")
+        if not isinstance(parsed, dict):
+            raise ValueError("ノベル化AIのJSONを解析できませんでした。")
+        parsed["model"] = result.get("model")
+        parsed["usage"] = result.get("usage")
+        return parsed
+
+    def _normalize_chat_session_novel_scenes(
+        self,
+        raw_scenes,
+        messages,
+        images,
+        *,
+        project_id: int | None = None,
+        player_speaker_name: str | None = None,
+        student_speaker_name: str | None = None,
+        learning_character_ids=None,
+    ):
+        raw_scenes = raw_scenes if isinstance(raw_scenes, list) else []
+        message_by_id = {int(message.id): message for message in messages}
+        image_by_index = {index: image for index, image in enumerate(images[-40:], start=1)}
+        player_aliases = {str(player_speaker_name or "").strip(), "プレイヤー", "Player", "player"}
+        player_aliases = {item for item in player_aliases if item}
+        learning_character_ids = self._normalize_character_ids(learning_character_ids)
+        learning_character_names = self._character_names_for_ids(project_id, learning_character_ids) if project_id and learning_character_ids else []
+        scenes = []
+        for raw in raw_scenes[:40]:
+            if not isinstance(raw, dict):
+                continue
+            text = str(raw.get("text") or "").strip()
+            if not text:
+                continue
+            speaker = str(raw.get("speaker") or "").strip()[:80]
+            source_ids = []
+            for value in raw.get("source_message_ids") or []:
+                try:
+                    message_id = int(value)
+                except (TypeError, ValueError):
+                    continue
+                if message_id in message_by_id:
+                    source_ids.append(message_id)
+            scene_type = str(raw.get("type") or ("dialogue" if speaker else "narration")).strip().lower()
+            if scene_type not in {"dialogue", "narration"}:
+                scene_type = "dialogue" if speaker else "narration"
+            if student_speaker_name and scene_type == "dialogue":
+                source_messages = [message_by_id.get(message_id) for message_id in source_ids]
+                has_user_source = any(str(getattr(message, "sender_type", "") or "").strip().lower() == "user" for message in source_messages if message)
+                if has_user_source and (not speaker or speaker in player_aliases):
+                    speaker = student_speaker_name
+            try:
+                image = image_by_index.get(int(raw.get("image_index") or 0))
+            except (TypeError, ValueError):
+                image = None
+            if not image:
+                image = self._image_for_source_messages(source_ids, message_by_id, images)
+            scene_payload = {
+                    "id": f"01-{len(scenes) + 1:03d}",
+                    "type": scene_type,
+                    "speaker": speaker if scene_type == "dialogue" else "",
+                    "text": text,
+                    "background_asset_id": None,
+                    "still_asset_id": image.asset_id if image else None,
+                    "choice_list": [],
+                    "source_message_ids": source_ids,
+                    "source_session_image_id": image.id if image else None,
+                }
+            if learning_character_ids:
+                scene_payload["character_ids"] = learning_character_ids
+                scene_payload["characters"] = learning_character_names
+            scenes.append(scene_payload)
+        if scenes:
+            return scenes
+        for message in messages[-24:]:
+            text = str(message.message_text or "").strip()
+            if not text:
+                continue
+            image = self._image_for_source_messages([message.id], message_by_id, images)
+            sender = str(message.sender_type or "").lower()
+            speaker = message.speaker_name or ("プレイヤー" if sender == "user" else "")
+            if student_speaker_name and sender == "user":
+                speaker = student_speaker_name
+            scene_payload = {
+                    "id": f"01-{len(scenes) + 1:03d}",
+                    "type": "dialogue" if sender != "system" else "narration",
+                    "speaker": speaker,
+                    "text": text,
+                    "background_asset_id": None,
+                    "still_asset_id": image.asset_id if image else None,
+                    "choice_list": [],
+                    "source_message_ids": [message.id],
+                    "source_session_image_id": image.id if image else None,
+                }
+            if learning_character_ids:
+                scene_payload["character_ids"] = learning_character_ids
+                scene_payload["characters"] = learning_character_names
+            scenes.append(scene_payload)
+        return scenes
+
+    def _image_for_source_messages(self, source_ids, message_by_id, images):
+        if not images or not source_ids:
+            return None
+        source_messages = [message_by_id.get(int(message_id)) for message_id in source_ids if message_by_id.get(int(message_id))]
+        source_messages = [message for message in source_messages if getattr(message, "created_at", None)]
+        if not source_messages:
+            return None
+        anchor = min(message.created_at for message in source_messages)
+        before = [image for image in images if getattr(image, "created_at", None) and image.created_at <= anchor]
+        if before:
+            return before[-1]
+        return images[0]
+
+    def _chat_session_novel_body_markdown(self, title: str, scenes: list[dict]):
+        lines = [f"# {title}", ""]
+        for scene in scenes:
+            speaker = str(scene.get("speaker") or "").strip()
+            text = str(scene.get("text") or "").strip()
+            if not text:
+                continue
+            if speaker:
+                lines.append(f"**{speaker}**")
+            lines.append(text)
+            lines.append("")
+        return "\n".join(lines).strip()
+
+    def _first_scene_asset_id(self, scenes: list[dict]):
+        for scene in scenes or []:
+            asset_id = scene.get("still_asset_id") or scene.get("background_asset_id")
+            if asset_id:
+                return asset_id
+        return None
+
     def _manual_short_video_scene(self, project_id: int, raw_scene: dict, *, index: int = 0) -> dict:
         character_ids = self._normalize_character_ids(raw_scene.get("character_ids"))
         characters = self._character_names_for_ids(project_id, character_ids)
@@ -1268,13 +1635,22 @@ figcaption {
             ]
         )
         reference_asset_ids = self._scene_character_reference_asset_ids(novel.project_id, first_panel) if manual_short_video else []
+        if manual_short_video:
+            reference_asset_ids = self._apply_novel_session_outfit_references(
+                novel,
+                reference_asset_ids,
+                character_ids=self._normalize_character_ids(first_panel.get("character_ids")),
+            )
         if reference_asset_ids:
             reference_paths, reference_asset_ids = self._resolve_reference_image_paths(reference_asset_ids)
         else:
             references = self._matching_character_references(novel.project_id, searchable, limit=3)
-            reference_paths, reference_asset_ids = self._resolve_reference_image_paths(
-                [item.get("base_asset_id") for item in references if item.get("base_asset_id")]
+            reference_asset_ids = self._apply_novel_session_outfit_references(
+                novel,
+                [item.get("base_asset_id") for item in references if item.get("base_asset_id")],
+                character_ids=[item.get("id") for item in references if item.get("id")],
             )
+            reference_paths, reference_asset_ids = self._resolve_reference_image_paths(reference_asset_ids)
         options = self._user_setting_service.apply_cinema_novel_image_generation_settings(payload.get("image_options") or payload)
         options["size"] = "1024x1536" if bool(getattr(novel, "mobile_visible", True)) else "1536x1024"
         options["quality"] = options.get("quality") or "medium"
@@ -1426,6 +1802,10 @@ figcaption {
             include_characters=False,
         )
         source_novel_context = self._source_novel_context_for_prompt(project_id, payload)
+        source_character_names = self._character_names_for_ids(
+            project_id,
+            self._source_novel_character_ids_from_payload(project_id, payload),
+        )
         prompt = "\n".join(
             [
                 "Return only JSON.",
@@ -1434,6 +1814,13 @@ figcaption {
                 (
                     "原作ノベルが提供されています。その章順、主要場面、感情の流れ、結末を圧縮してショート漫画化してください。別の新作にしないこと。"
                     if source_novel_context
+                    else ""
+                ),
+                (
+                    "Source novel fixed cast: "
+                    + ", ".join(source_character_names)
+                    + ". Keep these characters as the active cast, include them in characters/image_prompt when the scene is based on their conversation, and do not replace them with unrelated characters."
+                    if source_character_names
                     else ""
                 ),
                 f"Hard constraint: 指定主人公は「{main_character or '未指定'}」です。未指定でない場合、title/logline/panels は必ずこの主人公を中心に作ること。",
@@ -1541,6 +1928,10 @@ figcaption {
             include_characters=False,
         )
         source_novel_context = self._source_novel_context_for_prompt(project_id, payload)
+        source_character_names = self._character_names_for_ids(
+            project_id,
+            self._source_novel_character_ids_from_payload(project_id, payload),
+        )
         prompt = "\n".join(
             [
                 "Return only JSON.",
@@ -1557,6 +1948,13 @@ figcaption {
                 f"Target page count: {target_page_count}. A little fewer is acceptable if the story works.",
                 f"Hard constraint: main protagonist is {main_character or 'not specified'}. If specified, use this protagonist consistently.",
                 "Use registered characters if relevant. Do not replace the specified protagonist with another character.",
+                (
+                    "Source novel fixed cast: "
+                    + ", ".join(source_character_names)
+                    + ". Keep these characters as the active cast, include them in characters/image_prompt when the page is based on their conversation, and do not replace them with unrelated characters."
+                    if source_character_names
+                    else ""
+                ),
                 "For each page, provide page_title, summary, tone, characters, and panels.",
                 "For each panel, provide panel_no, composition, action, speaker, speech, sfx, and background.",
                 "Also provide image_prompt for each page. The image_prompt must describe the whole page layout and include the exact dialogue/sfx text to draw.",
@@ -1675,13 +2073,21 @@ figcaption {
                 else ([], [])
             )
             explicit_reference_ids = self._scene_character_reference_asset_ids(novel.project_id, scene)
+            explicit_reference_ids = self._apply_novel_session_outfit_references(
+                novel,
+                explicit_reference_ids,
+                character_ids=self._normalize_character_ids(scene.get("character_ids")),
+            )
             if explicit_reference_ids:
                 reference_paths, reference_asset_ids = self._resolve_reference_image_paths(explicit_reference_ids)
             else:
                 references = self._matching_character_references(novel.project_id, searchable, limit=3)
-                reference_paths, reference_asset_ids = self._resolve_reference_image_paths(
-                    [item.get("base_asset_id") for item in references if item.get("base_asset_id")]
+                reference_asset_ids = self._apply_novel_session_outfit_references(
+                    novel,
+                    [item.get("base_asset_id") for item in references if item.get("base_asset_id")],
+                    character_ids=[item.get("id") for item in references if item.get("id")],
                 )
+                reference_paths, reference_asset_ids = self._resolve_reference_image_paths(reference_asset_ids)
             prompt = (
                 self._comic_page_image_prompt(novel, scene, art_style=art_style)
                 if scene.get("comic_page")
@@ -2117,8 +2523,9 @@ figcaption {
         font_small,
         font_title,
         font_footer,
+        landscape=False,
     ):
-        target_size = (1080, 1920)
+        target_size = (1920, 1080) if landscape else (1080, 1920)
         try:
             source = ImageOps.exif_transpose(Image.open(image_path)).convert("RGB") if image_path else None
         except Exception:
@@ -2136,24 +2543,26 @@ figcaption {
                 top = max(0, (source.height - crop_height) // 2)
                 crop_box = (0, top, source.width, top + crop_height)
             background = source.crop(crop_box).resize(target_size, Image.Resampling.LANCZOS)
-            background = background.filter(ImageFilter.GaussianBlur(radius=26))
+            background = background.filter(ImageFilter.GaussianBlur(radius=22 if landscape else 26))
             background = ImageEnhance.Brightness(background).enhance(0.62)
-            foreground = ImageOps.contain(source, (1080, 1440), Image.Resampling.LANCZOS)
+            foreground_box = (1420, 900) if landscape else (1080, 1440)
+            foreground = ImageOps.contain(source, foreground_box, Image.Resampling.LANCZOS)
             canvas = background.copy()
-            canvas.paste(foreground, ((target_size[0] - foreground.width) // 2, 70))
+            canvas.paste(foreground, ((target_size[0] - foreground.width) // 2, 42 if landscape else 70))
         else:
             canvas = Image.new("RGB", target_size, (18, 22, 30))
 
         overlay = Image.new("RGBA", target_size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
-        box = (64, 1310 if not title else 1260, 1016, 1782)
-        draw.rounded_rectangle(box, radius=34, fill=(8, 10, 16, 170))
+        box = (140, 742 if not title else 704, 1780, 1016) if landscape else (64, 1310 if not title else 1260, 1016, 1782)
+        draw.rounded_rectangle(box, radius=34, fill=(8, 10, 16, 178))
         if speaker:
-            draw.rounded_rectangle((92, box[1] - 50, 380, box[1] + 20), radius=20, fill=(38, 56, 92, 210))
-            draw.text((236, box[1] - 36), speaker[:16], font=font_small, fill=(255, 255, 255, 255), anchor="ma")
+            speaker_box = (box[0] + 28, box[1] - 50, box[0] + 316, box[1] + 20)
+            draw.rounded_rectangle(speaker_box, radius=20, fill=(38, 56, 92, 210))
+            draw.text((speaker_box[0] + 144, box[1] - 36), speaker[:16], font=font_small, fill=(255, 255, 255, 255), anchor="ma")
 
         text_font = font_title if title else font_regular
-        lines = self._wrap_video_text(text, draw, text_font, max_width=850)
+        lines = self._wrap_video_text(text, draw, text_font, max_width=1500 if landscape else 850)
         line_height = 66 if title else 58
         total_height = len(lines) * line_height
         y = box[1] + max(36, ((box[3] - box[1]) - total_height) // 2)
@@ -2161,7 +2570,8 @@ figcaption {
             draw.text((target_size[0] // 2, y), line, font=text_font, fill=(255, 255, 255, 255), anchor="ma")
             y += line_height
         if footer:
-            draw.text((970, 1810), footer, font=font_footer, fill=(215, 222, 235, 230), anchor="ra")
+            footer_pos = (target_size[0] - 70, target_size[1] - 58) if landscape else (970, 1810)
+            draw.text(footer_pos, footer, font=font_footer, fill=(215, 222, 235, 230), anchor="ra")
 
         canvas = Image.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB")
         canvas.save(output_path, "PNG")
@@ -4023,17 +4433,55 @@ figcaption {
             return text
         return text[:limit].rstrip() + "..."
 
-    def _source_novel_context_for_prompt(self, project_id: int, payload: dict | None, limit: int = 9000) -> str:
+    def _source_novel_id_from_payload(self, project_id: int, payload: dict | None) -> int:
         payload = payload or {}
         try:
             source_novel_id = int(payload.get("source_novel_id") or 0)
         except (TypeError, ValueError):
-            source_novel_id = 0
-        if not source_novel_id:
-            return ""
+            return 0
+        if source_novel_id <= 0:
+            return 0
         novel = self.get_novel(source_novel_id)
         if not novel or int(novel.project_id) != int(project_id):
             raise ValueError("source_novel_id is invalid")
+        return source_novel_id
+
+    def _source_novel_character_ids_from_payload(self, project_id: int, payload: dict | None) -> list[int]:
+        source_novel_id = self._source_novel_id_from_payload(project_id, payload)
+        if not source_novel_id:
+            return []
+        source_novel = self.get_novel(source_novel_id)
+        if not source_novel:
+            return []
+
+        # Chat-derived learning novels may have older scene JSON without character_ids.
+        # In that case, recover the teacher/student pair from the original chat session snapshot.
+        source_session = self._novel_source_chat_session(source_novel)
+        session_role_ids = self._chat_session_learning_role_character_ids(source_session) if source_session else []
+        if session_role_ids:
+            return session_role_ids
+
+        character_ids = []
+        for chapter in self.list_chapters(source_novel.id):
+            scenes = self._load_json(chapter.scene_json, default=[])
+            if not isinstance(scenes, list):
+                continue
+            for scene in scenes:
+                if not isinstance(scene, dict):
+                    continue
+                for character_id in self._normalize_character_ids(scene.get("character_ids")):
+                    if character_id not in character_ids:
+                        character_ids.append(character_id)
+                        if len(character_ids) >= 6:
+                            return character_ids
+        return character_ids
+
+    def _source_novel_context_for_prompt(self, project_id: int, payload: dict | None, limit: int = 9000) -> str:
+        payload = payload or {}
+        source_novel_id = self._source_novel_id_from_payload(project_id, payload)
+        if not source_novel_id:
+            return ""
+        novel = self.get_novel(source_novel_id)
         chapters = self.list_chapters(novel.id)
         lines = [
             f"原作ノベルID: {novel.id}",
@@ -4172,6 +4620,11 @@ figcaption {
             limit=4,
         )
         reference_ids = [item.get("base_asset_id") for item in references if item.get("base_asset_id")]
+        reference_ids = self._apply_novel_session_outfit_references(
+            novel,
+            reference_ids,
+            character_ids=[item.get("id") for item in references if item.get("id")],
+        )
         reference_paths, reference_asset_ids = self._resolve_reference_image_paths(reference_ids)
         prompt = "\n".join(
             [
@@ -4388,6 +4841,17 @@ figcaption {
         sample = "\n".join(str(scene.get("text") or "") for scene in scenes[:12] if isinstance(scene, dict))[:1800]
         cover_references = self._matching_character_references(novel.project_id, "\n".join([chapter.title or "", chapter.body_markdown or "", sample]))
         visual_scenes = self._select_visual_scene_candidates(novel.project_id, scenes, limit=20)
+        source_session = self._novel_source_chat_session(novel)
+        learning_role_ids = self._chat_session_learning_role_character_ids(source_session) if source_session else []
+        learning_role_references = (
+            self._scene_reference_characters(novel.project_id, {"character_ids": learning_role_ids}, "", limit=6)
+            if learning_role_ids
+            else []
+        )
+        if learning_role_references:
+            cover_references = learning_role_references
+            for item in visual_scenes:
+                item["character_references"] = learning_role_references
         still_layout = (
             "スマホ版向けの縦長9:16スチル。人物の顔と上半身、背景の場所感が縦画面に自然に収まる構図。"
             if bool(getattr(novel, "mobile_visible", False))
@@ -4430,6 +4894,9 @@ figcaption {
                             f"ノベル作品『{novel.title}』第{chapter.chapter_no}章「{chapter.title}」の劇中スチル。",
                             *character_plan_lines(item["character_references"]),
                             f"ノベルゲーム再生用の映画スチル。{still_layout}キャラクター表情と場所の空気を重視。",
+                            "シーンに先生役と生徒役が指定されている場合は、両方を同じ画面に登場させる。",
+                            "先生は説明し、生徒は聞く・質問する・ノートを取るなど学習者として自然に反応する。",
+                            "参照画像が複数ある場合、同一人物の重複ではなく指定された別キャラクターとして描き分ける。",
                             "画像内に読める文字、ロゴ、透かしは入れない。",
                             f"シーン本文: {item['text'][:900]}",
                         ]
@@ -4467,6 +4934,11 @@ figcaption {
         if not cover_reference_ids:
             cover_reference_ids = self._chapter_character_reference_asset_ids(novel.project_id, chapter)
         cover_reference_ids.extend(extra_reference_ids)
+        cover_reference_ids = self._apply_novel_session_outfit_references(
+            novel,
+            cover_reference_ids,
+            character_ids=[item.get("id") for item in image_plan.get("character_references") or [] if item.get("id")],
+        )
         cover_reference_paths, cover_reference_asset_ids = self._resolve_reference_image_paths(cover_reference_ids)
         used_reference_asset_ids = []
 
@@ -4508,7 +4980,14 @@ figcaption {
                 for reference in item.get("character_references") or []
                 if reference.get("base_asset_id")
             ]
+            if not still_reference_ids:
+                still_reference_ids = self._scene_character_reference_asset_ids(novel.project_id, scene)
             still_reference_ids.extend(extra_reference_ids)
+            still_reference_ids = self._apply_novel_session_outfit_references(
+                novel,
+                still_reference_ids,
+                character_ids=[reference.get("id") for reference in item.get("character_references") or [] if reference.get("id")],
+            )
             still_reference_paths, still_reference_asset_ids = self._resolve_reference_image_paths(still_reference_ids)
             image_jobs.append(
                 {
@@ -4964,6 +5443,124 @@ figcaption {
                 reference_asset_ids.append(asset.id)
         return reference_paths, reference_asset_ids
 
+    def _novel_source_chat_session(self, novel):
+        production = self._load_json(getattr(novel, "production_json", None), default={})
+        if not isinstance(production, dict):
+            return None
+        try:
+            session_id = int(production.get("source_session_id") or 0)
+        except (TypeError, ValueError):
+            session_id = 0
+        if session_id > 0:
+            return ChatSession.query.filter(
+                ChatSession.id == session_id,
+                ChatSession.project_id == novel.project_id,
+                ChatSession.deleted_at.is_(None),
+            ).first()
+
+        try:
+            source_novel_id = int(production.get("source_novel_id") or 0)
+        except (TypeError, ValueError):
+            source_novel_id = 0
+        if source_novel_id <= 0 or int(source_novel_id) == int(getattr(novel, "id", 0) or 0):
+            return None
+        source_novel = CinemaNovel.query.filter(
+            CinemaNovel.id == source_novel_id,
+            CinemaNovel.project_id == novel.project_id,
+            CinemaNovel.deleted_at.is_(None),
+        ).first()
+        if not source_novel:
+            return None
+        return self._novel_source_chat_session(source_novel)
+
+    def _apply_novel_session_outfit_references(self, novel, reference_asset_ids, *, character_ids=None) -> list[int]:
+        session = self._novel_source_chat_session(novel)
+        if not session:
+            return list(reference_asset_ids or [])
+        ids = self._normalize_character_ids(character_ids)
+        if not ids:
+            ids = self._chat_session_learning_role_character_ids(session)
+        outfit_asset_ids = self._chat_session_outfit_reference_asset_ids(session, character_ids=ids)
+        merged = []
+        for asset_id in [*outfit_asset_ids, *(reference_asset_ids or [])]:
+            try:
+                normalized_id = int(asset_id or 0)
+            except (TypeError, ValueError):
+                normalized_id = 0
+            if normalized_id > 0 and normalized_id not in merged:
+                merged.append(normalized_id)
+        return merged
+
+    def _chat_session_outfit_reference_asset_ids(self, session, *, character_ids=None) -> list[int]:
+        ids = self._normalize_character_ids(character_ids)
+        costume_types = {"costume_initial", "costume_reference", "closet_costume", "costume"}
+        query = SessionImage.query.filter(
+            SessionImage.session_id == session.id,
+            SessionImage.asset_id.isnot(None),
+        ).order_by(SessionImage.is_selected.desc(), SessionImage.created_at.desc(), SessionImage.id.desc())
+        rows = [
+            row
+            for row in query.all()
+            if str(row.image_type or "").strip().lower() in costume_types
+            and (not ids or int(getattr(row, "character_id", 0) or 0) in ids)
+        ]
+        asset_by_character = {}
+        loose_assets = []
+        for row in rows:
+            character_id = int(getattr(row, "character_id", 0) or 0)
+            if character_id and character_id not in asset_by_character:
+                asset_by_character[character_id] = row.asset_id
+            elif not character_id and row.asset_id not in loose_assets:
+                loose_assets.append(row.asset_id)
+        snapshot_assets = self._chat_session_room_outfit_asset_ids(session, character_ids=ids)
+        result = []
+        source_character_ids = ids or list(asset_by_character.keys())
+        for character_id in source_character_ids:
+            asset_id = asset_by_character.get(int(character_id))
+            if asset_id and asset_id not in result:
+                result.append(asset_id)
+        for asset_id in [*snapshot_assets, *loose_assets]:
+            if asset_id and asset_id not in result:
+                result.append(asset_id)
+        return result
+
+    def _chat_session_room_outfit_asset_ids(self, session, *, character_ids=None) -> list[int]:
+        ids = self._normalize_character_ids(character_ids)
+        room_snapshot = self._load_json(getattr(session, "room_snapshot_json", None), default={})
+        settings = self._load_json(getattr(session, "settings_json", None), default={})
+        room_snapshot = room_snapshot if isinstance(room_snapshot, dict) else {}
+        settings = settings if isinstance(settings, dict) else {}
+        pairs = [
+            (
+                room_snapshot.get("teacher_character_id") or room_snapshot.get("character_id"),
+                room_snapshot.get("teacher_default_outfit_id") or room_snapshot.get("default_outfit_id") or settings.get("learning_teacher_default_outfit_id"),
+            ),
+            (
+                room_snapshot.get("student_character_id") or settings.get("learning_student_character_id"),
+                room_snapshot.get("student_default_outfit_id") or settings.get("learning_student_default_outfit_id"),
+            ),
+        ]
+        asset_ids = []
+        for raw_character_id, raw_outfit_id in pairs:
+            try:
+                character_id = int(raw_character_id or 0)
+                outfit_id = int(raw_outfit_id or 0)
+            except (TypeError, ValueError):
+                continue
+            if character_id <= 0 or outfit_id <= 0:
+                continue
+            if ids and character_id not in ids:
+                continue
+            outfit = CharacterOutfit.query.filter(
+                CharacterOutfit.id == outfit_id,
+                CharacterOutfit.project_id == session.project_id,
+                CharacterOutfit.character_id == character_id,
+                CharacterOutfit.deleted_at.is_(None),
+            ).first()
+            if outfit and getattr(outfit, "asset_id", None) and outfit.asset_id not in asset_ids:
+                asset_ids.append(outfit.asset_id)
+        return asset_ids
+
     def _select_visual_scene_candidates(self, project_id: int, scenes, *, limit: int = 20) -> list[dict]:
         if not isinstance(scenes, list):
             return []
@@ -4994,7 +5591,7 @@ figcaption {
             text = str(scene.get("text") or "").strip()
             if not text:
                 continue
-            references = self._matching_character_references(project_id, text)
+            references = self._scene_reference_characters(project_id, scene, text)
             score = min(len(text), 800) / 100
             if references:
                 score += 20
@@ -5040,6 +5637,15 @@ figcaption {
         scenes = self._load_json(chapter.scene_json, default=[])
         scene_text = "\n".join(str(scene.get("text") or "") for scene in scenes if isinstance(scene, dict))
         searchable_text = "\n".join([str(chapter.title or ""), str(chapter.body_markdown or ""), scene_text])
+        asset_ids = []
+        for scene in scenes if isinstance(scenes, list) else []:
+            if not isinstance(scene, dict):
+                continue
+            for asset_id in self._scene_character_reference_asset_ids(project_id, scene):
+                if asset_id and asset_id not in asset_ids:
+                    asset_ids.append(asset_id)
+        if asset_ids:
+            return asset_ids
         return [item["base_asset_id"] for item in self._matching_character_references(project_id, searchable_text)]
 
     def _normalize_character_ids(self, values) -> list[int]:
@@ -5131,6 +5737,35 @@ figcaption {
             if asset_id and asset_id not in asset_ids:
                 asset_ids.append(asset_id)
         return asset_ids
+
+    def _scene_reference_characters(self, project_id: int, scene: dict, searchable_text: str = "", *, limit: int = 5) -> list[dict]:
+        ids = self._normalize_character_ids((scene or {}).get("character_ids"))
+        if ids:
+            rows = Character.query.filter(
+                Character.project_id == project_id,
+                Character.deleted_at.is_(None),
+                Character.id.in_(ids),
+            ).all()
+            by_id = {int(row.id): row for row in rows}
+            references = []
+            for character_id in ids:
+                character = by_id.get(int(character_id))
+                if not character:
+                    continue
+                asset_id = getattr(character, "base_asset_id", None)
+                if not asset_id:
+                    continue
+                references.append(
+                    {
+                        "id": character.id,
+                        "name": character.name,
+                        "nickname": character.nickname,
+                        "base_asset_id": asset_id,
+                        "score": 999,
+                    }
+                )
+            return references[:limit]
+        return self._matching_character_references(project_id, searchable_text, limit=limit)
 
     def _scene_character_contexts(self, project_id: int, scene: dict) -> list[dict]:
         ids = self._normalize_character_ids((scene or {}).get("character_ids"))

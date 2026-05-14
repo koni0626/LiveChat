@@ -287,6 +287,9 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
         board_items = learning_state.get("board_items") or []
         aid_type = str(learning_state.get("teaching_aid_type") or "").strip().lower()
         aid_prompt = str(learning_state.get("teaching_aid_prompt") or "").strip()
+        room = context.get("room") or {}
+        teacher_name = room.get("teacher_character_name") or room.get("character_name") or ((active[0] or {}).get("name") if active else "")
+        student_name = room.get("student_character_name") or ((active[1] or {}).get("name") if len(active) > 1 else "")
         lines.extend(
             [
                 "",
@@ -305,6 +308,15 @@ def build_japanese_conversation_image_prompt_request(context: dict, state: dict)
             lines.append(f"教材画像の目的: {aid_prompt}")
         if board_items:
             lines.extend(["黒板に入れたい要点:", *[f"- {item}" for item in board_items[:8]]])
+        if teacher_name or student_name:
+            lines.extend(
+                [
+                    f"先生役: {teacher_name}",
+                    f"生徒役: {student_name or '未設定'}",
+                    "プレイヤーは生徒役として発言します。生徒役が設定されている場合、板書・教室シーンでは先生と生徒を一緒に配置してください。",
+                    "先生は説明し、生徒は聞く、質問する、驚く、ノートを取るなど学習者として反応します。無関係な人物は追加しないでください。",
+                ]
+            )
     world_map_context = (context.get("world_map") or {}).get("prompt_context")
     if world_map_context:
         lines.extend(["ワールドマップ登録施設:", world_map_context])
@@ -358,6 +370,9 @@ def fallback_japanese_conversation_image_prompt(context: dict, state: dict) -> d
         board_items = learning_state.get("board_items") or []
         aid_type = str(learning_state.get("teaching_aid_type") or "").strip().lower()
         aid_prompt = str(learning_state.get("teaching_aid_prompt") or "").strip()
+        room = context.get("room") or {}
+        teacher_name = room.get("teacher_character_name") or room.get("character_name") or (active[0].get("name") if active else "")
+        student_name = room.get("student_character_name") or (active[1].get("name") if len(active) > 1 else "")
         prompt_parts = [
             "学習モードの授業画像を生成してください。",
             "黒板、ホワイトボード、地図、年表、教材、図解、実験イメージ、写真資料のいずれかを画面内の主役にしてください。",
@@ -375,6 +390,9 @@ def fallback_japanese_conversation_image_prompt(context: dict, state: dict) -> d
             prompt_parts.append(f"教材画像の目的: {aid_prompt}")
         if board_items:
             prompt_parts.append("黒板に入れたい要点: " + "、".join(str(item) for item in board_items[:8]))
+        if teacher_name or student_name:
+            prompt_parts.append(f"先生役は{teacher_name}、生徒役は{student_name or '未設定'}です。")
+            prompt_parts.append("プレイヤーは生徒役として発言します。生徒役が設定されている場合、板書・教室シーンでは先生と生徒を一緒に配置してください。")
     if location:
         prompt_parts.append(f"会話内容に合う背景として「{location}」が自然に分かるように描いてください。")
     if world_rule:

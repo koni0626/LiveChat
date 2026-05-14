@@ -25,7 +25,7 @@
         </select>
       </div>
       <div class="col-lg-4 col-md-6">
-        <label class="form-label" for="liveChatRoomCharacterSelect">話すキャラクター</label>
+        <label class="form-label" for="liveChatRoomCharacterSelect">先生役キャラクター</label>
         <select class="form-select" id="liveChatRoomCharacterSelect" name="character_id" required>
           <option value="">キャラクターを選択</option>
         </select>
@@ -38,11 +38,25 @@
           <option value="archived">アーカイブ</option>
         </select>
       </div>
+      <div class="col-lg-4 col-md-6 live-chat-room-student-fields" id="liveChatRoomStudentCharacterField">
+          <label class="form-label" for="liveChatRoomStudentCharacterSelect">生徒役キャラクター</label>
+          <select class="form-select" id="liveChatRoomStudentCharacterSelect" name="student_character_id">
+            <option value="">生徒役を選択</option>
+          </select>
+          <div class="form-text">学習モードではプレイヤーがこの生徒役として話します。</div>
+      </div>
       <div class="col-12">
         <input type="hidden" id="liveChatRoomOutfitInput" name="default_outfit_id">
-        <div class="form-label">基準衣装</div>
+        <div class="form-label">先生役の衣装</div>
         <div class="room-outfit-picker" id="liveChatRoomOutfitPicker">
           <div class="empty-panel">キャラクターを選択すると衣装が表示されます。</div>
+        </div>
+      </div>
+      <div class="col-12 live-chat-room-student-fields" id="liveChatRoomStudentOutfitField">
+        <input type="hidden" id="liveChatRoomStudentOutfitInput" name="student_default_outfit_id">
+        <div class="form-label">生徒役の衣装</div>
+        <div class="room-outfit-picker" id="liveChatRoomStudentOutfitPicker">
+          <div class="empty-panel">生徒役キャラクターを選択すると衣装が表示されます。</div>
         </div>
       </div>
       <div class="col-12">

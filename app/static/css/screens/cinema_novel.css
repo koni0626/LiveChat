@@ -1141,6 +1141,55 @@ body[data-screen="cinema-novel-reader"] .modal-backdrop {
   z-index: 2980;
 }
 
+.cinema-export-modal {
+  z-index: 2990;
+}
+
+body[data-screen="cinema-novels"] .modal-backdrop {
+  z-index: 2980;
+}
+
+.cinema-export-modal .modal-content {
+  background: rgba(8, 14, 28, 0.98);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  color: #eff6ff;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.cinema-export-modal .modal-header {
+  border-bottom-color: rgba(148, 163, 184, 0.24);
+}
+
+.cinema-export-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.cinema-export-modal-grid .btn {
+  min-height: 3.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: #eff6ff;
+  border-color: rgba(125, 211, 252, 0.58);
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.cinema-export-modal-grid .btn:hover,
+.cinema-export-modal-grid .btn:focus {
+  color: #ffffff;
+  border-color: rgba(45, 212, 191, 0.88);
+  background: rgba(14, 165, 233, 0.22);
+}
+
+@media (max-width: 575.98px) {
+  .cinema-export-modal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .cinema-reader-edit-modal {
   z-index: 2990;
   pointer-events: auto;

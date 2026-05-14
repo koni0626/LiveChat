@@ -39,12 +39,15 @@ class LiveChatSessionWorkflowService:
     def selected_character_ids_from_session(self, session) -> list[int]:
         room_snapshot = self._serializer.load_json(getattr(session, "room_snapshot_json", None)) or {}
         if isinstance(room_snapshot, dict):
-            try:
-                room_character_id = int(room_snapshot.get("character_id") or 0)
-            except (TypeError, ValueError):
-                room_character_id = 0
-            if room_character_id > 0:
-                return [room_character_id]
+            raw_ids = room_snapshot.get("selected_character_ids")
+            if not isinstance(raw_ids, list):
+                raw_ids = [
+                    room_snapshot.get("teacher_character_id") or room_snapshot.get("character_id"),
+                    room_snapshot.get("student_character_id"),
+                ]
+            normalized = self._normalize_character_ids(raw_ids)
+            if normalized:
+                return normalized
 
         settings_json = self._serializer.load_json(getattr(session, "settings_json", None)) or {}
         if not isinstance(settings_json, dict):
@@ -52,6 +55,11 @@ class LiveChatSessionWorkflowService:
         raw_value = settings_json.get("selected_character_ids")
         if raw_value is None and settings_json.get("selected_character_id") is not None:
             raw_value = [settings_json.get("selected_character_id")]
+        if not isinstance(raw_value, list):
+            return []
+        return self._normalize_character_ids(raw_value)
+
+    def _normalize_character_ids(self, raw_value) -> list[int]:
         if not isinstance(raw_value, list):
             return []
         normalized = []
@@ -153,6 +161,7 @@ class LiveChatSessionWorkflowService:
         if not room:
             return None
         snapshot = self._live_chat_room_service.build_room_snapshot(room)
+        selected_character_ids = self._live_chat_room_service.room_character_ids(room)
         title = str(payload.get("title") or "").strip()
         if not title:
             title = f"{snapshot.get('character_name') or room.title}との会話"
@@ -161,8 +170,12 @@ class LiveChatSessionWorkflowService:
             "title": title,
             "player_name": str(payload.get("player_name") or "").strip() or None,
             "settings_json": {
-                "selected_character_ids": [room.character_id],
+                "selected_character_ids": selected_character_ids,
                 "live_chat_genre": snapshot.get("genre") or "romance",
+                "learning_teacher_character_id": room.character_id,
+                "learning_student_character_id": getattr(room, "student_character_id", None),
+                "learning_teacher_default_outfit_id": getattr(room, "default_outfit_id", None),
+                "learning_student_default_outfit_id": getattr(room, "student_default_outfit_id", None),
                 "conversation_objective": room.conversation_objective,
                 "proxy_player_objective": getattr(room, "proxy_player_objective", None),
                 "proxy_player_gender": getattr(room, "proxy_player_gender", None),
@@ -177,16 +190,30 @@ class LiveChatSessionWorkflowService:
             session.id,
             {
                 "state_json": {
-                    "active_character_ids": [room.character_id],
+                    "active_character_ids": selected_character_ids,
                     "room_id": room.id,
                     "live_chat_genre": snapshot.get("genre") or "romance",
                 }
             },
         )
         if getattr(room, "default_outfit_id", None):
-            self._media_service.select_closet_outfit(session.id, int(room.default_outfit_id))
-        else:
-            self._media_service.ensure_initial_costume(session.id)
+            self._media_service.register_outfit_reference_for_character(
+                session.id,
+                int(room.character_id),
+                int(room.default_outfit_id),
+                selected=True,
+            )
+        if getattr(room, "student_character_id", None) and getattr(room, "student_default_outfit_id", None):
+            self._media_service.register_outfit_reference_for_character(
+                session.id,
+                int(room.student_character_id),
+                int(room.student_default_outfit_id),
+                selected=not getattr(room, "default_outfit_id", None),
+            )
+        self._media_service.ensure_initial_costumes_for_active_characters(
+            session.id,
+            selected_character_id=int(room.character_id),
+        )
         return self._context_provider(session.id)
 
     def _preserve_locked_session_characters(self, session_id: int, payload: dict) -> dict:

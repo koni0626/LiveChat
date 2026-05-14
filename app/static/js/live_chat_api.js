@@ -101,6 +101,13 @@
     });
   }
 
+  async function createCinemaNovel(sessionId, body = {}) {
+    return NovelUI.api(`/api/v1/chat/sessions/${sessionId}/cinema-novel`, {
+      method: "POST",
+      body,
+    });
+  }
+
   async function analyzePlayerReaction(sessionId, formData) {
     const response = await fetch(`/api/v1/chat/sessions/${sessionId}/player-reaction`, {
       method: "POST",
@@ -209,6 +216,7 @@
     saveShortStory,
     generateProxyPlayerMessage,
     postIdleMessage,
+    createCinemaNovel,
     extractState,
     uploadImage,
     uploadGift,

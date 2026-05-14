@@ -419,6 +419,19 @@ def update_cinema_novel_status(novel_id: int):
     return json_response(cinema_novel_service.serialize_novel(updated, include_chapters=True, user_id=user.id))
 
 
+@cinema_novels_bp.route("/cinema-novels/<int:novel_id>/metadata", methods=["PUT"])
+def update_cinema_novel_metadata(novel_id: int):
+    novel, _project, user = _require_novel(novel_id, for_manage=True)
+    payload = request.get_json(silent=True) or {}
+    try:
+        updated = cinema_novel_service.update_novel_metadata(novel.id, payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    if not updated:
+        raise NotFoundError()
+    return json_response(cinema_novel_service.serialize_novel(updated, include_chapters=True, user_id=user.id))
+
+
 @cinema_novels_bp.route("/cinema-novels/<int:novel_id>/comic-scenes", methods=["PUT"])
 def update_cinema_novel_comic_scene(novel_id: int):
     novel, _project, _user = _require_novel(novel_id, for_manage=True)

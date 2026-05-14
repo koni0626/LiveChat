@@ -58,19 +58,36 @@ class LiveChatRoomService:
         if not room:
             return None
         character = self._character_service.get_character(room.character_id)
+        student_character = (
+            self._character_service.get_character(getattr(room, "student_character_id", None))
+            if getattr(room, "student_character_id", None)
+            else None
+        )
         thumbnail_asset = self._serialize_asset_summary(getattr(character, "thumbnail_asset_id", None) if character else None)
         bromide_asset = self._serialize_asset_summary(getattr(character, "bromide_asset_id", None) if character else None)
         base_asset = self._serialize_asset_summary(getattr(character, "base_asset_id", None) if character else None)
         default_outfit = self._closet_service.serialize_outfit(
             self._closet_service.resolve_outfit(room.character_id, getattr(room, "default_outfit_id", None))
         ) if getattr(room, "default_outfit_id", None) else None
+        student_default_outfit = self._closet_service.serialize_outfit(
+            self._closet_service.resolve_outfit(getattr(room, "student_character_id", None), getattr(room, "student_default_outfit_id", None))
+        ) if getattr(room, "student_character_id", None) and getattr(room, "student_default_outfit_id", None) else None
         payload = {
             "id": room.id,
             "project_id": room.project_id,
             "created_by_user_id": room.created_by_user_id,
             "character_id": room.character_id,
+            "character_name": character.name if character else None,
+            "teacher_character_id": room.character_id,
+            "teacher_character_name": character.name if character else None,
             "default_outfit_id": getattr(room, "default_outfit_id", None),
             "default_outfit": default_outfit,
+            "teacher_default_outfit_id": getattr(room, "default_outfit_id", None),
+            "teacher_default_outfit": default_outfit,
+            "student_character_id": getattr(room, "student_character_id", None),
+            "student_character_name": student_character.name if student_character else None,
+            "student_default_outfit_id": getattr(room, "student_default_outfit_id", None),
+            "student_default_outfit": student_default_outfit,
             "title": room.title,
             "description": room.description,
             "genre": self.normalize_genre(getattr(room, "genre", None)),
@@ -98,6 +115,7 @@ class LiveChatRoomService:
                 if character
                 else None
             ),
+            "student_character": self._serialize_character_summary(student_character),
         }
         if include_counts:
             sessions = self._chat_session_repo.list_by_room(room.id)
@@ -133,6 +151,22 @@ class LiveChatRoomService:
             "file_name": asset.file_name,
             "mime_type": asset.mime_type,
             "media_url": self._build_media_url(asset.file_path),
+        }
+
+    def _serialize_character_summary(self, character):
+        if not character:
+            return None
+        return {
+            "id": character.id,
+            "name": character.name,
+            "nickname": getattr(character, "nickname", None),
+            "introduction_text": getattr(character, "introduction_text", None),
+            "thumbnail_asset_id": getattr(character, "thumbnail_asset_id", None),
+            "bromide_asset_id": getattr(character, "bromide_asset_id", None),
+            "base_asset_id": getattr(character, "base_asset_id", None),
+            "thumbnail_asset": self._serialize_asset_summary(getattr(character, "thumbnail_asset_id", None)),
+            "bromide_asset": self._serialize_asset_summary(getattr(character, "bromide_asset_id", None)),
+            "base_asset": self._serialize_asset_summary(getattr(character, "base_asset_id", None)),
         }
 
     def serialize_rooms(self, rooms, *, include_counts: bool = False, owner_user_id: int | None = None):
@@ -201,6 +235,7 @@ class LiveChatRoomService:
             created_by_user_id=room.created_by_user_id,
             require_all=False,
             current_character_id=room.character_id,
+            current_student_character_id=getattr(room, "student_character_id", None),
         )
         if not normalized:
             raise ValueError("payload must not be empty")
@@ -221,13 +256,31 @@ class LiveChatRoomService:
 
     def _build_room_settings(self, room) -> dict:
         return {
-            "selected_character_ids": [room.character_id],
+            "selected_character_ids": self.room_character_ids(room),
             "live_chat_genre": self.normalize_genre(getattr(room, "genre", None)),
+            "learning_teacher_character_id": room.character_id,
+            "learning_student_character_id": getattr(room, "student_character_id", None),
+            "learning_teacher_default_outfit_id": getattr(room, "default_outfit_id", None),
+            "learning_student_default_outfit_id": getattr(room, "student_default_outfit_id", None),
             "conversation_objective": room.conversation_objective,
             "proxy_player_objective": getattr(room, "proxy_player_objective", None),
             "proxy_player_gender": getattr(room, "proxy_player_gender", None),
             "proxy_player_speech_style": getattr(room, "proxy_player_speech_style", None),
         }
+
+    def room_character_ids(self, room) -> list[int]:
+        values = [getattr(room, "character_id", None)]
+        if self.normalize_genre(getattr(room, "genre", None)) == "learning":
+            values.append(getattr(room, "student_character_id", None))
+        ids = []
+        for value in values:
+            try:
+                character_id = int(value or 0)
+            except (TypeError, ValueError):
+                character_id = 0
+            if character_id > 0 and character_id not in ids:
+                ids.append(character_id)
+        return ids
 
     def sync_room_to_sessions(self, room_id: int, *, owner_user_id: int | None = None) -> dict | None:
         room = self.get_room(room_id)
@@ -250,7 +303,7 @@ class LiveChatRoomService:
             )
             state_row = self._session_state_service.get_state(session.id)
             state_json = self._load_json_dict(getattr(state_row, "state_json", None))
-            state_json["active_character_ids"] = [room.character_id]
+            state_json["active_character_ids"] = self.room_character_ids(room)
             state_json["room_id"] = room.id
             state_json["live_chat_genre"] = self.normalize_genre(getattr(room, "genre", None))
             self._session_state_service.upsert_state(session.id, {"state_json": state_json})
@@ -593,9 +646,17 @@ class LiveChatRoomService:
 
     def build_room_snapshot(self, room):
         character = self._character_service.get_character(room.character_id)
+        student_character = (
+            self._character_service.get_character(getattr(room, "student_character_id", None))
+            if getattr(room, "student_character_id", None)
+            else None
+        )
         default_outfit = self._closet_service.serialize_outfit(
             self._closet_service.resolve_outfit(room.character_id, getattr(room, "default_outfit_id", None))
         ) if getattr(room, "default_outfit_id", None) else None
+        student_default_outfit = self._closet_service.serialize_outfit(
+            self._closet_service.resolve_outfit(getattr(room, "student_character_id", None), getattr(room, "student_default_outfit_id", None))
+        ) if getattr(room, "student_character_id", None) and getattr(room, "student_default_outfit_id", None) else None
         return {
             "room_id": room.id,
             "room_title": room.title,
@@ -606,8 +667,17 @@ class LiveChatRoomService:
             "proxy_player_speech_style": getattr(room, "proxy_player_speech_style", None),
             "character_id": room.character_id,
             "character_name": character.name if character else None,
+            "teacher_character_id": room.character_id,
+            "teacher_character_name": character.name if character else None,
             "default_outfit_id": getattr(room, "default_outfit_id", None),
             "default_outfit_name": default_outfit.get("name") if isinstance(default_outfit, dict) else None,
+            "teacher_default_outfit_id": getattr(room, "default_outfit_id", None),
+            "teacher_default_outfit_name": default_outfit.get("name") if isinstance(default_outfit, dict) else None,
+            "student_character_id": getattr(room, "student_character_id", None),
+            "student_character_name": student_character.name if student_character else None,
+            "student_default_outfit_id": getattr(room, "student_default_outfit_id", None),
+            "student_default_outfit_name": student_default_outfit.get("name") if isinstance(student_default_outfit, dict) else None,
+            "selected_character_ids": self.room_character_ids(room),
             "status": room.status,
             "version_updated_at": room.updated_at.isoformat() if getattr(room, "updated_at", None) else None,
         }
@@ -620,6 +690,7 @@ class LiveChatRoomService:
         created_by_user_id: int,
         require_all: bool,
         current_character_id: int | None = None,
+        current_student_character_id: int | None = None,
     ):
         normalized = {}
         if require_all or "title" in payload:
@@ -642,6 +713,7 @@ class LiveChatRoomService:
             normalized["description"] = str(payload.get("description") or "").strip() or None
         if "genre" in payload or require_all:
             normalized["genre"] = self.normalize_genre(payload.get("genre"))
+        effective_genre = normalized.get("genre")
         if require_all or "character_id" in payload:
             try:
                 character_id = int(payload.get("character_id") or 0)
@@ -668,6 +740,42 @@ class LiveChatRoomService:
                 normalized["default_outfit_id"] = outfit_id
             else:
                 normalized["default_outfit_id"] = None
+        if effective_genre == "romance":
+            if require_all or "genre" in payload or "student_character_id" in payload:
+                normalized["student_character_id"] = None
+            if require_all or "genre" in payload or "student_default_outfit_id" in payload:
+                normalized["student_default_outfit_id"] = None
+        else:
+            if "student_character_id" in payload or require_all:
+                try:
+                    student_character_id = int(payload.get("student_character_id") or 0)
+                except (TypeError, ValueError):
+                    student_character_id = 0
+                if student_character_id:
+                    if effective_character_id and int(student_character_id) == int(effective_character_id):
+                        raise ValueError("student_character_id must be different from character_id")
+                    student_character = self._character_service.get_character(student_character_id)
+                    if not student_character or student_character.project_id != project_id:
+                        raise ValueError("student_character_id is invalid")
+                    normalized["student_character_id"] = student_character_id
+                else:
+                    normalized["student_character_id"] = None
+            effective_student_character_id = normalized.get("student_character_id")
+            if effective_student_character_id is None and "student_character_id" not in normalized:
+                effective_student_character_id = current_student_character_id
+            if "student_default_outfit_id" in payload or require_all or "student_character_id" in normalized:
+                raw_outfit_id = payload.get("student_default_outfit_id")
+                try:
+                    outfit_id = int(raw_outfit_id or 0)
+                except (TypeError, ValueError):
+                    outfit_id = 0
+                if outfit_id:
+                    outfit = self._closet_service.resolve_outfit(int(effective_student_character_id or 0), outfit_id)
+                    if not outfit or outfit.id != outfit_id or outfit.project_id != project_id:
+                        raise ValueError("student_default_outfit_id is invalid")
+                    normalized["student_default_outfit_id"] = outfit_id
+                else:
+                    normalized["student_default_outfit_id"] = None
         if "status" in payload or require_all:
             status = str(payload.get("status") or "draft").strip() or "draft"
             if status not in self.VALID_STATUSES:

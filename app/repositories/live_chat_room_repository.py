@@ -15,6 +15,8 @@ class LiveChatRoomRepository:
         "proxy_player_speech_style",
         "character_id",
         "default_outfit_id",
+        "student_character_id",
+        "student_default_outfit_id",
         "status",
         "sort_order",
     )
@@ -54,6 +56,8 @@ class LiveChatRoomRepository:
             created_by_user_id=payload["created_by_user_id"],
             character_id=payload["character_id"],
             default_outfit_id=payload.get("default_outfit_id"),
+            student_character_id=payload.get("student_character_id"),
+            student_default_outfit_id=payload.get("student_default_outfit_id"),
             title=payload["title"],
             description=payload.get("description"),
             genre=payload.get("genre") or "romance",

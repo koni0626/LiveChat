@@ -25,6 +25,7 @@
   const projectId = Number(document.body?.dataset?.projectId || 0);
   const isSuperuser = root.dataset.isSuperuser === "true";
   const canManageProject = root.dataset.canManageProject === "true";
+  const createCinemaNovelButton = document.getElementById("liveChatCreateCinemaNovelButton");
   const stateBoard = document.getElementById("liveChatStateBoard");
   const memoryBoard = document.getElementById("liveChatMemoryBoard");
   const selectedImagePanel = document.getElementById("liveChatSelectedImagePanel");
@@ -1160,6 +1161,22 @@
     }
   }
 
+  async function createCinemaNovelFromSession() {
+    if (!createCinemaNovelButton || createCinemaNovelButton.disabled) return;
+    const originalHtml = createCinemaNovelButton.innerHTML;
+    createCinemaNovelButton.disabled = true;
+    createCinemaNovelButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>ノベル化中...';
+    try {
+      const novel = await LiveChatApi.createCinemaNovel(sessionId, {});
+      NovelUI.toast("チャット内容からノベルを作成しました。");
+      window.location.href = `/projects/${projectId}/cinema-novels/${novel.id}`;
+    } catch (error) {
+      NovelUI.toast(error.message || "ノベル化に失敗しました。", "danger");
+      createCinemaNovelButton.disabled = false;
+      createCinemaNovelButton.innerHTML = originalHtml;
+    }
+  }
+
   function renderSceneChoices(context) {
     if (!sceneChoicePanel) return;
     sceneChoicePanel.classList.add("is-hidden");
@@ -1278,6 +1295,7 @@
   syncAffinityCardPlacement();
   composerController.bind();
   shortStoryPanel.bind();
+  createCinemaNovelButton?.addEventListener("click", createCinemaNovelFromSession);
   galleryToggleButton?.addEventListener("click", () => togglePanel(galleryCard, galleryBody, galleryToggleButton));
 
   costumeRoomController = LiveChatCostumeRoom.createCostumeRoomController({

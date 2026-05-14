@@ -307,6 +307,43 @@
   <div class="cinema-list-grid" id="cinemaNovelList"></div>
   <div class="empty-panel" id="cinemaNovelEmpty" hidden>上映作品がまだありません。</div>
 </section>
+<div class="modal fade cinema-export-modal" id="cinemaExportModal" tabindex="-1" aria-labelledby="cinemaExportModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <div class="eyebrow">Export</div>
+          <h5 class="modal-title" id="cinemaExportModalTitle">エクスポート</h5>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="cinema-export-modal-grid">
+          <button class="btn btn-outline-dark" type="button" data-cinema-export-kind="ppt">
+            <i class="bi bi-file-earmark-ppt"></i>
+            <span>PPT</span>
+          </button>
+          <button class="btn btn-outline-dark" type="button" data-cinema-export-kind="video_portrait">
+            <i class="bi bi-file-earmark-play"></i>
+            <span>動画(縦)</span>
+          </button>
+          <button class="btn btn-outline-dark" type="button" data-cinema-export-kind="video_landscape">
+            <i class="bi bi-aspect-ratio"></i>
+            <span>動画(横)</span>
+          </button>
+          <button class="btn btn-outline-dark" type="button" data-cinema-export-kind="epub_vertical">
+            <i class="bi bi-layout-text-window-reverse"></i>
+            <span>EPUB(縦)</span>
+          </button>
+          <button class="btn btn-outline-dark" type="button" data-cinema-export-kind="epub_horizontal">
+            <i class="bi bi-book"></i>
+            <span>EPUB(横)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/cinema_novels_page.js') }}"></script>

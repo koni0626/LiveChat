@@ -5,13 +5,22 @@
   const roomForm = document.getElementById("liveChatRoomForm");
   if (!roomForm) return;
   const characterSelect = document.getElementById("liveChatRoomCharacterSelect");
+  const studentCharacterSelect = document.getElementById("liveChatRoomStudentCharacterSelect");
   const genreSelect = document.getElementById("liveChatRoomGenreSelect");
   const outfitInput = document.getElementById("liveChatRoomOutfitInput");
   const outfitPicker = document.getElementById("liveChatRoomOutfitPicker");
+  const studentOutfitInput = document.getElementById("liveChatRoomStudentOutfitInput");
+  const studentOutfitPicker = document.getElementById("liveChatRoomStudentOutfitPicker");
+  const studentFields = Array.from(document.querySelectorAll(".live-chat-room-student-fields"));
   const outfitPickerController = window.OutfitPicker.create({
     characterSelect,
     input: outfitInput,
     picker: outfitPicker,
+  });
+  const studentOutfitPickerController = window.OutfitPicker.create({
+    characterSelect: studentCharacterSelect,
+    input: studentOutfitInput,
+    picker: studentOutfitPicker,
   });
   const objectivePreview = document.getElementById("liveChatRoomObjectivePreview");
   const objectiveEditButton = document.getElementById("liveChatRoomObjectiveEditButton");
@@ -87,6 +96,20 @@
 
   function renderProxyPlayerObjectivePreview() {
     proxyPlayerObjectivePreview.innerHTML = markdownToHtml(roomForm.proxy_player_objective.value);
+  }
+
+  function isLearningGenre() {
+    return (genreSelect?.value || "romance") === "learning";
+  }
+
+  function syncStudentFieldsVisibility() {
+    const visible = isLearningGenre();
+    studentFields.forEach((element) => element.classList.toggle("d-none", !visible));
+    if (!visible) {
+      if (studentCharacterSelect) studentCharacterSelect.value = "";
+      if (studentOutfitInput) studentOutfitInput.value = "";
+      studentOutfitPickerController.load("").catch(() => {});
+    }
   }
 
   function openObjectiveEditor() {
@@ -201,6 +224,8 @@
     if (genreSelect) genreSelect.value = room.genre || "romance";
     roomForm.character_id.value = room.character_id || "";
     outfitInput.value = room.default_outfit_id || "";
+    if (studentCharacterSelect) studentCharacterSelect.value = room.student_character_id || "";
+    if (studentOutfitInput) studentOutfitInput.value = room.student_default_outfit_id || "";
     roomForm.status.value = room.status || "draft";
     roomForm.description.value = room.description || "";
     roomForm.conversation_objective.value = room.conversation_objective || "";
@@ -209,6 +234,7 @@
     roomForm.proxy_player_speech_style.value = room.proxy_player_speech_style || "";
     renderObjectivePreview();
     renderProxyPlayerObjectivePreview();
+    syncStudentFieldsVisibility();
   }
 
   async function loadCharacters() {
@@ -218,10 +244,20 @@
       '<option value="">キャラクターを選択</option>',
       ...characters.map((item) => `<option value="${item.id}">${NovelUI.escape(item.name || "Unnamed")}</option>`),
     ].join("");
+    if (studentCharacterSelect) {
+      studentCharacterSelect.innerHTML = [
+        '<option value="">生徒役を選択</option>',
+        ...characters.map((item) => `<option value="${item.id}">${NovelUI.escape(item.name || "Unnamed")}</option>`),
+      ].join("");
+    }
   }
 
   async function loadOutfits(selectedOutfitId = "") {
     return outfitPickerController.load(selectedOutfitId);
+  }
+
+  async function loadStudentOutfits(selectedOutfitId = "") {
+    return studentOutfitPickerController.load(selectedOutfitId);
   }
 
   async function loadRoom() {
@@ -229,6 +265,7 @@
     const room = await NovelUI.api(`/api/v1/chat/rooms/${roomId}`);
     fillRoom(room);
     await loadOutfits(room.default_outfit_id || "");
+    await loadStudentOutfits(room.student_default_outfit_id || "");
   }
 
   async function saveRoom(event) {
@@ -238,6 +275,8 @@
       genre: genreSelect?.value || "romance",
       character_id: Number(roomForm.character_id.value || 0),
       default_outfit_id: outfitInput.value ? Number(outfitInput.value) : null,
+      student_character_id: isLearningGenre() && studentCharacterSelect?.value ? Number(studentCharacterSelect.value) : null,
+      student_default_outfit_id: isLearningGenre() && studentOutfitInput?.value ? Number(studentOutfitInput.value) : null,
       status: roomForm.status.value,
       description: roomForm.description.value.trim(),
       conversation_objective: roomForm.conversation_objective.value.trim(),
@@ -251,6 +290,11 @@
     if (!body.conversation_objective) {
       NovelUI.toast("キャラクターへの指示を入力してください。", "warning");
       openObjectiveEditor();
+      return;
+    }
+    if (isLearningGenre() && body.student_character_id && body.student_character_id === body.character_id) {
+      NovelUI.toast("先生役と生徒役は別のキャラクターを選択してください。", "warning");
+      studentCharacterSelect?.focus();
       return;
     }
     const path = roomId
@@ -285,9 +329,15 @@
   proxyPlayerObjectiveMarkdownInput?.addEventListener("input", () => {
     proxyPlayerObjectiveMarkdownPreview.innerHTML = markdownToHtml(proxyPlayerObjectiveMarkdownInput.value);
   });
+  genreSelect?.addEventListener("change", syncStudentFieldsVisibility);
+  studentCharacterSelect?.addEventListener("change", () => {
+    if (studentOutfitInput) studentOutfitInput.value = "";
+    loadStudentOutfits("").catch((error) => NovelUI.toast(error.message || "生徒役の衣装読み込みに失敗しました。", "danger"));
+  });
 
   renderObjectivePreview();
   renderProxyPlayerObjectivePreview();
+  syncStudentFieldsVisibility();
   loadCharacters()
     .then(() => roomId ? loadRoom() : loadOutfits(""))
     .catch((error) => NovelUI.toast(error.message || "ルーム設定の読み込みに失敗しました。", "danger"));

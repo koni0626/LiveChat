@@ -13,6 +13,7 @@ from ...services.authorization_service import AuthorizationService
 from ...services.chat_message_service import ChatMessageService
 from ...services.chat_session_service import ChatSessionService
 from ...services.character_affinity_reward_service import CharacterAffinityRewardService
+from ...services.cinema_novel_service import CinemaNovelService
 from ...services.live_chat_room_service import LiveChatRoomService
 from ...services.live_chat_service import LiveChatService
 from ...services.inventory_service import InventoryService
@@ -39,6 +40,7 @@ session_state_service = SessionStateService()
 authorization_service = AuthorizationService()
 user_setting_service = UserSettingService()
 point_billing_service = PointBillingService()
+cinema_novel_service = CinemaNovelService()
 
 
 def _run_with_app_context(app, callback, *args, **kwargs):
@@ -881,6 +883,21 @@ def list_chat_images(session_id: int):
     _require_session(session_id)
     context = live_chat_service.get_session_context(session_id)
     return json_response(context["images"], meta={"count": len(context["images"])})
+
+
+@chat_bp.route("/chat/sessions/<int:session_id>/cinema-novel", methods=["POST"])
+def create_chat_session_cinema_novel(session_id: int):
+    _chat_session, _project, user = _require_session(session_id, include_body=False)
+    if not authorization_service.can_manage_project(user, _project):
+        raise ForbiddenError()
+    payload = request.get_json(silent=True) or {}
+    try:
+        novel = cinema_novel_service.create_chat_session_novel(session_id, user.id, payload)
+    except (RuntimeError, ValueError) as exc:
+        raise ValidationError(str(exc))
+    if not novel:
+        raise NotFoundError()
+    return json_response(cinema_novel_service.serialize_novel(novel, include_chapters=True, user_id=user.id), status=201)
 
 
 @chat_bp.route("/chat/sessions/<int:session_id>/costumes", methods=["GET"])

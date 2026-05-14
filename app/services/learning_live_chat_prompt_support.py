@@ -26,6 +26,8 @@ def build_learning_reply_prompt(context: dict, user_message_text: str) -> str:
             parts.append(f"speech_style: {character.get('speech_style')}")
         character_lines.append(" / ".join(parts))
     room = context.get("room") or {}
+    teacher_name = room.get("teacher_character_name") or room.get("character_name") or ((characters[0] or {}).get("name") if characters else "")
+    student_name = room.get("student_character_name") or ((characters[1] or {}).get("name") if len(characters) > 1 else "")
     state_json = ((context.get("state") or {}).get("state_json") or {})
     learning_state = state_json.get("learning_director") or {}
     lines = [
@@ -52,6 +54,10 @@ def build_learning_reply_prompt(context: dict, user_message_text: str) -> str:
         "",
         f"Room title: {room.get('title') or room.get('room_title') or ''}",
         f"Learning objective: {room.get('conversation_objective') or ''}",
+        f"Teacher role: {teacher_name}",
+        f"Student role: {student_name or 'player only'}",
+        "The player speaks as the student. The AI response speaker must be the teacher role unless explicitly asked otherwise.",
+        "When referring to the player's viewpoint, treat it as the student role, not as a separate extra character.",
         "Characters:",
         *(character_lines or ["- 先生"]),
         "",
@@ -122,7 +128,9 @@ def normalize_learning_reply(context: dict, raw_text: str, user_message_text: st
     if not isinstance(parsed, dict):
         parsed = {}
     fallback = fallback_learning_reply(context, user_message_text)
-    speaker_name = str(parsed.get("speaker_name") or fallback["speaker_name"]).strip()
+    room = context.get("room") or {}
+    teacher_name = str(room.get("teacher_character_name") or room.get("character_name") or "").strip()
+    speaker_name = teacher_name or str(parsed.get("speaker_name") or fallback["speaker_name"]).strip()
     message_text = str(parsed.get("message_text") or fallback["message_text"]).strip()
     board_items = parsed.get("board_items")
     if not isinstance(board_items, list):

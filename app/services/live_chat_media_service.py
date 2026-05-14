@@ -147,11 +147,28 @@ class LiveChatMediaService:
         return reference_paths, reference_asset_ids
 
     def collect_session_reference_assets(self, session_id: int, active_characters: list[dict], *, limit: int = 1):
-        selected_costume = self._session_image_service.get_selected_costume(session_id)
         reference_paths = []
         reference_asset_ids = []
         seen_asset_ids = set()
 
+        active_ids = []
+        for character in active_characters or []:
+            try:
+                character_id = int((character or {}).get("id") or 0)
+            except (TypeError, ValueError):
+                character_id = 0
+            if character_id > 0 and character_id not in active_ids:
+                active_ids.append(character_id)
+        costume_rows = self._session_image_service.list_costumes(session_id)
+        for character_id in active_ids:
+            matching_rows = [row for row in costume_rows if int(getattr(row, "character_id", 0) or 0) == character_id]
+            selected = next((row for row in matching_rows if row.is_selected), None)
+            row = selected or (matching_rows[0] if matching_rows else None)
+            if row:
+                self._append_asset_reference(row.asset_id, reference_paths, reference_asset_ids, seen_asset_ids, limit=limit)
+        if reference_paths:
+            return reference_paths, reference_asset_ids
+        selected_costume = self._session_image_service.get_selected_costume(session_id)
         if selected_costume:
             self._append_asset_reference(selected_costume.asset_id, reference_paths, reference_asset_ids, seen_asset_ids, limit=limit)
             if reference_paths:
@@ -304,6 +321,99 @@ class LiveChatMediaService:
         )
         return self.serialize_session_image(row)
 
+    def register_outfit_reference_for_character(self, session_id: int, character_id: int, outfit_id: int, *, selected: bool = False):
+        session = self._chat_session_service.get_session(session_id)
+        if not session or not character_id or not outfit_id:
+            return None
+        outfit = self._closet_service.resolve_outfit(character_id, outfit_id)
+        if not outfit or int(outfit.id) != int(outfit_id) or not outfit.asset_id:
+            return None
+        existing = next(
+            (
+                row
+                for row in self._session_image_service.list_costumes(session_id)
+                if int(getattr(row, "character_id", 0) or 0) == int(character_id)
+                and int(row.asset_id or 0) == int(outfit.asset_id or 0)
+            ),
+            None,
+        )
+        if existing:
+            if selected:
+                existing = self._session_image_service.select_session_image(existing.id)
+                self._remember_selected_costume(session_id, existing, source="room_default_outfit")
+            return self.serialize_session_image(existing)
+        row = self._session_image_service.create_session_image(
+            session_id,
+            {
+                "asset_id": outfit.asset_id,
+                "owner_user_id": session.owner_user_id,
+                "character_id": character_id,
+                "image_type": "costume_reference",
+                "prompt_text": outfit.prompt_notes or outfit.name,
+                "state_json": {
+                    "source": "room_default_outfit",
+                    "outfit_id": outfit.id,
+                    "outfit_name": outfit.name,
+                    "description": outfit.description or "",
+                    "usage_scene": outfit.usage_scene or "",
+                    "season": outfit.season or "",
+                },
+                "quality": "closet",
+                "size": "closet",
+                "is_selected": 0,
+            },
+        )
+        if selected:
+            row = self._session_image_service.select_session_image(row.id)
+            self._remember_selected_costume(session_id, row, source="room_default_outfit")
+        return self.serialize_session_image(row)
+
+    def ensure_initial_costumes_for_active_characters(self, session_id: int, *, selected_character_id: int | None = None):
+        session = self._chat_session_service.get_session(session_id)
+        if not session:
+            return []
+        existing = self._session_image_service.list_costumes(session_id)
+        existing_character_ids = {
+            int(getattr(row, "character_id", 0) or 0)
+            for row in existing
+            if int(getattr(row, "character_id", 0) or 0) > 0
+        }
+        rows = []
+        for character in self._select_characters(session_id):
+            try:
+                character_id = int((character or {}).get("id") or 0)
+            except (TypeError, ValueError):
+                character_id = 0
+            if not character_id or character_id in existing_character_ids:
+                continue
+            base_asset = (character or {}).get("base_asset") or {}
+            asset_id = base_asset.get("id") or (character or {}).get("base_asset_id")
+            if not asset_id:
+                continue
+            row = self._session_image_service.create_session_image(
+                session_id,
+                {
+                    "asset_id": asset_id,
+                    "owner_user_id": session.owner_user_id,
+                    "character_id": character_id,
+                    "image_type": "costume_initial",
+                    "prompt_text": "character base reference image",
+                    "state_json": {"source": "character_base_asset", "character_id": character_id},
+                    "quality": "source",
+                    "size": "source",
+                    "is_selected": 0,
+                    "is_reference": 0,
+                },
+            )
+            rows.append(row)
+        if not self._session_image_service.get_selected_costume(session_id):
+            target_id = int(selected_character_id or 0)
+            selected_row = next((row for row in rows if int(getattr(row, "character_id", 0) or 0) == target_id), None)
+            selected_row = selected_row or (rows[0] if rows else None) or (existing[0] if existing else None)
+            if selected_row:
+                self._session_image_service.select_session_image(selected_row.id)
+        return [self.serialize_session_image(row) for row in rows]
+
     def analyze_displayed_image(self, file_path: str, *, prompt: str | None = None, source: str = "generated_image"):
         analysis_prompt = (
             "Return only JSON. Analyze this generated visual novel image so the chat character can understand "
@@ -388,14 +498,30 @@ class LiveChatMediaService:
             "experiment": "実験イメージ",
             "photo": "写真資料",
         }
+        teacher_name = room.get("teacher_character_name") or room.get("character_name") or ""
+        student_name = room.get("student_character_name") or ""
         lines = [
             f"学習用の{type_labels.get(aid_type, '教材画像')}を生成してください。",
-            "人物、キャラクター、先生、生徒、ポートレート、人型シルエットは描かないでください。",
-            "架空の女性や知らない人物を追加しないでください。",
-            "キャラクター写真ではなく、教材そのものを画面いっぱいに表示してください。",
             "吹き出し、字幕、UI、ロゴ、透かしは禁止です。",
             "教材内の自然な文字、ラベル、地名、年号、短い注釈は読みやすく表示して構いません。",
         ]
+        if aid_type in {"board", "diagram", "experiment"} or not aid_type:
+            lines.extend(
+                [
+                    f"先生役は{teacher_name or '選択キャラクター'}、生徒役は{student_name or '未設定'}です。",
+                    "生徒役が設定されている場合は、先生と生徒が教材を見ながら授業している構図にしてください。",
+                    "プレイヤーは生徒役として話しています。生徒は学習者として聞く、質問する、ノートを取る、驚くなど自然に反応します。",
+                    "知らない人物や追加の生徒は出さないでください。",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "人物、キャラクター、先生、生徒、ポートレート、人型シルエットは描かないでください。",
+                    "架空の女性や知らない人物を追加しないでください。",
+                    "キャラクター写真ではなく、教材そのものを画面いっぱいに表示してください。",
+                ]
+            )
         if aid_type == "map":
             lines.extend(
                 [

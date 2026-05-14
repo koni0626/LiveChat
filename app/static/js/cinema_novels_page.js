@@ -47,6 +47,8 @@
   const novelStatusSelect = document.getElementById("cinemaNovelStatusSelect");
   const novelMobileVisibleCheck = document.getElementById("cinemaNovelMobileVisibleCheck");
   const novelStatusSaveButton = document.getElementById("cinemaNovelStatusSaveButton");
+  const exportModalElement = document.getElementById("cinemaExportModal");
+  const exportModalTitle = document.getElementById("cinemaExportModalTitle");
   const comicEditorPanel = document.getElementById("cinemaComicEditorPanel");
   const comicEditorTitle = document.getElementById("cinemaComicEditorTitle");
   const comicEditorCloseButton = document.getElementById("cinemaComicEditorClose");
@@ -73,6 +75,13 @@
   let bgmAssets = [];
   let cinemaNovels = [];
   let productionMode = "novel";
+  let activeExportNovel = null;
+  if (exportModalElement && exportModalElement.parentElement !== document.body) {
+    document.body.appendChild(exportModalElement);
+  }
+  const exportModal = exportModalElement && window.bootstrap?.Modal
+    ? new window.bootstrap.Modal(exportModalElement)
+    : null;
 
   function escape(value) {
     return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
@@ -134,12 +143,22 @@
   }
 
   function selectedBgmQuery() {
+    return buildVideoQuery();
+  }
+
+  function buildVideoQuery(extra = {}) {
     const bgmAssetId = Number(bgmSelect?.value || 0);
-    if (!bgmAssetId) return "";
-    const params = new URLSearchParams({
-      bgm_asset_id: String(bgmAssetId),
-      bgm_volume: String(bgmVolumeSelect?.value || "0.45"),
+    const params = new URLSearchParams();
+    if (bgmAssetId) {
+      params.set("bgm_asset_id", String(bgmAssetId));
+      params.set("bgm_volume", String(bgmVolumeSelect?.value || "0.45"));
+    }
+    Object.entries(extra || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && String(value).trim()) {
+        params.set(key, String(value));
+      }
     });
+    if (!params.toString()) return "";
     return `?${params.toString()}`;
   }
 
@@ -449,6 +468,10 @@
       </div>
     ` : "";
     const actionsHtml = shortComic ? `
+          <button class="btn btn-sm btn-outline-dark" type="button" data-edit-novel-metadata-id="${novel.id}">
+            <i class="bi bi-pencil-square"></i>
+            情報編集
+          </button>
           <button class="btn btn-sm btn-outline-dark" type="button" data-comic-editor-novel-id="${novel.id}">
             <i class="bi bi-easel"></i>
             編集
@@ -462,23 +485,35 @@
             EPUB
           </button>
     ` : `
+          <button class="btn btn-sm btn-outline-dark" type="button" data-edit-novel-metadata-id="${novel.id}">
+            <i class="bi bi-pencil-square"></i>
+            情報編集
+          </button>
           <button class="btn btn-sm btn-outline-dark" type="button" data-production-novel-id="${novel.id}">
             <i class="bi bi-tools"></i>
             制作
           </button>
-          <button class="btn btn-sm btn-outline-dark" type="button" data-export-novel-id="${novel.id}">
+          <button class="btn btn-sm btn-outline-dark" type="button" data-open-export-novel-id="${novel.id}">
+            <i class="bi bi-box-arrow-up-right"></i>
+            エクスポート
+          </button>
+          <button class="d-none" type="button" data-export-novel-id="${novel.id}">
             <i class="bi bi-file-earmark-ppt"></i>
             PPT
           </button>
-          <button class="btn btn-sm btn-outline-dark" type="button" data-video-novel-id="${novel.id}">
+          <button class="d-none" type="button" data-video-novel-id="${novel.id}">
             <i class="bi bi-file-earmark-play"></i>
             動画
           </button>
-          <button class="btn btn-sm btn-outline-dark" type="button" data-epub-novel-id="${novel.id}">
+          <button class="d-none" type="button" data-video-landscape-novel-id="${novel.id}">
+            <i class="bi bi-aspect-ratio"></i>
+            横動画
+          </button>
+          <button class="d-none" type="button" data-epub-novel-id="${novel.id}">
             <i class="bi bi-book"></i>
             EPUB
           </button>
-          <button class="btn btn-sm btn-outline-dark" type="button" data-vertical-epub-novel-id="${novel.id}">
+          <button class="d-none" type="button" data-vertical-epub-novel-id="${novel.id}">
             <i class="bi bi-layout-text-window-reverse"></i>
             縦書きEPUB
           </button>
@@ -506,6 +541,32 @@
         ${canManageProject ? `<div class="cinema-novel-card-actions">${actionsHtml}${publicationButton}</div>` : ""}
       </article>
     `;
+  }
+
+  function openExportModal(novelId) {
+    activeExportNovel = cinemaNovels.find((novel) => Number(novel.id) === Number(novelId)) || { id: novelId };
+    if (exportModalTitle) {
+      exportModalTitle.textContent = activeExportNovel?.title
+        ? `エクスポート: ${activeExportNovel.title}`
+        : "エクスポート";
+    }
+    exportModal?.show();
+  }
+
+  function downloadActiveExport(kind) {
+    if (!activeExportNovel?.id) return;
+    const novelId = Number(activeExportNovel.id);
+    const urls = {
+      ppt: `/api/v1/cinema-novels/${novelId}/powerpoint`,
+      video_portrait: `/api/v1/cinema-novels/${novelId}/short-video${buildVideoQuery({ orientation: "portrait" })}`,
+      video_landscape: `/api/v1/cinema-novels/${novelId}/short-video${buildVideoQuery({ orientation: "landscape" })}`,
+      epub_vertical: `/api/v1/cinema-novels/${novelId}/epub?writing_mode=vertical`,
+      epub_horizontal: `/api/v1/cinema-novels/${novelId}/epub?writing_mode=horizontal`,
+    };
+    const url = urls[kind];
+    if (!url) return;
+    exportModal?.hide();
+    window.location.href = url;
   }
 
   async function loadNovels() {
@@ -683,6 +744,44 @@
         outlineResult.hidden = false;
         outlineResult.innerHTML = `<div class="alert alert-danger">${escape(cleanErrorMessage(error.message))}</div>`;
       }
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = originalHtml;
+      }
+    }
+  }
+
+  async function editNovelMetadata(novelId) {
+    const novel = (window.__cinemaNovels || []).find((item) => Number(item.id) === Number(novelId));
+    if (!novel) return;
+    const title = window.prompt("タイトル", novel.title || "");
+    if (title === null) return;
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      window.alert("タイトルを入力してください。");
+      return;
+    }
+    const currentDescription = novel.subtitle || novel.description || "";
+    const description = window.prompt("一覧に表示する説明文", currentDescription);
+    if (description === null) return;
+    const button = list?.querySelector(`[data-edit-novel-metadata-id="${CSS.escape(String(novelId))}"]`);
+    const originalHtml = button?.innerHTML;
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 保存中`;
+    }
+    try {
+      await api(`/api/v1/cinema-novels/${novelId}/metadata`, {
+        method: "PUT",
+        body: JSON.stringify({
+          title: trimmedTitle,
+          subtitle: description.trim(),
+          description: description.trim(),
+        }),
+      });
+      await loadNovels();
+    } catch (error) {
+      window.alert(error.message || "作品情報を保存できませんでした。");
       if (button) {
         button.disabled = false;
         button.innerHTML = originalHtml;
@@ -1462,6 +1561,12 @@
     button.addEventListener("click", () => setProductionMode(button.dataset.productionMode));
   });
   list.addEventListener("click", (event) => {
+    const openExportButton = event.target.closest("[data-open-export-novel-id]");
+    if (openExportButton) {
+      event.preventDefault();
+      openExportModal(Number(openExportButton.dataset.openExportNovelId));
+      return;
+    }
     const reviewButton = event.target.closest("[data-review-novel-id]");
     if (reviewButton) {
       event.preventDefault();
@@ -1478,6 +1583,12 @@
     if (statusButton) {
       event.preventDefault();
       toggleNovelPublication(Number(statusButton.dataset.toggleStatusNovelId), statusButton.dataset.nextStatus);
+      return;
+    }
+    const metadataButton = event.target.closest("[data-edit-novel-metadata-id]");
+    if (metadataButton) {
+      event.preventDefault();
+      editNovelMetadata(Number(metadataButton.dataset.editNovelMetadataId));
       return;
     }
     const exportButton = event.target.closest("[data-export-novel-id]");
@@ -1502,6 +1613,12 @@
     if (videoButton) {
       event.preventDefault();
       window.location.href = `/api/v1/cinema-novels/${Number(videoButton.dataset.videoNovelId)}/short-video${selectedBgmQuery()}`;
+      return;
+    }
+    const landscapeVideoButton = event.target.closest("[data-video-landscape-novel-id]");
+    if (landscapeVideoButton) {
+      event.preventDefault();
+      window.location.href = `/api/v1/cinema-novels/${Number(landscapeVideoButton.dataset.videoLandscapeNovelId)}/short-video${buildVideoQuery({ orientation: "landscape" })}`;
       return;
     }
     const comicEditorButton = event.target.closest("[data-comic-editor-novel-id]");
@@ -1534,6 +1651,12 @@
         outlineResult.innerHTML = `<div class="alert alert-danger">${escape(error.message)}</div>`;
       }
     });
+  });
+  exportModalElement?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-cinema-export-kind]");
+    if (!button) return;
+    event.preventDefault();
+    downloadActiveExport(button.dataset.cinemaExportKind);
   });
   novelStatusSaveButton?.addEventListener("click", saveNovelStatus);
   chapterSelect?.addEventListener("change", syncSelectedChapter);
