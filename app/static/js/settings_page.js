@@ -2,6 +2,7 @@
   const form = document.getElementById("settingsForm");
   const providerSelect = document.getElementById("imageAiProviderSelect");
   const modelInput = document.getElementById("imageAiModelInput");
+  const textModelOptions = document.getElementById("textAiModelOptions");
   const cinemaNovelProviderSelect = document.getElementById("cinemaNovelImageProviderSelect");
   const cinemaNovelModelInput = document.getElementById("cinemaNovelImageModelInput");
   let providerDefaultModels = { openai: "gpt-image-2", grok: "grok-imagine-image" };
@@ -33,6 +34,11 @@
   async function loadSettings() {
     const settings = await NovelUI.api("/api/v1/settings");
     providerDefaultModels = settings?.available_options?.provider_default_models || providerDefaultModels;
+    if (textModelOptions && Array.isArray(settings?.available_options?.text_models)) {
+      textModelOptions.innerHTML = settings.available_options.text_models
+        .map((model) => `<option value="${NovelUI.escape(model)}"></option>`)
+        .join("");
+    }
     NovelUI.fillForm(form, settings);
     if (providerSelect) providerSelect.dataset.previousProvider = providerSelect.value || "openai";
     if (cinemaNovelProviderSelect) cinemaNovelProviderSelect.dataset.previousProvider = cinemaNovelProviderSelect.value || "openai";

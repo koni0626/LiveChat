@@ -1,6 +1,8 @@
 from ..extensions import db
 
 from .asset import Asset
+from .blog_post import BlogPost
+from .blog_x_schedule import BlogXSchedule
 from .chat_session_objective_note import ChatSessionObjectiveNote
 from .chat_message import ChatMessage
 from .chat_session import ChatSession
@@ -52,6 +54,8 @@ from .world_news_item import WorldNewsItem
 __all__ = [
     "db",
     "Asset",
+    "BlogPost",
+    "BlogXSchedule",
     "ChatSessionObjectiveNote",
     "ChatMessage",
     "ChatSession",

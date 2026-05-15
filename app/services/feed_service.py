@@ -376,7 +376,12 @@ class FeedService:
         interaction_mode = self._normalize_feed_interaction_mode(
             payload.get("interaction_mode") or payload.get("mode") or "auto"
         )
-        candidates = self._generate_feed_candidates(project_id, count=count, interaction_mode=interaction_mode)
+        candidates = self._generate_feed_candidates(
+            project_id,
+            count=count,
+            interaction_mode=interaction_mode,
+            model=payload.get("model") or payload.get("text_ai_model"),
+        )
         created = []
         for candidate in candidates[:count]:
             character_id = int(candidate.get("character_id") or 0)
@@ -905,7 +910,7 @@ class FeedService:
         )
         return post
 
-    def _generate_feed_candidates(self, project_id: int, *, count: int, interaction_mode: str = "auto"):
+    def _generate_feed_candidates(self, project_id: int, *, count: int, interaction_mode: str = "auto", model: str | None = None):
         project = self._project_service.get_project(project_id)
         world = self._world_service.get_world(project_id)
         all_characters = self._character_service.list_characters(project_id)
@@ -981,6 +986,7 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
 """.strip()
         result = self._text_ai_client.generate_text(
             prompt,
+            model=model,
             response_format={"type": "json_object"},
             temperature=0.85,
             max_tokens=1600,

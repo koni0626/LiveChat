@@ -1,0 +1,422 @@
+body[data-screen="blog"] .feed-layout {
+  display: grid;
+  gap: 1.25rem;
+}
+
+body[data-screen="blog"] .feed-hero-panel,
+body[data-screen="blog"] .feed-filter-panel,
+body[data-screen="blog"] .feed-composer-panel,
+body[data-screen="blog"] .feed-post-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(84, 177, 255, 0.22);
+  background:
+    linear-gradient(180deg, rgba(8, 17, 31, 0.95), rgba(8, 18, 35, 0.86)),
+    radial-gradient(circle at top left, rgba(0, 245, 212, 0.09), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(255, 74, 166, 0.12), transparent 34%);
+  box-shadow: 0 18px 42px rgba(1, 6, 18, 0.34), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+body[data-screen="blog"] .feed-hero-panel {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 180px;
+  padding: clamp(1.1rem, 3vw, 2rem);
+  border-radius: 1.6rem;
+}
+
+body[data-screen="blog"] .feed-hero-kicker,
+body[data-screen="blog"] .feed-side-kicker {
+  margin-bottom: 0.45rem;
+  color: #7df9ff;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+body[data-screen="blog"] .feed-hero-panel h2 {
+  margin: 0;
+  color: #f7fdff;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 900;
+}
+
+body[data-screen="blog"] .feed-hero-panel p,
+body[data-screen="blog"] .section-copy,
+body[data-screen="blog"] .form-hint {
+  color: rgba(215, 240, 255, 0.78);
+}
+
+body[data-screen="blog"] .feed-filter-panel,
+body[data-screen="blog"] .feed-composer-panel,
+body[data-screen="blog"] .feed-post-card {
+  padding: 1.1rem;
+  border-radius: 1.35rem;
+}
+
+body[data-screen="blog"] .feed-section-head,
+body[data-screen="blog"] .feed-post-head,
+body[data-screen="blog"] .feed-post-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+body[data-screen="blog"] .feed-section-head {
+  margin-bottom: 1rem;
+}
+
+body[data-screen="blog"] .feed-section-head h3 {
+  margin: 0;
+  color: #f4fbff;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+body[data-screen="blog"] .feed-status-select {
+  width: min(12rem, 100%);
+}
+
+body[data-screen="blog"] .feed-composer-textarea {
+  resize: vertical;
+}
+
+body[data-screen="blog"] .blog-body-editor {
+  min-height: 16rem;
+}
+
+body[data-screen="blog"] .feed-stream,
+body[data-screen="blog"] .feed-stream-wrap {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+body[data-screen="blog"] .feed-post-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, #00f5d4, #54b1ff, #ff4aa6);
+}
+
+body[data-screen="blog"] .feed-post-author {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  min-width: 0;
+}
+
+body[data-screen="blog"] .feed-post-avatar {
+  display: grid;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 2px solid rgba(0, 245, 212, 0.46);
+  background: linear-gradient(135deg, rgba(0, 245, 212, 0.18), rgba(189, 92, 255, 0.18));
+  color: #f4fbff;
+  font-weight: 900;
+}
+
+body[data-screen="blog"] .feed-post-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+body[data-screen="blog"] .feed-post-name {
+  color: #f4fbff;
+  font-size: 1.13rem;
+  font-weight: 900;
+}
+
+body[data-screen="blog"] .feed-post-world,
+body[data-screen="blog"] .blog-character-name,
+body[data-screen="blog"] .feed-post-date,
+body[data-screen="blog"] .blog-x-length {
+  color: rgba(210, 236, 255, 0.72);
+  font-size: 0.86rem;
+}
+
+body[data-screen="blog"] .feed-post-world {
+  color: #76d8ff;
+  text-decoration: none;
+}
+
+body[data-screen="blog"] .feed-status-badge,
+body[data-screen="blog"] .feed-x-scheduled-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(71, 220, 255, 0.35);
+  background: rgba(71, 220, 255, 0.12);
+  color: #dffaff;
+  font-weight: 800;
+}
+
+body[data-screen="blog"] .feed-post-body {
+  margin-top: 0.9rem;
+  padding: 1.05rem 1.15rem;
+  border: 1px solid rgba(84, 177, 255, 0.09);
+  border-radius: 1rem;
+  background: rgba(2, 7, 16, 0.26);
+  color: #dff6ff;
+  line-height: 1.9;
+}
+
+body[data-screen="blog"] .feed-post-body p {
+  margin: 0;
+}
+
+body[data-screen="blog"] .feed-post-body p + p {
+  margin-top: 1.15rem;
+}
+
+body[data-screen="blog"] .feed-post-image-button {
+  display: block;
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0;
+  border: 0;
+  border-radius: 1.2rem;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+body[data-screen="blog"] .feed-post-image {
+  display: block;
+  width: 100%;
+  max-height: 680px;
+  object-fit: contain;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1.2rem;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+body[data-screen="blog"] .feed-post-footer {
+  align-items: center;
+  margin-top: 0.85rem;
+}
+
+body[data-screen="blog"] .feed-post-manage {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+body[data-screen="blog"] .feed-post-manage > .btn {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  min-height: 2.15rem;
+  white-space: nowrap;
+}
+
+body[data-screen="blog"] .feed-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(84, 177, 255, 0.18);
+  border-radius: 1rem;
+  background: rgba(8, 18, 35, 0.72);
+}
+
+body[data-screen="blog"] .feed-pagination-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+body[data-screen="blog"] .feed-page-button,
+body[data-screen="blog"] .feed-page-number {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid rgba(123, 205, 255, 0.24);
+  border-radius: 999px;
+  background: rgba(10, 26, 45, 0.86);
+  color: #d9f4ff;
+  font-weight: 800;
+}
+
+body[data-screen="blog"] .feed-page-number.is-active,
+body[data-screen="blog"] .feed-page-button:hover,
+body[data-screen="blog"] .feed-page-number:hover {
+  border-color: rgba(0, 245, 212, 0.58);
+  background: rgba(0, 245, 212, 0.16);
+}
+
+body[data-screen="blog"] .feed-edit-modal {
+  color: #dff6ff;
+  border: 1px solid rgba(84, 177, 255, 0.24);
+  background:
+    linear-gradient(180deg, rgba(8, 17, 31, 0.98), rgba(8, 18, 35, 0.94)),
+    radial-gradient(circle at top left, rgba(0, 245, 212, 0.1), transparent 36%),
+    radial-gradient(circle at bottom right, rgba(255, 74, 166, 0.1), transparent 32%);
+}
+
+body[data-screen="blog"] .feed-x-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+}
+
+body[data-screen="blog"] .feed-x-calendar {
+  display: grid;
+  grid-template-columns: 4rem repeat(7, minmax(5.25rem, 1fr));
+  max-height: 62vh;
+  overflow: auto;
+  border: 1px solid rgba(84, 177, 255, 0.16);
+  border-radius: 0.75rem;
+}
+
+body[data-screen="blog"] .feed-x-calendar-day,
+body[data-screen="blog"] .feed-x-calendar-hour {
+  position: sticky;
+  z-index: 1;
+  background: rgba(8, 17, 31, 0.98);
+  color: #dff6ff;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+body[data-screen="blog"] .feed-x-calendar-day {
+  top: 0;
+  padding: 0.5rem;
+  text-align: center;
+}
+
+body[data-screen="blog"] .feed-x-calendar-hour {
+  left: 0;
+  display: grid;
+  place-items: center;
+  min-height: 3.75rem;
+}
+
+body[data-screen="blog"] .feed-x-calendar-slot {
+  display: grid;
+  place-items: center;
+  min-height: 3.75rem;
+  padding: 0.25rem;
+  border: 0;
+  border-top: 1px solid rgba(84, 177, 255, 0.1);
+  border-left: 1px solid rgba(84, 177, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  color: #e8fbff;
+}
+
+body[data-screen="blog"] .feed-x-calendar-slot.has-schedule {
+  background: rgba(71, 220, 255, 0.12);
+}
+
+body[data-screen="blog"] .feed-x-calendar-slot.is-target {
+  outline: 2px solid rgba(255, 105, 180, 0.72);
+  outline-offset: -2px;
+}
+
+body[data-screen="blog"] .feed-x-calendar-slot img {
+  width: 3.2rem;
+  height: 2.4rem;
+  object-fit: cover;
+  border-radius: 0.35rem;
+}
+
+body[data-screen="blog"] .feed-x-target-card {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: center;
+  padding: 0.85rem;
+  border: 1px solid rgba(84, 177, 255, 0.18);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body[data-screen="blog"] .feed-x-target-card img,
+body[data-screen="blog"] .feed-x-target-noimage {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 0.55rem;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body[data-screen="blog"] .feed-image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: none;
+  place-items: center;
+  padding: clamp(1rem, 3vw, 2.4rem);
+  background: rgba(2, 6, 14, 0.88);
+  backdrop-filter: blur(10px);
+}
+
+body[data-screen="blog"] .feed-image-lightbox.is-open {
+  display: grid;
+}
+
+body[data-screen="blog"] .feed-image-lightbox-image {
+  max-width: min(96vw, 1440px);
+  max-height: 92vh;
+  object-fit: contain;
+}
+
+body[data-screen="blog"] .feed-image-lightbox-close {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  display: inline-grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid rgba(105, 220, 255, 0.34);
+  border-radius: 999px;
+  background: rgba(7, 16, 31, 0.82);
+  color: #eaffff;
+}
+
+@media (max-width: 768px) {
+  body[data-screen="blog"] .feed-hero-panel,
+  body[data-screen="blog"] .feed-section-head,
+  body[data-screen="blog"] .feed-post-head,
+  body[data-screen="blog"] .feed-post-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  body[data-screen="blog"] .feed-post-avatar {
+    width: 2.65rem;
+    height: 2.65rem;
+  }
+
+  body[data-screen="blog"] .feed-post-manage {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  body[data-screen="blog"] .feed-post-manage > .btn {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+}

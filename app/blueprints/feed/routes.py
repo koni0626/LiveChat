@@ -125,6 +125,7 @@ def create_post(project_id: int):
 def generate_feed_posts(project_id: int):
     _, user = require_project_manage(project_id)
     payload = request.get_json(silent=True) or {}
+    payload = user_setting_service.apply_global_text_generation_settings(payload)
     payload = user_setting_service.apply_global_image_generation_settings(payload)
     try:
         posts = feed_service.generate_posts(project_id=project_id, user_id=user.id, payload=payload)

@@ -16,6 +16,7 @@ from .services.authorization_service import AuthorizationService
 from .services.project_service import ProjectService
 from .blueprints.ui import ui_bp
 from .blueprints.auth import auth_bp
+from .blueprints.blog import blog_bp
 from .blueprints.chat import chat_bp
 from .blueprints.projects import projects_bp
 from .blueprints.worlds import worlds_bp
@@ -120,13 +121,16 @@ def _register_cli_commands(app: Flask):
         click.echo(json_util.dumps(result, indent=2))
 
     @app.cli.command("publish-scheduled-x-posts")
-    @click.option("--limit", default=10, show_default=True, type=int, help="Maximum scheduled Feed posts to publish.")
+    @click.option("--limit", default=10, show_default=True, type=int, help="Maximum scheduled Feed/Blog posts to publish.")
     def publish_scheduled_x_posts_command(limit: int):
+        from .services.blog_service import BlogService
         from .services.feed_service import FeedService
         from .utils import json_util
 
-        service = FeedService()
-        result = service.publish_due_x_schedules(limit=limit)
+        result = {
+            "feed": FeedService().publish_due_x_schedules(limit=limit),
+            "blog": BlogService().publish_due_x_schedules(limit=limit),
+        }
         click.echo(json_util.dumps(result, indent=2))
 
     @app.cli.command("generate-character-line-thread")
@@ -181,15 +185,21 @@ def _start_feed_x_schedule_worker(app: Flask):
     interval = max(60, int(app.config.get("FEED_X_SCHEDULE_CHECK_INTERVAL_SECONDS") or 600))
 
     def worker():
+        from .services.blog_service import BlogService
         from .services.feed_service import FeedService
 
         time.sleep(10)
         while True:
             try:
                 with app.app_context():
-                    results = FeedService().publish_due_x_schedules(limit=10)
-                    if results:
-                        app.logger.info("published scheduled X Feed posts: %s", len(results))
+                    feed_results = FeedService().publish_due_x_schedules(limit=10)
+                    blog_results = BlogService().publish_due_x_schedules(limit=10)
+                    if feed_results or blog_results:
+                        app.logger.info(
+                            "published scheduled X posts: feed=%s blog=%s",
+                            len(feed_results),
+                            len(blog_results),
+                        )
             except Exception:
                 app.logger.exception("scheduled X Feed post worker failed")
             time.sleep(interval)
@@ -224,6 +234,7 @@ def create_app(config_object=Config):
     app.register_blueprint(admin_bp, url_prefix="/api/v1")
     app.register_blueprint(settings_bp, url_prefix="/api/v1")
     app.register_blueprint(letters_bp, url_prefix="/api/v1")
+    app.register_blueprint(blog_bp, url_prefix="/api/v1")
     app.register_blueprint(feed_bp, url_prefix="/api/v1")
     app.register_blueprint(stories_bp, url_prefix="/api/v1")
     app.register_blueprint(studio_bp, url_prefix="/api/v1")

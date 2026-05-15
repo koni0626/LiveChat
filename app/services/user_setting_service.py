@@ -32,6 +32,12 @@ class UserSettingService:
     VALID_QUALITIES = {"low", "medium", "high"}
     VALID_SIZES = {"1024x1024", "1024x1536", "1536x1024"}
     VALID_AUTOSAVE_INTERVALS = {"off", "30", "60"}
+    TEXT_MODEL_OPTIONS = [
+        "gpt-5.5",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.2",
+    ]
 
     def _get_active_user(self, user_id: int | None) -> User:
         if not user_id:
@@ -81,6 +87,7 @@ class UserSettingService:
             "available_options": {
                 "image_providers": sorted(self.VALID_IMAGE_PROVIDERS),
                 "provider_default_models": dict(self.PROVIDER_DEFAULT_MODELS),
+                "text_models": list(self.TEXT_MODEL_OPTIONS),
                 "qualities": sorted(self.VALID_QUALITIES),
                 "sizes": sorted(self.VALID_SIZES),
                 "autosave_intervals": sorted(self.VALID_AUTOSAVE_INTERVALS, key=lambda item: (item == "off", item)),
@@ -146,6 +153,7 @@ class UserSettingService:
             "available_options": {
                 "image_providers": sorted(self.VALID_IMAGE_PROVIDERS),
                 "provider_default_models": dict(self.PROVIDER_DEFAULT_MODELS),
+                "text_models": list(self.TEXT_MODEL_OPTIONS),
                 "qualities": sorted(self.VALID_QUALITIES),
                 "sizes": sorted(self.VALID_SIZES),
                 "autosave_intervals": sorted(self.VALID_AUTOSAVE_INTERVALS, key=lambda item: (item == "off", item)),
@@ -259,6 +267,14 @@ class UserSettingService:
             "chapter_target_chars",
             int(settings.get("cinema_novel_chapter_target_chars") or self.DEFAULTS["cinema_novel_chapter_target_chars"]),
         )
+        return options
+
+    def apply_global_text_generation_settings(self, payload: dict | None = None) -> dict:
+        settings = self.get_global_settings()
+        options = dict(payload or {})
+        if "model" not in options and options.get("text_ai_model"):
+            options["model"] = options.get("text_ai_model")
+        options.setdefault("model", settings.get("text_ai_model") or self.DEFAULTS["text_ai_model"])
         return options
 
     def apply_cinema_novel_image_generation_settings(self, payload: dict | None = None) -> dict:

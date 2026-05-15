@@ -82,6 +82,7 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
         [
             {"label": "メール", "icon": "bi-envelope-heart", "href": url_for("ui.letters_page")},
             {"label": "Feed", "icon": "bi-broadcast", "href": url_for("ui.feed_page")},
+            {"label": "ブログ", "icon": "bi-journal-text", "href": url_for("ui.blog_page")},
             {"label": "ワールド", "icon": "bi-collection", "href": url_for("ui.project_list_page")},
         ]
     )
@@ -130,6 +131,11 @@ def letters_page():
 @ui_bp.route("/feed", methods=["GET"])
 def feed_page():
     return _render("ui/feed.html", title="Feed", screen_id="feed")
+
+
+@ui_bp.route("/blog", methods=["GET"])
+def blog_page():
+    return _render("ui/blog.html", title="ブログ", screen_id="blog")
 
 
 @ui_bp.route("/points", methods=["GET"])

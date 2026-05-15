@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="feed-layout blog-layout" data-blog-page data-can-create="{{ 'true' if current_user_role in ['superuser', 'project_user'] else 'false' }}">
+  <section class="feed-hero-panel">
+    <div>
+      <div class="feed-hero-kicker">CHARACTER BLOG / X READY ARTICLE</div>
+      <h2>キャラクターブログ</h2>
+      <p>ワールドとキャラクター、テーマ、指示から、X投稿を前提にしたプレーンテキストの記事を生成します。</p>
+    </div>
+    <button class="btn btn-outline-light btn-sm" type="button" id="blogReloadButton">
+      <i class="bi bi-arrow-clockwise"></i>
+      <span>更新</span>
+    </button>
+  </section>
+
+  <section class="feed-filter-panel">
+    <div class="feed-section-head">
+      <div>
+        <h3>Filter</h3>
+        <p class="section-copy mb-0">ワールド、キャラクター、本文で絞り込みます。</p>
+      </div>
+    </div>
+    <form class="row g-3 align-items-end" id="blogFilterForm">
+      <div class="col-md-4">
+        <label class="form-label" for="blogProjectFilter">ワールド</label>
+        <select class="form-select" id="blogProjectFilter" name="project_id">
+          <option value="">すべて</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="blogCharacterFilter">キャラクター</label>
+        <select class="form-select" id="blogCharacterFilter" name="character_id">
+          <option value="">すべて</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="blogSearchInput">検索</label>
+        <input class="form-control" id="blogSearchInput" name="q" placeholder="テーマや本文で検索">
+      </div>
+    </form>
+  </section>
+
+  {% if current_user_role in ["superuser", "project_user"] %}
+  <section class="feed-composer-panel">
+    <div class="feed-section-head">
+      <div>
+        <h3>Blog Composer</h3>
+        <p class="section-copy mb-0">見出しやMarkdownを使わない、キャラクター口調の記事を生成します。</p>
+      </div>
+    </div>
+    <form class="vstack gap-3" id="blogComposerForm">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" for="blogComposerProject">ワールド</label>
+          <select class="form-select" id="blogComposerProject" name="project_id" required></select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="blogComposerCharacter">キャラクター</label>
+          <select class="form-select" id="blogComposerCharacter" name="character_id" required></select>
+        </div>
+      </div>
+      <div>
+        <label class="form-label" for="blogComposerTheme">テーマ</label>
+        <input class="form-control" id="blogComposerTheme" name="theme" maxlength="255" placeholder="例: 今日の失敗談、都市の新しい噂、読者への近況報告" required>
+      </div>
+      <div>
+        <label class="form-label" for="blogComposerInstruction">指示</label>
+        <textarea class="form-control feed-composer-textarea" id="blogComposerInstruction" name="instruction" rows="4" placeholder="例: 面白く、少し照れながら。最後は読者が反応したくなる一文で。"></textarea>
+      </div>
+      <div class="d-flex flex-wrap gap-2 justify-content-end">
+        <select class="form-select feed-status-select" name="status" aria-label="公開状態">
+          <option value="draft" selected>下書き</option>
+          <option value="published">公開</option>
+        </select>
+        <button class="btn btn-sunrise" type="submit">
+          <i class="bi bi-magic"></i>
+          <span>生成</span>
+        </button>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="feed-stream-wrap">
+    <section class="feed-stream" id="blogStream"></section>
+    <nav class="feed-pagination" id="blogPagination" aria-label="ブログページ"></nav>
+  </section>
+</section>
+
+<div class="modal fade" id="blogEditModal" tabindex="-1" aria-labelledby="blogEditModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <form class="modal-content feed-edit-modal" id="blogEditForm">
+      <div class="modal-header">
+        <div>
+          <p class="feed-side-kicker mb-1">Edit Blog</p>
+          <h5 class="modal-title" id="blogEditModalTitle">ブログ記事を編集</h5>
+        </div>
+        <button class="btn-close btn-close-white" type="button" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body vstack gap-3">
+        <input type="hidden" id="blogEditPostId">
+        <div class="row g-3">
+          <div class="col-md-7">
+            <label class="form-label" for="blogEditCharacter">キャラクター</label>
+            <select class="form-select" id="blogEditCharacter" name="character_id" required></select>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label" for="blogEditStatus">公開状態</label>
+            <select class="form-select" id="blogEditStatus" name="status">
+              <option value="published">公開</option>
+              <option value="draft">下書き</option>
+              <option value="archived">アーカイブ</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="form-label" for="blogEditTheme">テーマ</label>
+          <input class="form-control" id="blogEditTheme" name="theme" maxlength="255" required>
+        </div>
+        <div>
+          <label class="form-label" for="blogEditInstruction">指示</label>
+          <textarea class="form-control feed-composer-textarea" id="blogEditInstruction" name="instruction" rows="3"></textarea>
+        </div>
+        <div>
+          <label class="form-label" for="blogEditBody">本文</label>
+          <textarea class="form-control feed-composer-textarea blog-body-editor" id="blogEditBody" name="body" rows="10" required></textarea>
+          <p class="form-hint mb-0 mt-2">X投稿前提のため、見出しやMarkdown記法は保存時にプレーンテキストへ整えられます。</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-light" type="button" data-bs-dismiss="modal">キャンセル</button>
+        <button class="btn btn-sunrise" type="submit">
+          <i class="bi bi-check2-circle"></i>
+          <span>保存</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="blogXScheduleModal" tabindex="-1" aria-labelledby="blogXScheduleModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content feed-edit-modal feed-x-schedule-modal">
+      <div class="modal-header">
+        <div>
+          <p class="feed-side-kicker mb-1">X Schedule</p>
+          <h5 class="modal-title" id="blogXScheduleModalTitle">X予約投稿</h5>
+        </div>
+        <button class="btn-close btn-close-white" type="button" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="feed-x-schedule-target" id="blogXScheduleTarget"></div>
+        <div class="feed-x-calendar-head">
+          <button class="btn btn-sm btn-outline-light" type="button" id="blogXCalendarPrev"><i class="bi bi-chevron-left"></i></button>
+          <strong id="blogXCalendarTitle"></strong>
+          <button class="btn btn-sm btn-outline-light" type="button" id="blogXCalendarNext"><i class="bi bi-chevron-right"></i></button>
+        </div>
+        <div class="feed-x-calendar" id="blogXCalendar"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/blog_page.js') }}"></script>
+{% endblock %}
