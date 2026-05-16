@@ -23,6 +23,7 @@ from ..clients.image_ai_client import ImageAIClient
 from ..clients.text_ai_client import TextAIClient
 from ..extensions import db
 from ..models.feed_x_schedule import FeedXSchedule
+from ..repositories.character_outfit_repository import CharacterOutfitRepository
 from ..repositories.feed_repository import FeedRepository
 from ..repositories.world_location_repository import WorldLocationRepository
 from ..utils import json_util
@@ -139,6 +140,204 @@ FEED_DUO_POST_PATTERNS = [
     },
 ]
 
+PHOTOBOOK_SCENE_PRESETS = [
+    {
+        "label": "夕暮れの神社",
+        "message": "夕暮れ時の{character}。",
+        "place_prompt": "a quiet old Japanese shrine terrace at sunset, warm lantern light, cherry blossoms, wooden railings, soft petals in the air",
+    },
+    {
+        "label": "朝の花畑",
+        "message": "朝の花畑にいる{character}。",
+        "place_prompt": "a bright flower field in the early morning, gentle sunlight, fresh green grass, pastel flowers, shallow depth of field",
+    },
+    {
+        "label": "雨上がりの路地",
+        "message": "雨上がりの{character}。",
+        "place_prompt": "a quiet narrow street after rain, glossy pavement, soft reflections, hydrangeas, clean fresh air, subtle city lights",
+    },
+    {
+        "label": "海辺の午後",
+        "message": "海辺で風に吹かれる{character}。",
+        "place_prompt": "a calm seaside promenade in the afternoon, blue sky, sparkling ocean, white clouds, gentle wind",
+    },
+    {
+        "label": "夜桜",
+        "message": "夜桜と{character}。",
+        "place_prompt": "night cherry blossoms, soft paper lanterns, elegant bokeh, quiet path, romantic but wholesome atmosphere",
+    },
+    {
+        "label": "木漏れ日の縁側",
+        "message": "木漏れ日の{character}。",
+        "place_prompt": "a traditional veranda with dappled sunlight through trees, calm garden, soft shadows, warm peaceful mood",
+    },
+    {
+        "label": "放課後の教室",
+        "message": "放課後の{character}。",
+        "place_prompt": "a quiet classroom after school, warm late-afternoon light through windows, tidy desks, soft dust motes, gentle nostalgic mood",
+    },
+    {
+        "label": "駅前の夕景",
+        "message": "夕方の駅前にいる{character}。",
+        "place_prompt": "a small station plaza at golden hour, soft city lights, crosswalk reflections, calm everyday atmosphere, cinematic bokeh",
+    },
+    {
+        "label": "図書館の窓辺",
+        "message": "図書館の窓辺の{character}。",
+        "place_prompt": "a quiet library window seat, tall bookshelves, soft natural light, warm wood textures, peaceful refined mood",
+    },
+    {
+        "label": "星空の丘",
+        "message": "星空の下の{character}。",
+        "place_prompt": "a grassy hill under a clear starry sky, soft moonlight, distant town lights, dreamy but clean photobook atmosphere",
+    },
+    {
+        "label": "夏祭りの屋台通り",
+        "message": "夏祭りの{character}。",
+        "place_prompt": "a summer festival street with food stalls, paper lanterns, warm night lighting, colorful bokeh, festive but gentle mood",
+    },
+    {
+        "label": "温室の花園",
+        "message": "温室にいる{character}。",
+        "place_prompt": "a glasshouse botanical garden, lush greenery, tropical flowers, filtered sunlight, glass reflections, fresh elegant mood",
+    },
+    {
+        "label": "雪の日の参道",
+        "message": "雪の日の{character}。",
+        "place_prompt": "a shrine approach covered in soft snow, red torii gate, white breath in cold air, quiet winter light, elegant atmosphere",
+    },
+    {
+        "label": "カフェの窓際",
+        "message": "カフェの窓際の{character}。",
+        "place_prompt": "a cozy cafe window seat, soft morning light, simple table, warm drinks, muted city street outside, clean lifestyle photobook mood",
+    },
+    {
+        "label": "屋上の青空",
+        "message": "屋上の{character}。",
+        "place_prompt": "a school or city rooftop under a vivid blue sky, white clouds, gentle wind, bright clean sunlight, open airy composition",
+    },
+    {
+        "label": "水族館の光",
+        "message": "水族館の光に包まれた{character}。",
+        "place_prompt": "an aquarium hall with blue water glow, drifting light caustics, large glass tank, quiet magical atmosphere, soft reflections",
+    },
+    {
+        "label": "和室の朝",
+        "message": "朝の和室にいる{character}。",
+        "place_prompt": "a simple traditional Japanese room in morning light, tatami mats, shoji screens, small flower arrangement, calm clean mood",
+    },
+    {
+        "label": "イルミネーション通り",
+        "message": "イルミネーションの{character}。",
+        "place_prompt": "a winter illumination street, sparkling lights, soft night bokeh, elegant coat-friendly atmosphere, romantic but wholesome mood",
+    },
+    {
+        "label": "森の小道",
+        "message": "森の小道の{character}。",
+        "place_prompt": "a quiet forest path, soft green light through leaves, mossy stones, gentle breeze, natural fairytale photobook feeling",
+    },
+    {
+        "label": "美術館の回廊",
+        "message": "美術館にいる{character}。",
+        "place_prompt": "a modern art museum corridor, clean white walls, soft skylight, polished floor reflections, minimal elegant composition",
+    },
+    {
+        "label": "夕焼けの河川敷",
+        "message": "夕焼けの河川敷にいる{character}。",
+        "place_prompt": "a riverside path at sunset, orange sky, calm water reflections, tall grass, gentle wind, nostalgic photobook mood",
+    },
+    {
+        "label": "月明かりの庭",
+        "message": "月明かりの庭にいる{character}。",
+        "place_prompt": "a quiet Japanese garden under moonlight, stone lantern, dark pond reflections, subtle flowers, refined dreamy atmosphere",
+    },
+]
+
+PHOTOBOOK_OUTFIT_PRESETS = [
+    "a clean white shrine-maiden inspired outfit with delicate cords, beads, subtle red accents, layered flowing fabric",
+    "a pale one-piece dress with soft translucent sleeves, ribbon details, tasteful elegant accessories",
+    "a light kimono-inspired casual outfit, floral pattern, relaxed sash, delicate hair ornament",
+    "a simple cream blouse and long skirt, airy fabric, small necklace, natural cute styling",
+    "a soft cardigan over a modest dress, pastel color accents, gentle everyday photobook styling",
+]
+
+PHOTOBOOK_FRAMING_PRESETS = [
+    "full-body portrait with clean magazine-like framing",
+    "knees-up portrait with the background softly visible",
+    "waist-up portrait with elegant negative space",
+    "close portrait with cinematic shallow depth of field",
+    "wide environmental portrait, character small enough to show the location",
+    "three-quarter portrait with soft foreground bokeh",
+    "profile-oriented portrait with gentle side light",
+    "low-angle full-body portrait, airy sky or ceiling space",
+    "high-angle seated portrait, delicate photobook composition",
+    "over-the-shoulder environmental portrait, subtle and not too dramatic",
+]
+
+PHOTOBOOK_POSE_PRESETS = [
+    "standing relaxed with one hand lightly touching the hair",
+    "walking slowly, hair and clothing moving in a gentle breeze",
+    "sitting on a bench or step with a calm posture",
+    "leaning lightly against a railing or wall",
+    "standing with both hands loosely behind the back",
+    "holding a small seasonal prop naturally, not posing too hard",
+    "looking up at the scenery with a quiet posture",
+    "touching a flower, leaf, book, cup, or nearby object with one hand",
+    "resting elbows lightly on a windowsill or railing",
+    "standing in profile with a graceful straight posture",
+    "crouching slightly to look at something near the ground",
+    "sitting sideways with legs together and relaxed shoulders",
+    "turning only slightly toward the camera, no exaggerated twist",
+    "adjusting a sleeve, ribbon, hair ornament, or accessory",
+    "hands clasped loosely in front, composed and clean",
+    "one hand shading the eyes from light, natural outdoor pose",
+    "walking down steps carefully, elegant everyday motion",
+    "standing still while fabric moves in the wind",
+]
+
+PHOTOBOOK_GAZE_PRESETS = [
+    "eyes toward camera",
+    "looking slightly away from camera",
+    "looking down softly",
+    "looking up toward light or scenery",
+    "side glance with a calm mood",
+    "eyes following something in the background",
+    "gaze lowered in a quiet photobook moment",
+    "looking at the object in hand",
+]
+
+PHOTOBOOK_EXPRESSION_PRESETS = [
+    "gentle smile",
+    "soft neutral expression",
+    "faint shy smile",
+    "calm elegant expression",
+    "slightly curious expression",
+    "peaceful relaxed face",
+    "bright but restrained smile",
+    "cool composed expression",
+    "dreamy distant expression",
+    "small playful smile",
+]
+
+PHOTOBOOK_CAPTION_PRESETS = [
+    "今日の{character}。",
+    "やわらかい光の{character}。",
+    "ただ可愛い{character}。",
+    "きれいな{character}。",
+    "少しだけ特別な{character}。",
+    "光の中の{character}。",
+    "{character}の一枚。",
+    "静かな{character}。",
+    "ふわっと{character}。",
+    "透明感のある{character}。",
+    "今日も可愛い{character}。",
+    "綺麗めの{character}。",
+    "何気ない{character}。",
+    "写真集っぽい{character}。",
+    "ただ眺めたい{character}。",
+    "淡い雰囲気の{character}。",
+]
+
 
 class _MetaTagParser(HTMLParser):
     def __init__(self):
@@ -166,6 +365,7 @@ class FeedService:
         project_service: ProjectService | None = None,
         world_service: WorldService | None = None,
         location_repository: WorldLocationRepository | None = None,
+        outfit_repository: CharacterOutfitRepository | None = None,
         text_ai_client: TextAIClient | None = None,
         image_ai_client: ImageAIClient | None = None,
         x_publishing_service: XPublishingService | None = None,
@@ -176,6 +376,7 @@ class FeedService:
         self._project_service = project_service or ProjectService()
         self._world_service = world_service or WorldService()
         self._locations = location_repository or WorldLocationRepository()
+        self._outfits = outfit_repository or CharacterOutfitRepository()
         self._text_ai_client = text_ai_client or TextAIClient()
         self._image_ai_client = image_ai_client or ImageAIClient()
         self._x_publishing_service = x_publishing_service or XPublishingService(asset_service=self._asset_service)
@@ -376,6 +577,8 @@ class FeedService:
         interaction_mode = self._normalize_feed_interaction_mode(
             payload.get("interaction_mode") or payload.get("mode") or "auto"
         )
+        if interaction_mode == "photobook":
+            return self._generate_photobook_posts(project_id=project_id, user_id=user_id, payload=payload, count=count)
         candidates = self._generate_feed_candidates(
             project_id,
             count=count,
@@ -414,6 +617,177 @@ class FeedService:
         if not created:
             raise RuntimeError("feed auto generation did not create any posts")
         return created
+
+    def _generate_photobook_posts(self, *, project_id: int, user_id: int, payload: dict, count: int):
+        characters = self._photobook_target_characters(project_id, payload, count)
+        if not characters:
+            raise ValueError("character is required to generate photobook Feed posts")
+        locations = [
+            location
+            for location in self._locations.list_by_project(project_id)
+            if str(getattr(location, "status", "published") or "published") == "published"
+        ]
+        created = []
+        for character in characters[:count]:
+            candidate = self._build_photobook_candidate(character, locations=locations)
+            post = self._repo.create_post(
+                {
+                    "project_id": project_id,
+                    "character_id": character.id,
+                    "created_by_user_id": user_id,
+                    "body": candidate["body"][:10000],
+                    "status": "published",
+                    "generation_state_json": json_util.dumps(
+                        {
+                            "source": "feed_photobook",
+                            "generated_at": datetime.utcnow().isoformat(),
+                            "candidate": candidate,
+                        }
+                    ),
+                }
+            )
+            self.refresh_character_feed_profile(character.id)
+            created.append(post)
+        return created
+
+    def _photobook_target_characters(self, project_id: int, payload: dict, count: int):
+        all_characters = self._character_service.list_characters(project_id)
+        try:
+            character_id = int(payload.get("character_id") or 0)
+        except (TypeError, ValueError):
+            character_id = 0
+        if character_id:
+            character = self._character_service.get_character(character_id)
+            if not character or character.project_id != project_id:
+                raise ValueError("character is required to generate photobook Feed posts")
+            return [character]
+        recent_posts = self._repo.list_posts(project_id=project_id, statuses=["published"], limit=80)
+        return self._select_feed_characters(all_characters, recent_posts, count=count)
+
+    def _build_photobook_candidate(self, character, *, locations: list | None = None) -> dict:
+        scene = self._photobook_scene_from_location(random.choice(locations)) if locations else random.choice(PHOTOBOOK_SCENE_PRESETS)
+        outfit = self._select_photobook_outfit(character)
+        composition = self._build_photobook_composition()
+        display_name = self._photobook_display_name(character)
+        body = f"{self._build_photobook_caption(display_name)}\n\n#AIイラスト #AIArt"
+        scene_anchor = {
+            "place": scene["label"],
+            "place_prompt": scene["place_prompt"],
+            "outfit_prompt": outfit["prompt"],
+            "composition_prompt": composition,
+            "outfit_source": outfit["source"],
+        }
+        if outfit.get("outfit_id"):
+            scene_anchor["outfit_id"] = outfit["outfit_id"]
+        if outfit.get("outfit_name"):
+            scene_anchor["outfit_name"] = outfit["outfit_name"]
+        if outfit.get("outfit_asset_id"):
+            scene_anchor["outfit_asset_id"] = outfit["outfit_asset_id"]
+        if scene.get("location"):
+            scene_anchor.update(scene["location"])
+        return {
+            "character_id": character.id,
+            "body": body,
+            "scene_brief": f"{scene['label']}で、{display_name}が可愛く綺麗に写る写真集風の一枚。",
+            "post_pattern": "写真集モード",
+            "photobook": True,
+            "scene_anchor": scene_anchor,
+            "feed_tone": "cute_visual_only",
+        }
+
+    def _build_photobook_caption(self, display_name: str) -> str:
+        return random.choice(PHOTOBOOK_CAPTION_PRESETS).format(character=display_name)
+
+    def _build_photobook_composition(self) -> str:
+        framing = random.choice(PHOTOBOOK_FRAMING_PRESETS)
+        pose = random.choice(PHOTOBOOK_POSE_PRESETS)
+        gaze = random.choice(PHOTOBOOK_GAZE_PRESETS)
+        expression = random.choice(PHOTOBOOK_EXPRESSION_PRESETS)
+        return (
+            f"{framing}; pose: {pose}; gaze: {gaze}; expression: {expression}. "
+            "Keep it tasteful, cute, clean, and photobook-like. Avoid repetitive over-the-shoulder glamour posing unless explicitly selected."
+        )
+
+    def _select_photobook_outfit(self, character) -> dict:
+        outfits = [
+            outfit
+            for outfit in self._outfits.list_by_character(character.id)
+            if str(getattr(outfit, "status", "active") or "active") == "active"
+            and getattr(outfit, "asset_id", None)
+        ]
+        if outfits:
+            default = next((outfit for outfit in outfits if getattr(outfit, "is_default", False)), None)
+            pool = [default, *outfits] if default else outfits
+            outfit = random.choice([item for item in pool if item])
+            return {
+                "source": "closet",
+                "outfit_id": outfit.id,
+                "outfit_name": outfit.name,
+                "outfit_asset_id": outfit.asset_id,
+                "prompt": self._photobook_outfit_prompt(outfit),
+            }
+        return {
+            "source": "fallback",
+            "prompt": random.choice(PHOTOBOOK_OUTFIT_PRESETS),
+        }
+
+    def _photobook_outfit_prompt(self, outfit) -> str:
+        lines = [
+            "Use the selected closet outfit as the clothing reference.",
+            f"Outfit name: {getattr(outfit, 'name', '') or ''}",
+        ]
+        for label, value in (
+            ("Description", getattr(outfit, "description", None)),
+            ("Usage scene", getattr(outfit, "usage_scene", None)),
+            ("Season", getattr(outfit, "season", None)),
+            ("Mood", getattr(outfit, "mood", None)),
+            ("Color notes", getattr(outfit, "color_notes", None)),
+            ("Fixed parts", getattr(outfit, "fixed_parts", None)),
+            ("Allowed changes", getattr(outfit, "allowed_changes", None)),
+            ("NG rules", getattr(outfit, "ng_rules", None)),
+            ("Prompt notes", getattr(outfit, "prompt_notes", None)),
+        ):
+            if value:
+                lines.append(f"{label}: {value}")
+        return " ".join(lines)
+
+    def _photobook_display_name(self, character) -> str:
+        name = str(getattr(character, "name", "") or getattr(character, "nickname", "") or "キャラクター").strip()
+        return re.sub(r"(さん|ちゃん|くん|君|様|さま)$", "", name).strip() or "キャラクター"
+
+    def _photobook_scene_from_location(self, location) -> dict:
+        name = str(getattr(location, "name", "") or "施設").strip()
+        location_type = str(getattr(location, "location_type", "") or "").strip()
+        region = str(getattr(location, "region", "") or "").strip()
+        tags = self._load_json(getattr(location, "tags_json", None))
+        if not isinstance(tags, list):
+            tags = []
+        description = self._shorten(getattr(location, "description", None), 220)
+        image_prompt = str(getattr(location, "image_prompt", "") or "").strip()
+        details = []
+        if region:
+            details.append(f"region: {region}")
+        if location_type:
+            details.append(f"type: {location_type}")
+        if tags:
+            details.append(f"tags: {', '.join(str(tag) for tag in tags[:8])}")
+        if description:
+            details.append(f"description: {description}")
+        place_prompt = image_prompt or f"{name}, {', '.join(details)}"
+        return {
+            "label": name,
+            "message": f"{name}にいる{{character}}。",
+            "place_prompt": place_prompt,
+            "location": {
+                "location_id": getattr(location, "id", None),
+                "location_name": name,
+                "location_type": location_type,
+                "region": region,
+                "tags": tags,
+                "description": description,
+                "image_prompt": image_prompt,
+            },
+        }
 
     def _format_auto_feed_body(self, body: str, character) -> str:
         name = str(getattr(character, "name", "") or getattr(character, "nickname", "") or "").strip()
@@ -847,6 +1221,17 @@ class FeedService:
                 reference_paths.append(base_asset.file_path)
                 reference_ids.append(base_asset.id)
         candidate = generation_state.get("candidate") if isinstance(generation_state.get("candidate"), dict) else {}
+        scene_anchor = candidate.get("scene_anchor") if isinstance(candidate.get("scene_anchor"), dict) else {}
+        for raw_asset_id in (scene_anchor.get("outfit_asset_id"), candidate.get("outfit_asset_id")):
+            try:
+                outfit_asset_id = int(raw_asset_id or 0)
+            except (TypeError, ValueError):
+                outfit_asset_id = 0
+            if outfit_asset_id and outfit_asset_id not in reference_ids:
+                outfit_asset = self._asset_service.get_asset(outfit_asset_id)
+                if outfit_asset and os.path.exists(outfit_asset.file_path):
+                    reference_paths.append(outfit_asset.file_path)
+                    reference_ids.append(outfit_asset.id)
         try:
             co_character_id = int(candidate.get("co_character_id") or 0)
         except (TypeError, ValueError):
@@ -862,7 +1247,7 @@ class FeedService:
             prompt,
             size=payload.get("size") or "1536x1024",
             quality=payload.get("quality") or current_app.config.get("IMAGE_DEFAULT_QUALITY", "medium"),
-            model=payload.get("model") or payload.get("image_ai_model"),
+            model=payload.get("image_ai_model") or payload.get("model"),
             provider=payload.get("provider") or payload.get("image_ai_provider"),
             output_format="png",
             background="opaque",
@@ -1003,6 +1388,8 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
             return "solo"
         if mode in {"duo", "pair", "two", "2", "two_character"}:
             return "duo"
+        if mode in {"photobook", "photo_book", "photo", "album", "gravure", "portfolio"}:
+            return "photobook"
         return "auto"
 
     def _feed_tone_instruction(self, tone: str) -> str:
@@ -1415,6 +1802,8 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
         scene_brief = str(candidate.get("scene_brief") or "").strip()
         co_character = candidate.get("co_character") if isinstance(candidate.get("co_character"), dict) else {}
         co_character_name = str(candidate.get("co_character_name") or co_character.get("name") or "").strip()
+        if candidate.get("photobook") or generation_state.get("source") == "feed_photobook":
+            return self._build_photobook_image_prompt(post, character, project, world, candidate)
         lines = [
             "Create a high-impact Feed image for a character conversation app.",
             "Use the reference images as the primary source of character identity and art style.",
@@ -1489,6 +1878,49 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
             if character.ng_rules:
                 lines.append(f"Never violate: {character.ng_rules}")
         lines.append("If safety-sensitive wording appears in the post, preserve intent while converting it into tasteful, non-explicit visual novel promotional art.")
+        return "\n".join(lines)
+
+    def _build_photobook_image_prompt(self, post, character, project, world, candidate: dict) -> str:
+        scene_anchor = candidate.get("scene_anchor") if isinstance(candidate.get("scene_anchor"), dict) else {}
+        lines = [
+            "Create a single beautiful photobook-style character image for an X post.",
+            "The goal is simple: cute, clean, pretty, immediately likable. Do not make it complex, funny, lore-heavy, or text-heavy.",
+            "Use the reference image as the primary source of character identity, face, hairstyle, color palette, rendering quality, and design logic.",
+            "Keep the character tasteful and non-explicit: no nudity, no lingerie, no sexual framing, no transparent clothing over intimate areas.",
+            "No speech bubbles, no captions, no subtitles, no logo, no watermark, no UI overlay.",
+            "High-end semi-realistic anime game-CG finish, soft skin rendering, delicate hair detail, cinematic bokeh, polished social-media illustration.",
+            "Make it feel like a page from a cute character photobook: quiet pose, pretty light, clean background, gentle expression.",
+            "The image should be attractive even if the viewer reads no text.",
+        ]
+        if scene_anchor.get("place_prompt"):
+            lines.append(f"Background/location: {scene_anchor.get('place_prompt')}")
+        elif scene_anchor.get("place"):
+            lines.append(f"Background/location: {scene_anchor.get('place')}")
+        if scene_anchor.get("outfit_prompt"):
+            lines.append(f"Outfit: {scene_anchor.get('outfit_prompt')}")
+        if scene_anchor.get("composition_prompt"):
+            lines.append(f"Composition: {scene_anchor.get('composition_prompt')}")
+        scene_brief = str(candidate.get("scene_brief") or "").strip()
+        if scene_brief:
+            lines.append(f"Scene brief: {scene_brief}")
+        lines.append(f"Post caption: {post.body}")
+        if project:
+            lines.append(f"World: {project.title}. {project.summary or ''}")
+        if world:
+            lines.append(f"World setting mood: {world.overview or ''} {world.tone or ''}")
+        if character:
+            lines.append(f"Character: {character.name}")
+            if character.nickname:
+                lines.append(f"Nickname: {character.nickname}")
+            if getattr(character, "character_summary", None):
+                lines.append(f"Character overview: {character.character_summary}")
+            if character.appearance_summary:
+                lines.append(f"Appearance: {character.appearance_summary}")
+            if character.art_style:
+                lines.append(f"Art style: {character.art_style}")
+            if character.ng_rules:
+                lines.append(f"Never violate: {character.ng_rules}")
+        lines.append("If the character is a shrine maiden, guide maiden, miko, or similar, lean into elegant shrine accessories, beads, cords, soft white fabric, warm sunset lantern light, and the attached-reference vibe.")
         return "\n".join(lines)
 
     def _feed_visual_direction_for_pattern(self, post_pattern: str) -> str:

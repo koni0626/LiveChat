@@ -107,6 +107,8 @@ class UserSettingService:
             if not value or value.startswith(("gpt-", "dall-e")):
                 return self.PROVIDER_DEFAULT_MODELS["grok"]
             return value
+        if provider == "openai" and value and not value.startswith(("gpt-image", "dall-e")):
+            return self.PROVIDER_DEFAULT_MODELS["openai"]
         if provider == "openai" and value.startswith("grok-"):
             return self.PROVIDER_DEFAULT_MODELS["openai"]
         return value or self.PROVIDER_DEFAULT_MODELS.get(provider, self.DEFAULTS["image_ai_model"])
