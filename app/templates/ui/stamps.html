@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="stamp-page" data-stamp-page data-project-id="{{ project_id }}" data-can-manage-project="{{ 'true' if can_manage_project else 'false' }}">
+  <div class="stamp-toolbar">
+    <div>
+      <h2>スタンプ</h2>
+      <p>キャラクターのベース画像から、返信用の小さなリアクション画像を作ります。</p>
+    </div>
+    <button class="btn btn-outline-dark" type="button" id="stampReloadButton">
+      <i class="bi bi-arrow-clockwise"></i>
+      <span>更新</span>
+    </button>
+  </div>
+
+  <div class="stamp-workspace">
+    <form class="stamp-composer" id="stampGenerateForm">
+      <div class="stamp-form-row">
+        <label class="form-label" for="stampCharacterSelect">キャラクター</label>
+        <select class="form-select" id="stampCharacterSelect" name="character_id" required></select>
+      </div>
+      <div class="stamp-form-row">
+        <label class="form-label" for="stampTextInput">スタンプ文字</label>
+        <input class="form-control" id="stampTextInput" name="text" maxlength="32" placeholder="可愛いっ！" required>
+      </div>
+      <div class="stamp-form-row">
+        <label class="form-label" for="stampStyleInput">追加の雰囲気</label>
+        <input class="form-control" id="stampStyleInput" name="style_instruction" maxlength="160" placeholder="両手を頬に添えて、きらきらした表情">
+      </div>
+      <div class="stamp-options">
+        <div>
+          <label class="form-label" for="stampQualitySelect">品質</label>
+          <select class="form-select" id="stampQualitySelect" name="quality">
+            <option value="low">low</option>
+            <option value="medium" selected>medium</option>
+            <option value="high">high</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label" for="stampSizeSelect">サイズ</label>
+          <select class="form-select" id="stampSizeSelect" name="size">
+            <option value="1024x1024" selected>1024x1024</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-dark stamp-generate-button" type="submit" id="stampGenerateButton">
+        <i class="bi bi-stars"></i>
+        <span>生成</span>
+      </button>
+      <div class="stamp-hint" id="stampCharacterHint"></div>
+    </form>
+
+    <div class="stamp-library">
+      <div class="stamp-library-head">
+        <div>
+          <h3>ライブラリ</h3>
+          <p id="stampCountLabel">0件</p>
+        </div>
+        <select class="form-select" id="stampFilterCharacterSelect" aria-label="キャラクターで絞り込み">
+          <option value="">すべて</option>
+        </select>
+      </div>
+      <div class="stamp-grid" id="stampGrid"></div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/stamps_page.js') }}"></script>
+{% endblock %}

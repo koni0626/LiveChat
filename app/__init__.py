@@ -34,6 +34,7 @@ from .blueprints.world_news import world_news_bp
 from .blueprints.closet import closet_bp
 from .blueprints.cinema_novels import cinema_novels_bp
 from .blueprints.character_lines import character_lines_bp
+from .blueprints.stamps import stamps_bp
 
 
 def _ensure_runtime_directories(app: Flask):
@@ -132,6 +133,60 @@ def _register_cli_commands(app: Flask):
             "blog": BlogService().publish_due_x_schedules(limit=limit),
         }
         click.echo(json_util.dumps(result, indent=2))
+
+    @app.cli.command("x-recent-following-posts")
+    @click.option("--hours", default=24, show_default=True, type=int, help="Look back this many hours.")
+    @click.option("--max-users", default=100, show_default=True, type=int, help="Maximum followed users to inspect.")
+    @click.option("--tweets-per-user", default=5, show_default=True, type=int, help="Recent posts to inspect per user.")
+    @click.option("--include-replies", is_flag=True, help="Include replies.")
+    @click.option("--include-reposts", is_flag=True, help="Include reposts.")
+    @click.option("--with-reply-suggestions", is_flag=True, help="Add manual reply suggestions in character voice.")
+    @click.option("--project-id", default=1, show_default=True, type=int, help="Project id used to resolve reply characters.")
+    @click.option("--reply-as", multiple=True, help="Character name/nickname for reply suggestions. Repeatable. Defaults to ノア and ラプ.")
+    @click.option("--reply-limit", default=20, show_default=True, type=int, help="Maximum posts to add reply suggestions to.")
+    @click.option("--reply-model", default=None, help="Optional text model for reply suggestions.")
+    @click.option("--output", default=None, help="Optional Markdown output file path.")
+    def x_recent_following_posts_command(
+        hours: int,
+        max_users: int,
+        tweets_per_user: int,
+        include_replies: bool,
+        include_reposts: bool,
+        with_reply_suggestions: bool,
+        project_id: int,
+        reply_as: tuple[str, ...],
+        reply_limit: int,
+        reply_model: str | None,
+        output: str | None,
+    ):
+        from pathlib import Path
+
+        from .services.x_timeline_digest_service import XTimelineDigestService
+
+        service = XTimelineDigestService()
+        posts = service.collect_recent_following_posts(
+            hours=hours,
+            max_users=max_users,
+            tweets_per_user=tweets_per_user,
+            include_replies=include_replies,
+            include_reposts=include_reposts,
+        )
+        if with_reply_suggestions:
+            service.add_reply_suggestions(
+                posts,
+                project_id=project_id,
+                reply_as=list(reply_as) or ["ノア", "ラプ"],
+                limit=reply_limit,
+                model=reply_model,
+            )
+        markdown = service.render_markdown(posts, hours=hours, include_reply_suggestions=with_reply_suggestions)
+        if output:
+            output_path = Path(output)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(markdown, encoding="utf-8")
+            click.echo(str(output_path))
+            return
+        click.echo(markdown)
 
     @app.cli.command("generate-character-line-thread")
     @click.option("--project-id", required=True, type=int, help="Project id to generate a character LINE thread for.")
@@ -244,6 +299,7 @@ def create_app(config_object=Config):
     app.register_blueprint(closet_bp, url_prefix="/api/v1")
     app.register_blueprint(cinema_novels_bp, url_prefix="/api/v1")
     app.register_blueprint(character_lines_bp, url_prefix="/api/v1")
+    app.register_blueprint(stamps_bp, url_prefix="/api/v1")
 
     @app.before_request
     def enforce_csrf_protection():

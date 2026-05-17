@@ -1,0 +1,216 @@
+.stamp-page {
+  display: grid;
+  gap: 18px;
+}
+
+.stamp-toolbar,
+.stamp-composer,
+.stamp-library {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow);
+}
+
+.stamp-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+}
+
+.stamp-toolbar h2,
+.stamp-library h3 {
+  margin: 0;
+  font-weight: 700;
+}
+
+.stamp-toolbar p,
+.stamp-library p,
+.stamp-hint {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.stamp-workspace {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.stamp-composer {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  position: sticky;
+  top: 18px;
+}
+
+.stamp-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.stamp-generate-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.stamp-library {
+  padding: 18px;
+}
+
+.stamp-library-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.stamp-library-head .form-select {
+  max-width: 220px;
+}
+
+.stamp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.stamp-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(84, 177, 255, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(8, 17, 31, 0.94), rgba(8, 18, 35, 0.84)),
+    radial-gradient(circle at top right, rgba(189, 92, 255, 0.1), transparent 42%);
+  color: #e9fbff;
+  padding: 10px;
+  box-shadow:
+    0 16px 34px rgba(1, 6, 18, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.stamp-preview {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background:
+    linear-gradient(45deg, rgba(125, 215, 255, 0.1) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(125, 215, 255, 0.1) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(125, 215, 255, 0.1) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(125, 215, 255, 0.1) 75%);
+  background-color: rgba(2, 8, 16, 0.72);
+  background-size: 18px 18px;
+  background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+  padding: 0;
+}
+
+.stamp-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.stamp-card-body {
+  min-height: 42px;
+  display: grid;
+  gap: 2px;
+}
+
+.stamp-card-body strong,
+.stamp-card-body span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stamp-card-body span {
+  color: rgba(216, 235, 255, 0.68);
+  font-size: 0.86rem;
+}
+
+.stamp-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.stamp-card-actions .btn {
+  width: 36px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stamp-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: none;
+  place-items: center;
+  background: rgba(4, 10, 20, 0.82);
+  backdrop-filter: blur(10px);
+  padding: 24px;
+}
+
+.stamp-lightbox.is-open {
+  display: grid;
+}
+
+.stamp-lightbox img {
+  max-width: min(86vw, 760px);
+  max-height: 86vh;
+  border-radius: 8px;
+  background: rgba(5, 12, 24, 0.96);
+  border: 1px solid rgba(84, 177, 255, 0.24);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.45),
+    0 0 28px rgba(0, 180, 255, 0.14);
+}
+
+.stamp-lightbox-close {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(8, 17, 31, 0.92);
+  color: #e9f7ff;
+  box-shadow: 0 0 0 1px rgba(84, 177, 255, 0.2);
+}
+
+@media (max-width: 900px) {
+  .stamp-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .stamp-composer {
+    position: static;
+  }
+}
+
+@media (max-width: 560px) {
+  .stamp-toolbar,
+  .stamp-library-head,
+  .stamp-options {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .stamp-library-head .form-select {
+    max-width: none;
+  }
+}
