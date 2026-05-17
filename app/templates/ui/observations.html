@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="observation-page" data-observation-page data-project-id="{{ project_id }}" data-can-manage-project="{{ 'true' if can_manage_project else 'false' }}">
+  <div class="observation-hero panel-card">
+    <div>
+      <h2>観測</h2>
+      <p class="section-copy">Xの直近投稿を眺めて、画像を見たうえでキャラクターの返信候補を作ります。</p>
+    </div>
+    <div class="observation-actions">
+      <select class="form-select" id="observationSourceSelect" aria-label="対象">
+        <option value="following">フォロー中</option>
+        <option value="followers">フォロワー</option>
+      </select>
+      <button class="btn btn-outline-dark" type="button" id="observationRefreshButton">
+        <i class="bi bi-arrow-clockwise"></i>
+        <span>更新</span>
+      </button>
+      <button class="btn btn-outline-dark" type="button" id="observationFollowCleanupButton">
+        <i class="bi bi-person-dash"></i>
+        <span>フォロワー整理</span>
+      </button>
+    </div>
+  </div>
+
+  <section class="observation-cleanup-panel panel-card d-none" id="observationFollowCleanupPanel">
+    <div class="observation-cleanup-head">
+      <div>
+        <h3>相互フォローではないフォロー中ユーザー</h3>
+        <p id="observationFollowCleanupSummary">候補を取得して、チェックしたユーザーだけフォロー解除します。</p>
+      </div>
+      <div class="observation-cleanup-actions">
+        <button class="btn btn-sm btn-outline-dark" type="button" id="observationFollowCleanupSelectAllButton">
+          <i class="bi bi-check2-square"></i>
+          <span>全選択</span>
+        </button>
+        <button class="btn btn-sm btn-outline-dark" type="button" id="observationFollowCleanupReloadButton">
+          <i class="bi bi-arrow-clockwise"></i>
+          <span>候補取得</span>
+        </button>
+        <button class="btn btn-sm btn-danger" type="button" id="observationFollowCleanupUnfollowButton">
+          <i class="bi bi-person-dash"></i>
+          <span>選択を解除</span>
+        </button>
+      </div>
+    </div>
+    <div class="observation-cleanup-list" id="observationFollowCleanupList"></div>
+  </section>
+
+  <div class="observation-layout">
+    <section class="observation-list-panel panel-card">
+      <div class="observation-list-head">
+        <div>
+          <h3>直近投稿</h3>
+          <p id="observationCountLabel">未取得</p>
+        </div>
+        <div class="observation-filter-grid">
+          <label>
+            <span>時間</span>
+            <input class="form-control" id="observationHoursInput" type="number" min="1" max="72" value="24">
+          </label>
+          <label>
+            <span>抽出人数</span>
+            <input class="form-control" id="observationMaxUsersInput" type="number" min="1" max="500" value="50">
+          </label>
+          <label>
+            <span>候補母数</span>
+            <input class="form-control" id="observationUserSamplePoolInput" type="number" min="1" max="5000" value="1000">
+          </label>
+          <label>
+            <span>投稿/人</span>
+            <input class="form-control" id="observationTweetsPerUserInput" type="number" min="1" max="10" value="3">
+          </label>
+          <label>
+            <span>並び順</span>
+            <select class="form-select" id="observationSortSelect">
+              <option value="newest">新しい順</option>
+              <option value="user">ユーザーごと</option>
+            </select>
+          </label>
+          <label>
+            <span>表示</span>
+            <select class="form-select" id="observationReplyFilterSelect">
+              <option value="all">すべて</option>
+              <option value="unreplied">未返信のみ</option>
+              <option value="unreplied_users">未返信ユーザーのみ</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="observation-post-list" id="observationPostList"></div>
+    </section>
+
+    <aside class="observation-detail-panel panel-card">
+      <div class="observation-detail-empty" id="observationDetailEmpty">詳細ボタンで画像とコメント作成欄を表示します。</div>
+      <div class="observation-detail d-none" id="observationDetail">
+        <div class="observation-detail-head">
+          <div>
+            <h3 id="observationDetailAuthor"></h3>
+            <p id="observationDetailMeta"></p>
+          </div>
+          <a class="btn btn-sm btn-outline-dark" id="observationDetailLink" href="#" target="_blank" rel="noopener">
+            <i class="bi bi-box-arrow-up-right"></i>
+            <span>Xで開く</span>
+          </a>
+        </div>
+        <p class="observation-detail-text" id="observationDetailText"></p>
+        <div class="observation-existing-reply d-none" id="observationExistingReply"></div>
+        <div class="observation-media-grid" id="observationMediaGrid"></div>
+        <div class="observation-comment-box">
+          <div class="observation-comment-controls">
+            <select class="form-select" id="observationCharacterSelect"></select>
+            <button class="btn btn-dark" type="button" id="observationCommentButton">
+              <i class="bi bi-chat-heart"></i>
+              <span>コメント作成</span>
+            </button>
+            <button class="btn btn-primary" type="button" id="observationPublishReplyButton">
+              <i class="bi bi-send"></i>
+              <span>APIで返信</span>
+            </button>
+            <button class="btn btn-primary" type="button" id="observationReplyButton">
+              <i class="bi bi-check2-circle"></i>
+              <span>返信済みにする</span>
+            </button>
+          </div>
+          <textarea class="form-control" id="observationCommentOutput" rows="4" placeholder="コメント候補がここに出ます。"></textarea>
+          <div class="observation-reply-result d-none" id="observationReplyResult"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/observations_page.js') }}"></script>
+{% endblock %}
