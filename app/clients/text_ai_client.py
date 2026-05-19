@@ -57,7 +57,7 @@ class TextAIClient:
 
     def _call_openai_chat(self, payload: dict[str, Any]) -> dict[str, Any]:
         attempts = int(os.getenv("TEXT_AI_RETRY_ATTEMPTS", "3"))
-        retry_statuses = {502, 503, 504}
+        retry_statuses = {500, 502, 503, 504}
         last_error: Exception | None = None
         for attempt in range(max(1, attempts)):
             try:

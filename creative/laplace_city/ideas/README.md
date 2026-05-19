@@ -25,6 +25,8 @@
 | `doll_bread_past_social_shift` | ドル、パンを盗んだ夜を語る | 保管中 | ドル過去回・社会変化と自己責任批判 |
 | `doll_convenience_store` | ドル、コンビニ経営す | 本編化済み | 第12話 `episode_012_doll_convenience_store` |
 | `immortal_black_company_book` | 不死のブラック上司、経営学を誤読す | 本編化済み | 第15話 `episode_015_immortal_black_company_book` |
+| `kinoko_takenoko_mars_war` | 旧人類、菓子で戦争す | 本編化済み | 第16話 `episode_016_kinoko_takenoko_war` |
+| `windows_mac_mars_war` | 旧人類、OSで戦争す | 本編化済み | 第17話 `episode_017_windows_mac_war` |
 | `lap_azatoi_goddess_morning_oracle` | ラプ、あざとい女神になる | 保管中 | ラプラス朝配信・ご神託・市民いいね文化 |
 | `lap_noah_drive_nature_park` | ラプとノア、星を見に行く | 保管中 | ラプとノアの静かな関係回・ラプラス自然公園 |
 | `humanoid_emotion_backbone` | ヒューマノイドに感情はあるのか | 世界観バックボーン | ノアのブログ・ウォズ技術解説・ラプラスシティ根幹テーマ |

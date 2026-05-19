@@ -1139,6 +1139,10 @@ figcaption {
                     "tone": str(panel.get("tone") or "").strip(),
                     "emotion": str(panel.get("emotion") or "").strip(),
                     "shot": str(panel.get("shot") or "").strip(),
+                    "viewer_context": str(panel.get("viewer_context") or "").strip(),
+                    "visible_event": str(panel.get("visible_event") or "").strip(),
+                    "joke": str(panel.get("joke") or "").strip(),
+                    "story_function": str(panel.get("story_function") or "").strip(),
                     "visual_focus": str(panel.get("visual_focus") or "").strip(),
                     "image_prompt": str(panel.get("image_prompt") or "").strip(),
                     "characters": characters,
@@ -1828,7 +1832,14 @@ figcaption {
                 "Hard constraint: 登録キャラクター文脈に別キャラがいても、指定主人公を別キャラへ置き換えないこと。",
                 f"目安コマ数: {target_panel_count}。物語として自然なら±2コマまで許可。",
                 genre_guidance,
-                "各コマの caption は日本語20文字以内。画像内にそのまま大きく入れるので短く、強く、誤字なく。",
+                "初見視聴者向けに再脚本化すること。原作を知らない人が、誰が・何をしようとして・何がズレて・なぜ面白いのかを字幕だけで追える構成にする。",
+                "冒頭3コマは必ず前提を明示する。例: 主人公の役割、今回やろうとしている実験/事件/勝負、相手や障害。",
+                "中盤は因果をつなぐ。単なる名詞見出しではなく『保存したくて動けない』『祈りすぎて殴れない』のように、原因とズレが分かる短文にする。",
+                "終盤はオチの意味を明示する。何に失敗し、何が意外に成功したのかが初見でも分かるようにする。",
+                "各コマの caption は日本語22文字以内。画像内にそのまま大きく入れるので短く、強く、誤字なく。名詞だけのラベルは禁止。",
+                "caption は『赤グローブ館長』のような既読者向け見出しではなく、『拳闘文化を保存します』『保存したくて動けない』のような初見向けの状況説明にする。",
+                "caption にはできるだけ動詞を入れる。『誰が何をする/できない/勘違いする/止まる/守る』が分かる文にする。",
+                "各コマに viewer_context, visible_event, joke, story_function を入れる。viewer_context は初見者に必要な前提、visible_event は画面で見せる行動、joke は笑いのズレ、story_function は setup/escalation/payoff のいずれか。",
                 (
                     f"各コマの image_prompt は gpt-image-2 用。スマホ版なら9:16 vertical {prompt_visual_label}、"
                     f"スマホ版でないなら16:9 horizontal {prompt_visual_label}。no speech bubbles except the exact headline text."
@@ -1844,7 +1855,7 @@ figcaption {
                 "主人公は冒頭、転換点、ラストに必ず登場させ、可能なら多くのコマの characters に含めてください。",
                 "Use only the enabled reference sections below as story material. Do not invent facts that contradict them.",
                 "Required JSON shape:",
-                '{"title": "...", "logline": "...", "target_panel_count": 20, "panels": [{"caption": "...", "tone": "comedy", "emotion": "...", "shot": "close-up", "visual_focus": "...", "characters": ["..."], "image_prompt": "..."}]}',
+                '{"title": "...", "logline": "...", "first_time_viewer_summary": "...", "target_panel_count": 20, "panels": [{"caption": "...", "viewer_context": "...", "visible_event": "...", "joke": "...", "story_function": "setup", "tone": "comedy", "emotion": "...", "shot": "close-up", "visual_focus": "...", "characters": ["..."], "image_prompt": "..."}]}',
                 "",
                 f"Requested title: {title}",
                 f"Genre: {genre}",
@@ -2066,22 +2077,45 @@ figcaption {
                     " ".join(str(item) for item in scene.get("characters") or []),
                 ]
             )
+            prompt_searchable = "\n".join(
+                [
+                    caption,
+                    str(scene.get("visual_focus") or ""),
+                    str(scene.get("image_prompt") or ""),
+                ]
+            )
+            prompt_references = self._matching_character_references(novel.project_id, prompt_searchable, limit=3)
+            effective_scene = dict(scene)
+            if prompt_references:
+                prompt_character_ids = [item.get("id") for item in prompt_references if item.get("id")]
+                effective_scene["character_ids"] = prompt_character_ids
+                effective_scene["characters"] = [
+                    str(item.get("name") or item.get("nickname") or "").strip()
+                    for item in prompt_references
+                    if str(item.get("name") or item.get("nickname") or "").strip()
+                ]
             use_current_image = bool(payload.get("use_current_image")) and bool(scene.get("still_asset_id"))
             current_image_paths, current_image_asset_ids = (
                 self._resolve_reference_image_paths([scene.get("still_asset_id")])
                 if use_current_image
                 else ([], [])
             )
-            explicit_reference_ids = self._scene_character_reference_asset_ids(novel.project_id, scene)
-            explicit_reference_ids = self._apply_novel_session_outfit_references(
-                novel,
-                explicit_reference_ids,
-                character_ids=self._normalize_character_ids(scene.get("character_ids")),
-            )
+            explicit_reference_ids = []
+            if not prompt_references:
+                explicit_reference_ids = self._scene_character_reference_asset_ids(novel.project_id, scene)
+                explicit_reference_ids = self._apply_novel_session_outfit_references(
+                    novel,
+                    explicit_reference_ids,
+                    character_ids=self._normalize_character_ids(scene.get("character_ids")),
+                )
             if explicit_reference_ids:
                 reference_paths, reference_asset_ids = self._resolve_reference_image_paths(explicit_reference_ids)
             else:
-                references = self._matching_character_references(novel.project_id, searchable, limit=3)
+                # Prefer the text the user just edited. Existing storyboard character labels can be stale
+                # after manual prompt edits, and should not override an explicit name in the new prompt.
+                references = prompt_references
+                if not references:
+                    references = self._matching_character_references(novel.project_id, searchable, limit=3)
                 reference_asset_ids = self._apply_novel_session_outfit_references(
                     novel,
                     [item.get("base_asset_id") for item in references if item.get("base_asset_id")],
@@ -2089,9 +2123,9 @@ figcaption {
                 )
                 reference_paths, reference_asset_ids = self._resolve_reference_image_paths(reference_asset_ids)
             prompt = (
-                self._comic_page_image_prompt(novel, scene, art_style=art_style)
+                self._comic_page_image_prompt(novel, effective_scene, art_style=art_style)
                 if scene.get("comic_page")
-                else self._short_comic_image_prompt(novel, scene, caption, art_style=art_style)
+                else self._short_comic_image_prompt(novel, effective_scene, caption, art_style=art_style)
             )
             if current_image_paths:
                 prompt = "\n".join(
@@ -2204,6 +2238,19 @@ figcaption {
             scene["characters"] = self._character_names_for_ids(novel.project_id, character_ids)
         elif "characters" in payload and isinstance(payload.get("characters"), list):
             scene["characters"] = [str(item).strip() for item in payload.get("characters") if str(item).strip()]
+        elif any(key in payload for key in ("caption", "text", "image_prompt", "visual_focus")):
+            prompt_searchable = "\n".join(
+                [
+                    str(scene.get("caption") or scene.get("text") or ""),
+                    str(scene.get("visual_focus") or ""),
+                    str(scene.get("image_prompt") or ""),
+                ]
+            )
+            prompt_references = self._matching_character_references(novel.project_id, prompt_searchable, limit=3)
+            if prompt_references:
+                character_ids = self._normalize_character_ids([item.get("id") for item in prompt_references if item.get("id")])
+                scene["character_ids"] = character_ids
+                scene["characters"] = self._character_names_for_ids(novel.project_id, character_ids)
         if "outfit_ids" in payload:
             character_ids = self._normalize_character_ids(scene.get("character_ids"))
             scene["outfit_ids"] = self._normalize_scene_outfit_ids(novel.project_id, character_ids, payload.get("outfit_ids"))
@@ -2746,7 +2793,12 @@ figcaption {
         shot = str(scene.get("shot") or "").strip() or "thumbnail composition"
         visual_focus = str(scene.get("visual_focus") or "").strip()
         base_prompt = str(scene.get("image_prompt") or "").strip()
+        viewer_context = str(scene.get("viewer_context") or "").strip()
+        visible_event = str(scene.get("visible_event") or "").strip()
+        joke = str(scene.get("joke") or "").strip()
+        story_function = str(scene.get("story_function") or "").strip()
         characters = "、".join(str(item) for item in scene.get("characters") or [] if str(item).strip())
+        character_contexts = self._scene_character_contexts(novel.project_id, scene)
         is_mobile = bool(getattr(novel, "mobile_visible", True))
         if art_style == "anime":
             aspect_instruction = (
@@ -2786,9 +2838,19 @@ figcaption {
                 composition_instruction,
                 f"Novel title: {novel.title or ''}",
                 f"Characters in this panel: {characters or 'use the scene context'}",
+                "Registered character identity constraints:",
+                "Every named character in this panel is a registered character represented by the attached reference images and the settings below.",
+                "Do not replace a registered character with a generic boxer, a random man, a stunt double, or a newly invented person.",
+                "Preserve each registered character's gender presentation, face, hair, body silhouette, outfit logic, color mood, accessories, and fixed design traits from the reference images/settings.",
+                "If the scene requires boxing gloves or action poses, add only those props/poses while keeping the registered character's identity intact.",
+                f"Selected character settings: {json_util.dumps(character_contexts) if character_contexts else 'none'}",
                 f"Tone: {tone}",
                 f"Emotion: {emotion}",
                 f"Shot/composition: {shot}",
+                f"Story function: {story_function}",
+                f"First-time viewer context: {viewer_context}",
+                f"Visible event to make obvious: {visible_event}",
+                f"Comedic/dramatic gap to show: {joke}",
                 f"Visual focus: {visual_focus}",
                 "",
                 *text_lines,
@@ -5842,10 +5904,14 @@ figcaption {
             names = [name for name in names if name]
             if not names:
                 continue
+            if any(self._character_name_is_excluded(searchable_text, name) for name in names):
+                continue
             score = 0
             for name in names:
                 score += searchable_text.count(name)
-                score += lowered.count(name.lower())
+                lowered_name = name.lower()
+                if lowered_name != name:
+                    score += lowered.count(lowered_name)
             if score > 0:
                 scored.append((score, character.id, character, asset_id))
         scored.sort(key=lambda item: (-item[0], item[1]))
@@ -5858,6 +5924,35 @@ figcaption {
             }
             for _score, _character_id, character, asset_id in scored[:limit]
         ]
+
+    def _character_name_is_excluded(self, searchable_text: str, name: str) -> bool:
+        text = str(searchable_text or "")
+        name = str(name or "").strip()
+        if not text or not name:
+            return False
+        escaped = re.escape(name)
+        japanese_negative_words = (
+            "出さない",
+            "出ない",
+            "出すな",
+            "登場しない",
+            "描かない",
+            "入れない",
+            "含めない",
+            "不要",
+            "なし",
+            "無し",
+            "禁止",
+            "除外",
+        )
+        negative = "|".join(re.escape(word) for word in japanese_negative_words)
+        patterns = [
+            rf"{escaped}\s*(?:は|を|が|も|には|だけは)?\s*(?:{negative})",
+            rf"(?:{negative})\s*(?:にする|で)?\s*.{{0,8}}{escaped}",
+            rf"\b(?:no|not|without|exclude|excluding)\s+{escaped}\b",
+            rf"\b{escaped}\s+(?:must\s+not|should\s+not|is\s+not|are\s+not)\b",
+        ]
+        return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
 
     def _generate_cinema_asset(
         self,

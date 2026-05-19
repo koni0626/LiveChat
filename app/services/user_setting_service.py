@@ -277,6 +277,7 @@ class UserSettingService:
         if "model" not in options and options.get("text_ai_model"):
             options["model"] = options.get("text_ai_model")
         options.setdefault("model", settings.get("text_ai_model") or self.DEFAULTS["text_ai_model"])
+        options.setdefault("text_ai_model", options.get("model"))
         return options
 
     def apply_cinema_novel_image_generation_settings(self, payload: dict | None = None) -> dict:

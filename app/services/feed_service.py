@@ -583,7 +583,7 @@ class FeedService:
             project_id,
             count=count,
             interaction_mode=interaction_mode,
-            model=payload.get("model") or payload.get("text_ai_model"),
+            model=payload.get("text_ai_model") or payload.get("model"),
         )
         created = []
         for candidate in candidates[:count]:
@@ -1304,15 +1304,17 @@ class FeedService:
         characters = self._select_feed_characters(all_characters, recent_posts, count=count)
         if not characters:
             raise ValueError("character is required to generate Feed posts")
+        mode = self._normalize_feed_interaction_mode(interaction_mode)
         selected_ids = [character.id for character in characters]
         recent_scene_anchors = self._recent_feed_scene_anchors(recent_posts)
         post_plans = self._build_feed_post_plans(
             characters,
             all_characters,
-            interaction_mode=interaction_mode,
+            interaction_mode=mode,
             recent_scene_anchors=recent_scene_anchors,
             locations=locations,
         )
+        co_character_contexts = self._feed_available_co_character_contexts(all_characters, mode=mode)
         prompt = f"""
 Return only JSON.
 Create {count} public Feed posts for a Japanese character world app.
@@ -1364,7 +1366,7 @@ Project summary: {getattr(project, "summary", "") or ""}
 World tone: {getattr(world, "tone", "") if world else ""}
 World overview: {getattr(world, "overview", "") if world else ""}
 Characters: {json_util.dumps([self._feed_character_context(character) for character in characters])}
-Available co-characters: {json_util.dumps([self._feed_character_context(character) for character in all_characters[:30]])}
+Available co-characters: {json_util.dumps(co_character_contexts)}
 Post plans: {json_util.dumps(post_plans)}
 Recent posts: {json_util.dumps([{"character_id": post.character_id, "body": post.body} for post in recent_posts[:12]])}
 Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
@@ -1785,6 +1787,19 @@ Recent scene anchors to avoid: {json_util.dumps(recent_scene_anchors[:12])}
             "appearance": character.appearance_summary,
             "art_style": getattr(character, "art_style", None),
         }
+
+    def _feed_available_co_character_contexts(self, characters, *, mode: str) -> list[dict]:
+        if mode == "solo":
+            return []
+        return [
+            {
+                "id": character.id,
+                "name": character.name,
+                "nickname": character.nickname,
+            }
+            for character in characters[:30]
+            if getattr(character, "id", None)
+        ]
 
     def _build_feed_image_prompt(self, post, character, project, world, payload: dict):
         override = str(payload.get("prompt") or "").strip()

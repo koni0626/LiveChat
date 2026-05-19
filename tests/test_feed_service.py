@@ -89,6 +89,58 @@ def test_solo_feed_candidate_rejects_other_project_character_name():
         )
 
 
+def test_solo_feed_prompt_omits_available_co_character_contexts():
+    target = SimpleNamespace(id=1, name="Noa", nickname="N", personality="p" * 100, speech_style="s", appearance_summary="a")
+    other = SimpleNamespace(id=2, name="Rei", nickname="R", personality="p" * 5000, speech_style="s", appearance_summary="a")
+    captured = {}
+
+    class _TextAI:
+        def generate_text(self, prompt, **_kwargs):
+            captured["prompt"] = prompt
+            return {
+                "text": (
+                    '{"items":[{"character_id":1,"scene_brief":"Noa is reacting to a small visible incident in town.",'
+                    '"body":"Noaの小さな事件メモです。","post_pattern":"test"}]}'
+                )
+            }
+
+        def _try_parse_json(self, text):
+            import json
+
+            return json.loads(text)
+
+    service = FeedService(
+        repository=_Repo(),
+        character_service=SimpleNamespace(list_characters=lambda project_id: [target, other]),
+        project_service=SimpleNamespace(get_project=lambda project_id: SimpleNamespace(title="", summary="")),
+        world_service=SimpleNamespace(get_world=lambda project_id: None),
+        location_repository=_Locations(),
+        text_ai_client=_TextAI(),
+    )
+    service._select_feed_characters = lambda _characters, _recent_posts, count: [target]
+
+    items = service._generate_feed_candidates(1, count=1, interaction_mode="solo")
+
+    assert items[0]["character_id"] == 1
+    assert "Available co-characters: []" in captured["prompt"]
+    assert "p" * 5000 not in captured["prompt"]
+
+
+def test_duo_feed_available_co_character_contexts_are_thin():
+    characters = [
+        SimpleNamespace(id=1, name="Noa", nickname="N", personality="p" * 100, speech_style="s", appearance_summary="a"),
+        SimpleNamespace(id=2, name="Rei", nickname="R", personality="p" * 5000, speech_style="s", appearance_summary="a"),
+    ]
+    service = FeedService()
+
+    contexts = service._feed_available_co_character_contexts(characters, mode="duo")
+
+    assert contexts == [
+        {"id": 1, "name": "Noa", "nickname": "N"},
+        {"id": 2, "name": "Rei", "nickname": "R"},
+    ]
+
+
 def test_photobook_mode_creates_thin_caption_without_generating_image(monkeypatch):
     character = SimpleNamespace(id=3, project_id=1, name="導巫女さん", nickname="ブラック企業")
     location = SimpleNamespace(
@@ -179,3 +231,51 @@ def test_image_settings_do_not_keep_text_model_as_image_model():
     )
 
     assert options["model"] == "gpt-image-2"
+
+
+def test_text_settings_preserve_text_ai_model_after_image_settings():
+    service = UserSettingService()
+    service.get_global_settings = lambda: {
+        "text_ai_model": "gpt-5.4-mini",
+        "image_ai_provider": "openai",
+        "image_ai_model": "gpt-image-2",
+    }
+    text_options = service.apply_global_text_generation_settings({"count": 1})
+
+    image_options = service._apply_image_generation_settings(
+        {
+            "image_ai_provider": "openai",
+            "image_ai_model": "gpt-image-2",
+            "default_quality": "medium",
+            "default_size": "1024x1024",
+            "mobile_default_size": "1024x1536",
+            "prefer_portrait_on_mobile": False,
+        },
+        text_options,
+    )
+
+    assert image_options["model"] == "gpt-image-2"
+    assert image_options["text_ai_model"].startswith("gpt-")
+
+
+def test_feed_generate_prefers_text_model_when_image_settings_overwrite_model(monkeypatch):
+    character = SimpleNamespace(id=3, project_id=1, name="Noa")
+    repo = _Repo()
+    service = FeedService(repository=repo, character_service=_Characters(character))
+    captured = {}
+
+    def generate_candidates(project_id, count, **kwargs):
+        captured.update(kwargs)
+        return [{"character_id": character.id, "body": "NoaのFeed本文です。"}]
+
+    monkeypatch.setattr(service, "_generate_feed_candidates", generate_candidates)
+    monkeypatch.setattr(service, "generate_post_image", lambda post_id, payload: repo.created[post_id - 1])
+    monkeypatch.setattr(service, "refresh_character_feed_profile", lambda _character_id: None)
+
+    service.generate_posts(
+        project_id=1,
+        user_id=2,
+        payload={"count": 1, "model": "gpt-image-2", "text_ai_model": "gpt-5.4-mini", "image_ai_model": "gpt-image-2"},
+    )
+
+    assert captured["model"] == "gpt-5.4-mini"
