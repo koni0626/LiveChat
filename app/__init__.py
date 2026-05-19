@@ -35,6 +35,7 @@ from .blueprints.closet import closet_bp
 from .blueprints.cinema_novels import cinema_novels_bp
 from .blueprints.character_lines import character_lines_bp
 from .blueprints.stamps import stamps_bp
+from .blueprints.observations import observations_bp
 
 
 def _ensure_runtime_directories(app: Flask):
@@ -188,6 +189,34 @@ def _register_cli_commands(app: Flask):
             return
         click.echo(markdown)
 
+    @app.cli.command("x-trends")
+    @click.option("--woeid", default="japan", show_default=True, help="WOEID or alias: japan, tokyo, worldwide, united_states.")
+    @click.option("--max-trends", default=50, show_default=True, type=int, help="Maximum trends to fetch from X.")
+    @click.option("--hashtags-only", is_flag=True, help="Only include trends that start with #.")
+    @click.option("--limit", default=None, type=int, help="Maximum rows to render after filtering.")
+    @click.option("--output", default=None, help="Optional Markdown output file path.")
+    def x_trends_command(
+        woeid: str,
+        max_trends: int,
+        hashtags_only: bool,
+        limit: int | None,
+        output: str | None,
+    ):
+        from pathlib import Path
+
+        from .services.x_trend_service import XTrendService
+
+        service = XTrendService()
+        trends = service.collect_trends(woeid=woeid, max_trends=max_trends, hashtags_only=hashtags_only)
+        markdown = service.render_markdown(trends, woeid=woeid, hashtags_only=hashtags_only, limit=limit)
+        if output:
+            output_path = Path(output)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(markdown, encoding="utf-8")
+            click.echo(str(output_path))
+            return
+        click.echo(markdown)
+
     @app.cli.command("generate-character-line-thread")
     @click.option("--project-id", required=True, type=int, help="Project id to generate a character LINE thread for.")
     @click.option("--theme", required=True, help="Initial topic thrown in by the player.")
@@ -300,6 +329,7 @@ def create_app(config_object=Config):
     app.register_blueprint(cinema_novels_bp, url_prefix="/api/v1")
     app.register_blueprint(character_lines_bp, url_prefix="/api/v1")
     app.register_blueprint(stamps_bp, url_prefix="/api/v1")
+    app.register_blueprint(observations_bp, url_prefix="/api/v1")
 
     @app.before_request
     def enforce_csrf_protection():

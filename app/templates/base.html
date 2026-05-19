@@ -47,6 +47,9 @@
     {% if screen_id == "stamps" %}
     <link href="{{ url_for('static', filename='css/screens/stamps.css') }}" rel="stylesheet">
     {% endif %}
+    {% if screen_id == "observations" %}
+    <link href="{{ url_for('static', filename='css/screens/observations.css') }}" rel="stylesheet">
+    {% endif %}
     {% if screen_id in ["stories", "story-edit", "story-sessions", "story-session", "live-chat-sessions", "live-chat-rooms", "live-chat-room-edit", "live-chat", "outings", "character-edit", "character-create"] %}
     <link href="{{ url_for('static', filename='css/screens/live_chat.css') }}" rel="stylesheet">
     {% endif %}

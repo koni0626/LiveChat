@@ -88,6 +88,40 @@ class XPublishingService:
             "thread_count": len(responses),
         }
 
+    def publish_reply(self, tweet_id: str, text: str) -> dict:
+        normalized = self._normalize_text(text)
+        if not normalized:
+            raise ValueError("reply text is required")
+        if self._tweet_weight(normalized) > self.TWEET_WEIGHT_LIMIT:
+            raise ValueError("reply text is too long for X")
+        if not self.is_configured():
+            raise RuntimeError("X API keys are not configured")
+        try:
+            import tweepy
+        except ImportError as exc:
+            raise RuntimeError("tweepy is required for X publishing. Run pip install -r requirements.txt") from exc
+
+        client = tweepy.Client(
+            bearer_token=current_app.config.get("X_BEARER_TOKEN") or None,
+            consumer_key=current_app.config["X_API_KEY"],
+            consumer_secret=current_app.config["X_API_SECRET"],
+            access_token=current_app.config["X_ACCESS_TOKEN"],
+            access_token_secret=current_app.config["X_ACCESS_TOKEN_SECRET"],
+        )
+        try:
+            response = client.create_tweet(text=normalized, in_reply_to_tweet_id=str(tweet_id))
+        except Exception as exc:
+            raise RuntimeError(self._friendly_tweepy_error(exc)) from exc
+        data = getattr(response, "data", None) or {}
+        x_post_id = str(data.get("id") or "")
+        return {
+            "x_post_id": x_post_id,
+            "in_reply_to_tweet_id": str(tweet_id),
+            "text": normalized,
+            "url": f"https://x.com/i/web/status/{x_post_id}" if x_post_id else "",
+            "response": data,
+        }
+
     def upload_media_paths(self, image_paths: list[str]) -> dict[str, str]:
         if not self.is_configured():
             raise RuntimeError("X API keys are not configured")
@@ -234,3 +268,21 @@ class XPublishingService:
         if codepoint >= 0x1100:
             return True
         return unicodedata.east_asian_width(char) in {"W", "F"}
+
+    def _friendly_tweepy_error(self, error: Exception) -> str:
+        api_messages = []
+        for attr in ("api_messages", "errors"):
+            value = getattr(error, attr, None)
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        api_messages.append(str(item.get("message") or item.get("detail") or item))
+                    elif item:
+                        api_messages.append(str(item))
+        response_text = getattr(getattr(error, "response", None), "text", None)
+        parts = [message for message in api_messages if message]
+        if response_text:
+            parts.append(str(response_text))
+        if parts:
+            return "X reply failed: " + " / ".join(parts)
+        return f"X reply failed: {error}"

@@ -50,6 +50,7 @@ from .world_location import WorldLocation
 from .world_location_service import WorldLocationServiceItem
 from .world_map_image import WorldMapImage
 from .world_news_item import WorldNewsItem
+from .x_observation_reply import XObservationReply
 
 __all__ = [
     "db",
@@ -103,4 +104,5 @@ __all__ = [
     "WorldLocationServiceItem",
     "WorldMapImage",
     "WorldNewsItem",
+    "XObservationReply",
 ]

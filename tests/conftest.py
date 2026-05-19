@@ -14,6 +14,7 @@ class TestConfig:
     JSON_SORT_KEYS = False
     SESSION_TYPE = "filesystem"
     SESSION_PERMANENT = False
+    FEED_X_SCHEDULE_WORKER_ENABLED = False
 
 
 @pytest.fixture()

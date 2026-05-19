@@ -8,6 +8,7 @@
     </div>
     <div class="observation-actions">
       <select class="form-select" id="observationSourceSelect" aria-label="対象">
+        <option value="home_timeline" selected>ホームタイムライン</option>
         <option value="following">フォロー中</option>
         <option value="followers">フォロワー</option>
       </select>
@@ -59,7 +60,7 @@
             <input class="form-control" id="observationHoursInput" type="number" min="1" max="72" value="24">
           </label>
           <label>
-            <span>抽出人数</span>
+            <span>取得件数/人数</span>
             <input class="form-control" id="observationMaxUsersInput" type="number" min="1" max="500" value="50">
           </label>
           <label>
@@ -68,7 +69,7 @@
           </label>
           <label>
             <span>投稿/人</span>
-            <input class="form-control" id="observationTweetsPerUserInput" type="number" min="1" max="10" value="3">
+            <input class="form-control" id="observationTweetsPerUserInput" type="number" min="1" max="10" value="1">
           </label>
           <label>
             <span>並び順</span>

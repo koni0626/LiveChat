@@ -140,6 +140,16 @@ def test_observations_recent_detail_and_comment_endpoints(client, app, monkeypat
     assert fake.calls[0][1]["randomize_users"] is True
     assert fake.calls[0][1]["user_sample_pool"] == 80
 
+    default_recent = client.get(f"/api/v1/projects/{project.id}/observations/x/recent")
+    assert default_recent.status_code == 200
+    default_filters = default_recent.get_json()["data"]["filters"]
+    assert default_filters["source"] == "home_timeline"
+    assert default_filters["tweets_per_user"] == 1
+    assert default_filters["randomize_users"] is False
+    assert fake.calls[1][1]["source"] == "home_timeline"
+    assert fake.calls[1][1]["tweets_per_user"] == 1
+    assert fake.calls[1][1]["randomize_users"] is False
+
     detail = client.get(f"/api/v1/projects/{project.id}/observations/x/posts/2055")
     assert detail.status_code == 200
     assert detail.get_json()["data"]["media"][0]["media_url"].endswith("a.jpg")

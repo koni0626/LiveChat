@@ -35,6 +35,7 @@ def _project_nav(project_id: int | None, current_user: User | None = None):
         links.append({"label": "キャラクター", "icon": "bi-people", "href": url_for("ui.character_list_page", project_id=project_id)})
         links.append({"label": "クローゼット", "icon": "bi-person-bounding-box", "href": url_for("ui.closet_page", project_id=project_id)})
         links.append({"label": "スタンプ", "icon": "bi-sticky", "href": url_for("ui.stamps_page", project_id=project_id)})
+        links.append({"label": "観測", "icon": "bi-radar", "href": url_for("ui.observations_page", project_id=project_id)})
         links.append({"label": "ルーム", "icon": "bi-chat-square-heart", "href": url_for("ui.live_chat_rooms_page", project_id=project_id)})
     links.append({"label": "LINE", "icon": "bi-chat-left-heart", "href": url_for("ui.character_line_rooms_page", project_id=project_id)})
     links.append({"label": "チャットルーム", "icon": "bi-chat-dots", "href": url_for("ui.live_chat_sessions_page", project_id=project_id)})
@@ -64,6 +65,7 @@ def _render(template_name: str, *, title: str, screen_id: str, project_id: int |
         "story-edit",
         "short-videos",
         "stamps",
+        "observations",
         "live-chat-rooms",
         "live-chat-room-edit",
     } and not can_manage_project:
@@ -216,6 +218,11 @@ def closet_page(project_id: int):
 @ui_bp.route("/projects/<int:project_id>/stamps", methods=["GET"])
 def stamps_page(project_id: int):
     return _render("ui/stamps.html", title="スタンプ", screen_id="stamps", project_id=project_id)
+
+
+@ui_bp.route("/projects/<int:project_id>/observations", methods=["GET"])
+def observations_page(project_id: int):
+    return _render("ui/observations.html", title="観測", screen_id="observations", project_id=project_id)
 
 
 @ui_bp.route("/projects/<int:project_id>/world-news", methods=["GET"])

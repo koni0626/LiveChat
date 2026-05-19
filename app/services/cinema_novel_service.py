@@ -1002,7 +1002,7 @@ figcaption {
                 entry["caption"],
                 label=entry["label"],
                 footer=entry["footer"],
-                duration=1.0 if manual_short_video and entry_index == len(scene_entries) - 1 else 2.45,
+                duration=1.0 if manual_short_video and entry_index == len(scene_entries) - 1 else 3.45,
             )
 
         end_card_image = None if manual_short_video else self._asset_file_path(production.get("end_card_asset_id"))

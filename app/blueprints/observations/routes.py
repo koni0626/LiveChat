@@ -21,8 +21,9 @@ def recent_x_posts(project_id: int):
     hours = request.args.get("hours", default=24, type=int)
     max_users = request.args.get("max_users", default=50, type=int)
     user_sample_pool = request.args.get("user_sample_pool", default=1000, type=int)
-    tweets_per_user = request.args.get("tweets_per_user", default=3, type=int)
-    source = request.args.get("source") or "following"
+    tweets_per_user = request.args.get("tweets_per_user", default=1, type=int)
+    source = request.args.get("source") or "home_timeline"
+    randomize_users = str(source or "").lower() not in {"home", "home_timeline", "timeline"}
     posts = timeline_service.collect_recent_posts(
         hours=hours,
         max_users=max_users,
@@ -31,7 +32,7 @@ def recent_x_posts(project_id: int):
         include_replies=False,
         include_reposts=False,
         source=source,
-        randomize_users=True,
+        randomize_users=randomize_users,
     )
     items = [timeline_service.serialize_post(post) for post in posts]
     x_observation_reply_service.apply_to_posts(project_id, items)
@@ -44,7 +45,7 @@ def recent_x_posts(project_id: int):
                 "user_sample_pool": user_sample_pool,
                 "tweets_per_user": tweets_per_user,
                 "source": source,
-                "randomize_users": True,
+                "randomize_users": randomize_users,
                 "include_replies": False,
                 "include_reposts": False,
             },

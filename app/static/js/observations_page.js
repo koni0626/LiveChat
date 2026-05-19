@@ -114,12 +114,18 @@
 
   function params() {
     return new URLSearchParams({
-      source: sourceSelect.value || "following",
+      source: sourceSelect.value || "home_timeline",
       hours: String(Math.max(1, Number(hoursInput.value || 24))),
       max_users: String(Math.max(1, Number(maxUsersInput.value || 50))),
       user_sample_pool: String(Math.max(1, Number(userSamplePoolInput.value || 1000))),
-      tweets_per_user: String(Math.max(1, Number(tweetsPerUserInput.value || 3))),
+      tweets_per_user: String(Math.max(1, Number(tweetsPerUserInput.value || 1))),
     });
+  }
+
+  function syncSourceControls() {
+    const isHomeTimeline = (sourceSelect.value || "home_timeline") === "home_timeline";
+    userSamplePoolInput.disabled = isHomeTimeline;
+    userSamplePoolInput.closest("label")?.classList.toggle("opacity-50", isHomeTimeline);
   }
 
   async function loadCharacters() {
@@ -423,6 +429,10 @@
   }
 
   refreshButton.addEventListener("click", loadPosts);
+  sourceSelect.addEventListener("change", () => {
+    syncSourceControls();
+    loadPosts();
+  });
   followCleanupButton.addEventListener("click", () => {
     if (followCleanupPanel.classList.contains("d-none") || !followCleanupCandidates.length) {
       loadFollowCleanupCandidates();
@@ -444,6 +454,7 @@
   publishReplyButton.addEventListener("click", publishReply);
   replyButton.addEventListener("click", markReplyDone);
 
+  syncSourceControls();
   loadCharacters().catch((error) => NovelUI.toast(error.message || "キャラクター取得に失敗しました。", "danger"));
   loadPosts();
 })();
