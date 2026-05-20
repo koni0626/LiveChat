@@ -20,8 +20,9 @@
 | `collector_shion_undou_onchi` | コレクタとシオン、運動を保存できない | 本編化済み | 第14話 `episode_014_collector_shion_boxing` |
 | `collector_azuki_bar_relic` | コレクタ、小豆バーを保存す | 本編化済み | 第13話 `episode_013_collector_azuki_bar` |
 | `riko_golm_training` | リコの日常、筋肉に巻き込まれる | 保管中 | リコ・ゴルム登場回または日常回 |
-| `colly_food_reaction_shokugeki` | コリー、味覚で衣装概念を飛ばす | 保管中 | コリー料理回・ラプ/ノアのリアクション芸 |
+| `colly_food_reaction_shokugeki` | コリー、味覚で衣装概念を飛ばす | 本編化済み | 第18話 `episode_018_colly_food_reaction` |
 | `doll_sm_club_misdirection` | ドル・SMクラブ、期待だけを縛る | 保管中 | ドル金融区の娯楽施設・ノア煩悩いじり回 |
+| `noah_forced_romcom_physics` | ノア、ラブコメ物理に巻き込まれる | 保管中 | ウォズ発明事故・ノア煩悩ラブコメ回 |
 | `doll_bread_past_social_shift` | ドル、パンを盗んだ夜を語る | 保管中 | ドル過去回・社会変化と自己責任批判 |
 | `doll_convenience_store` | ドル、コンビニ経営す | 本編化済み | 第12話 `episode_012_doll_convenience_store` |
 | `immortal_black_company_book` | 不死のブラック上司、経営学を誤読す | 本編化済み | 第15話 `episode_015_immortal_black_company_book` |

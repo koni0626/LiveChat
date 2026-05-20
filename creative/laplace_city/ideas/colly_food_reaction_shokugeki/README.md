@@ -2,7 +2,9 @@
 
 ## ステータス
 
-保管中。
+本編化済み。
+
+本編: `creative/laplace_city/stories/episode_018_colly_food_reaction/`
 
 ## 方向性
 
