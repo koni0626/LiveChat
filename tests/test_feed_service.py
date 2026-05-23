@@ -4,6 +4,8 @@ import pytest
 
 from app.services.feed_service import FeedService
 from app.services.user_setting_service import UserSettingService
+from app.clients.image_ai_client import ImageAIClient
+from app.services.live_chat_conversation_service import LiveChatConversationService
 
 
 class _Repo:
@@ -231,6 +233,42 @@ def test_image_settings_do_not_keep_text_model_as_image_model():
     )
 
     assert options["model"] == "gpt-image-2"
+
+
+def test_grok_image_settings_default_to_quality_model(monkeypatch):
+    monkeypatch.delenv("XAI_IMAGE_MODEL", raising=False)
+    monkeypatch.delenv("GROK_IMAGE_MODEL", raising=False)
+    service = UserSettingService()
+
+    options = service._apply_image_generation_settings(
+        {
+            "image_ai_provider": "grok",
+            "image_ai_model": "gpt-image-2",
+            "default_quality": "medium",
+            "default_size": "1024x1024",
+            "mobile_default_size": "1024x1536",
+            "prefer_portrait_on_mobile": False,
+        },
+        {},
+    )
+
+    assert options["model"] == "grok-imagine-image-quality"
+    assert ImageAIClient(provider="grok")._resolve_model() == "grok-imagine-image-quality"
+
+
+def test_live_chat_internal_image_payload_preserves_provider_and_model():
+    service = object.__new__(LiveChatConversationService)
+
+    options = service._image_provider_model_options(
+        {
+            "provider": "grok",
+            "model": "grok-imagine-image-quality",
+            "image_ai_provider": "openai",
+            "image_ai_model": "gpt-image-2",
+        }
+    )
+
+    assert options == {"provider": "grok", "model": "grok-imagine-image-quality"}
 
 
 def test_text_settings_preserve_text_ai_model_after_image_settings():

@@ -5,7 +5,7 @@
   const textModelOptions = document.getElementById("textAiModelOptions");
   const cinemaNovelProviderSelect = document.getElementById("cinemaNovelImageProviderSelect");
   const cinemaNovelModelInput = document.getElementById("cinemaNovelImageModelInput");
-  let providerDefaultModels = { openai: "gpt-image-2", grok: "grok-imagine-image" };
+  let providerDefaultModels = { openai: "gpt-image-2", grok: "grok-imagine-image-quality" };
 
   function applyProviderModelDefault(previousProvider) {
     const provider = providerSelect?.value || "openai";

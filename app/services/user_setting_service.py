@@ -26,7 +26,7 @@ class UserSettingService:
     }
     PROVIDER_DEFAULT_MODELS = {
         "openai": "gpt-image-2",
-        "grok": "grok-imagine-image",
+        "grok": "grok-imagine-image-quality",
     }
     VALID_IMAGE_PROVIDERS = {"openai", "grok"}
     VALID_QUALITIES = {"low", "medium", "high"}

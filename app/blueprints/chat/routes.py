@@ -64,6 +64,22 @@ def _generate_affinity_100_event_image(session_id: int, context: dict, character
     )
 
 
+def _apply_live_chat_image_generation_settings(payload: dict | None = None) -> dict:
+    options = user_setting_service.apply_global_image_generation_settings(payload or {})
+    provider = str(current_app.config.get("LIVE_CHAT_IMAGE_AI_PROVIDER") or "").strip()
+    model = str(current_app.config.get("LIVE_CHAT_IMAGE_AI_MODEL") or "").strip()
+    quality = str(current_app.config.get("LIVE_CHAT_IMAGE_QUALITY") or "").strip()
+    if provider:
+        options["provider"] = provider
+        options["image_ai_provider"] = provider
+    if model:
+        options["model"] = model
+        options["image_ai_model"] = model
+    if quality:
+        options["quality"] = quality
+    return options
+
+
 def _generate_affinity_100_short_story(session_id: int, image_options: dict | None = None):
     image_options = image_options or {}
     short_story = live_chat_service.generate_short_story(
@@ -425,7 +441,7 @@ def create_room_chat_session(room_id: int):
         point_billing_service.ensure_image_generation_balance(user)
         initial_image = live_chat_service.generate_image(
             created["session"]["id"],
-            user_setting_service.apply_global_image_generation_settings(image_payload),
+            _apply_live_chat_image_generation_settings(image_payload),
         )
         initial_image = point_billing_service.charge_image_generation(
             user,
@@ -560,7 +576,7 @@ def analyze_chat_player_reaction(session_id: int):
 def generate_chat_short_story(session_id: int):
     _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
-    payload = user_setting_service.apply_global_image_generation_settings(payload)
+    payload = _apply_live_chat_image_generation_settings(payload)
     try:
         result = live_chat_service.generate_short_story(session_id, payload)
     except ValueError as exc:
@@ -596,7 +612,7 @@ def delete_chat_message(session_id: int, message_id: int):
 def execute_chat_scene_choice(session_id: int, choice_id: str):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
-    payload = user_setting_service.apply_global_image_generation_settings(payload)
+    payload = _apply_live_chat_image_generation_settings(payload)
     result = live_chat_service.execute_scene_choice(session_id, choice_id, payload)
     if not result:
         raise NotFoundError()
@@ -607,7 +623,7 @@ def execute_chat_scene_choice(session_id: int, choice_id: str):
 def move_chat_session_location(session_id: int, location_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
-    payload = user_setting_service.apply_global_image_generation_settings(payload)
+    payload = _apply_live_chat_image_generation_settings(payload)
     point_billing_service.ensure_image_generation_balance(user)
     try:
         result = live_chat_service.move_to_location(session_id, location_id, payload)
@@ -631,7 +647,7 @@ def move_chat_session_location(session_id: int, location_id: int):
 def select_chat_location_service(session_id: int, service_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
-    payload = user_setting_service.apply_global_image_generation_settings(payload)
+    payload = _apply_live_chat_image_generation_settings(payload)
     point_billing_service.ensure_image_generation_balance(user)
     try:
         result = live_chat_service.select_location_service(session_id, service_id, payload)
@@ -966,7 +982,7 @@ def delete_chat_costume(session_id: int, image_id: int):
 def generate_chat_image(session_id: int):
     _chat_session, _project, user = _require_session(session_id, for_manage=True)
     payload = request.get_json(silent=True) or {}
-    payload = user_setting_service.apply_global_image_generation_settings(payload)
+    payload = _apply_live_chat_image_generation_settings(payload)
     point_billing_service.ensure_image_generation_balance(user)
     try:
         result = live_chat_service.generate_image(session_id, payload)

@@ -278,6 +278,17 @@ class LiveChatConversationService:
         self._world_location_service_repository = world_location_service_repository or WorldLocationServiceRepository()
         self._player_intent_service = player_intent_service or LiveChatPlayerIntentService()
 
+    def _image_provider_model_options(self, payload: dict | None) -> dict:
+        payload = payload or {}
+        options = {}
+        model = payload.get("model") or payload.get("image_ai_model")
+        provider = payload.get("provider") or payload.get("image_ai_provider")
+        if model:
+            options["model"] = model
+        if provider:
+            options["provider"] = provider
+        return options
+
     def _update_character_user_memory(self, session, context: dict):
         if not session:
             return
@@ -1142,6 +1153,7 @@ class LiveChatConversationService:
                         "input_fidelity": "low",
                         "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
                         "quality": payload.get("quality") or "low",
+                        **self._image_provider_model_options(payload),
                     },
                 )
             else:
@@ -1155,6 +1167,7 @@ class LiveChatConversationService:
                         "skip_outfit_prompt": False,
                         "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
                         "quality": payload.get("quality") or "low",
+                        **self._image_provider_model_options(payload),
                     },
                 )
         except Exception as exc:
@@ -1302,6 +1315,7 @@ class LiveChatConversationService:
                         "input_fidelity": "low",
                         "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
                         "quality": payload.get("quality") or "low",
+                        **self._image_provider_model_options(payload),
                     },
                 )
             else:
@@ -1315,6 +1329,7 @@ class LiveChatConversationService:
                         "skip_outfit_prompt": False,
                         "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
                         "quality": payload.get("quality") or "low",
+                        **self._image_provider_model_options(payload),
                     },
                 )
         except Exception as exc:
@@ -1805,6 +1820,7 @@ class LiveChatConversationService:
                     "use_existing_prompt": True,
                     "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1536x1024"),
                     "quality": payload.get("quality") or "low",
+                    **self._image_provider_model_options(payload),
                 },
             )
         except Exception as exc:
@@ -2575,6 +2591,7 @@ class LiveChatConversationService:
             "use_existing_prompt": True,
             "size": payload.get("size") or UserSettingService.DEFAULTS.get("default_size", "1024x1024"),
             "quality": payload.get("quality") or "low",
+            **self._image_provider_model_options(payload),
         }
         if selected_costume_image:
             image_payload.update(

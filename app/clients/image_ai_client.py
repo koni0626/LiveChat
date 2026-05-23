@@ -69,7 +69,7 @@ class ImageAIClient:
         if self._model:
             return self._model
         if resolved_provider == "grok":
-            return os.getenv("XAI_IMAGE_MODEL") or os.getenv("GROK_IMAGE_MODEL") or "grok-imagine-image"
+            return os.getenv("XAI_IMAGE_MODEL") or os.getenv("GROK_IMAGE_MODEL") or "grok-imagine-image-quality"
         return os.getenv("IMAGE_AI_MODEL") or "gpt-image-2"
 
     def _resolve_timeout(self) -> int:
